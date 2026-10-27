@@ -6,6 +6,9 @@ import { ChangelogEntry } from '../types/changelog';
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Nyxen's shield retaliation no longer fires on fully blocked hits.",
+    'Combat simulator: Vindicator no longer reports Provoke when no adjacent enemy exists.',
+    'Combat simulator: purging or stealing Taunt no longer moves the hit that follows.',
+    "Combat simulator: Bayah's and Bizon's passive debuffs now need the hit to deal damage.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

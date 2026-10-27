@@ -9162,7 +9162,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             /** Ship-wide stealth-targeting bypass. */
             ignoresStealth?: boolean;
             actingId: string;
-            /** The cast's resolved target: a Concentrate Fire pick made at selection time. */
+            /** The cast's turn-start target (`selectTurnTarget`): its first hit's anchor
+             *  (`applyPositionalDamage`'s `firstAnchorId`) and its Concentrate Fire pick. */
             castTargetId?: string;
             opposingLiving: CombatActor[];
             /** This turn's landed scheduled enemy effects, from the acting
@@ -9281,6 +9282,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         attackerId: args.actingId,
                         concentrateFirePickId: args.castTargetId,
                     },
+                    firstAnchorId: args.castTargetId,
                     defenseProfileOf: (v, didCrit) => ({
                         ...victimDefenseProfileOf(v, {
                             scheduledEnemyEffects: args.scheduledEnemyEffects,
@@ -10763,6 +10765,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             /** This cast's per-hit passive gains for one sub-attack (R178); undefined for a cast
              *  carrying none. */
             applyPerHitSelfStatusesForSubAttack: PlayerTurnResult['applyPerHitSelfStatusesForSubAttack'];
+            /** This cast's enemy-side per-hit passive clauses for one sub-attack (#655); undefined
+             *  for a cast carrying none. */
+            applyPerHitEnemyStatusesForSubAttack: PlayerTurnResult['applyPerHitEnemyStatusesForSubAttack'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
             /** Whether a Stasis this cast wrote stands on a victim — its covered Stasis marks skip
              *  such a victim (see `resolveStasisBreaks`). */
@@ -11186,13 +11191,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                 },
                 onSubAttackEnd: (sub) => {
-                    // Every sub-attack's per-hit gains fire here, the first included, once the
-                    // funnel has said which victims the hit did damage to.
-                    const firePerHitGains = (): void =>
-                        sel.applyPerHitSelfStatusesForSubAttack?.({
+                    // Every sub-attack's per-hit passive clauses fire here, the first included, once
+                    // the funnel has said which victims the hit did damage to: the enemy-side
+                    // landings, then the caster's own gains.
+                    const firePerHitGains = (): void => {
+                        const struck = {
                             ...sub,
                             directVictimIds: [...(damagedVictimsBySubAttack.get(sub.index) ?? [])],
-                        });
+                        };
+                        bufferDebuffEmitters(
+                            sub.index,
+                            sel.applyPerHitEnemyStatusesForSubAttack?.(struck) ?? []
+                        );
+                        sel.applyPerHitSelfStatusesForSubAttack?.(struck);
+                    };
                     if (sub.index === 0) {
                         // Sub-attack 0 keeps its CAST-TIME roll (several consumers read that
                         // outcome before this loop runs — see applyDebuffsForSubAttack's doc). What
@@ -11204,8 +11216,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // that victim here and would name a LATER sub-attack's victim without this
                         // branch. Both effects are gated on a LATER sub-attack existing to see
                         // them: with one sub-attack there is no next reader, so the write and the
-                        // emission both stay at the flush site.
-                        if (sub.index < sel.scalars.hits - 1) {
+                        // emission both stay at the flush site — unless an enemy-side per-hit
+                        // passive lands here, which follows the cast's own after-damage clauses.
+                        if (
+                            sub.index < sel.scalars.hits - 1 ||
+                            sel.applyPerHitEnemyStatusesForSubAttack !== undefined
+                        ) {
                             // A landing on a ship this sub-attack destroyed is dropped, and only
                             // its `landing-dropped` record rides this sub-attack's emission step.
                             const pending = sel.deferredEnemyApplications
@@ -13034,6 +13050,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         applyDebuffsForSubAttack: turn.applyDebuffsForSubAttack,
                                         applyPerHitSelfStatusesForSubAttack:
                                             turn.applyPerHitSelfStatusesForSubAttack,
+                                        applyPerHitEnemyStatusesForSubAttack:
+                                            turn.applyPerHitEnemyStatusesForSubAttack,
                                         deferredEnemyApplications: turn.deferredEnemyApplications,
                                         castStasisStandsOn: turn.castStasisStandsOn,
                                         scheduledEnemyEffects: turn.scheduledEnemyEffects,
@@ -13305,6 +13323,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         applyDebuffsForSubAttack: teamTurn.applyDebuffsForSubAttack,
                                         applyPerHitSelfStatusesForSubAttack:
                                             teamTurn.applyPerHitSelfStatusesForSubAttack,
+                                        applyPerHitEnemyStatusesForSubAttack:
+                                            teamTurn.applyPerHitEnemyStatusesForSubAttack,
                                         deferredEnemyApplications:
                                             teamTurn.deferredEnemyApplications,
                                         castStasisStandsOn: teamTurn.castStasisStandsOn,
@@ -13751,6 +13771,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         applyDebuffsForSubAttack: enemyApplyDebuffsForSubAttack,
                                         applyPerHitSelfStatusesForSubAttack:
                                             enemyApplyPerHitSelfStatusesForSubAttack,
+                                        applyPerHitEnemyStatusesForSubAttack:
+                                            enemyTurn.applyPerHitEnemyStatusesForSubAttack,
                                         // The SAME array the fallback flush below drains (see
                                         // the capture note), never a fresh one.
                                         deferredEnemyApplications: enemyDeferredApplications,

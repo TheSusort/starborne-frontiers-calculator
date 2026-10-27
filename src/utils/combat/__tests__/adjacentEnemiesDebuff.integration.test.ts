@@ -183,11 +183,9 @@ describe('team symmetry — an ENEMY-side caster fans out onto its PLAYER-side m
  * buildShipAbilities.ts) whose `target` is RE-DERIVED from the named twin's
  * `detectEnemyGrantScope` (buildShipAbilities.ts) — so a real Vindicator
  * Provoke / Asphyxiator Stasis cast carries a control ability with `target:'adjacent-enemies'` /
- * `'target-and-adjacent-enemies'` too. playerTurn.ts's control-applied loop only special-cases
- * `ctrl.target === 'enemy'` (Block-Debuff/resisted-suppression) — a non-'enemy' string just
- * always emits (same as the standalone-control path), so these target values must not throw.
- * This does not assert control-applied semantics — only that the control-twin's presence doesn't
- * break the fan-out.
+ * `'target-and-adjacent-enemies'` too. These target values must not throw. This does not assert
+ * control-applied semantics (see the no-neighbour block below) — only that the control-twin's
+ * presence doesn't break the fan-out.
  */
 describe('control-path smoke test (real control-effect buff names)', () => {
     const controlCaster = (id: string, text: string): Ship => ship(id, { activeSkillText: text });
@@ -317,5 +315,48 @@ describe('single-entry roster edge case (positional, no neighbours to fan out to
         expect(applied).toHaveLength(1);
         // M1: the recipient is the real roster entry, not the vestigial `enemy` sink.
         expect(applied[0]?.targetId).toBe(BARE_ENEMY_ID);
+    });
+});
+
+/**
+ * A fan-out control scope with no recipient controls nobody, so it announces nothing: no
+ * `control-applied` (which `on-stasis-applied` reactions hear) and no control log row. Vindicator's
+ * Provoke ("to all adjacent enemies") cast on a lone enemy has no neighbour to land on.
+ */
+describe('adjacent-enemies control with no neighbour emits no control event', () => {
+    const provokeText = `This Unit deals <unit-damage>100% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn to all adjacent enemies.`;
+    const caster = (): Ship => ship('atk', { activeSkillText: provokeText });
+    const controlRows = (result: ReturnType<typeof simulateBattle>) =>
+        flattenCombatLog(result).filter((e) => e.kind === 'control');
+    const provokeRows = (result: ReturnType<typeof simulateBattle>) =>
+        flattenCombatLog(result).filter((e) => e.kind === 'debuff' && e.note === 'Provoke');
+
+    it('player caster vs a lone enemy: no control row, no Provoke', () => {
+        const result = simulateBattle({
+            playerTeam: [place(caster(), 'M4', 1, 1e9)],
+            enemyTeam: [place(plain('tgt'), 'M4', 1, 1e9)],
+            rounds: 1,
+        });
+        expect(controlRows(result)).toEqual([]);
+        expect(provokeRows(result)).toEqual([]);
+    });
+
+    it('enemy caster vs a lone player ship: no control row, no Provoke', () => {
+        const result = simulateBattle({
+            playerTeam: [place(plain('tgt'), 'M4', 1, 1e9)],
+            enemyTeam: [place(caster(), 'M4', 1, 1e9)],
+            rounds: 1,
+        });
+        expect(controlRows(result)).toEqual([]);
+        expect(provokeRows(result)).toEqual([]);
+    });
+
+    it('positive control: with a neighbour the control row names that neighbour', () => {
+        const result = simulateBattle({
+            playerTeam: [place(caster(), 'M4', 1, 1e9)],
+            enemyTeam: [place(plain('tgt'), 'M4', 1, 1e9), place(plain('nbrA'), 'M3', 1, 1e9)],
+            rounds: 1,
+        });
+        expect(controlRows(result).map((e) => e.targets[0]?.targetId)).toEqual(['e:nbrA:1']);
     });
 });
