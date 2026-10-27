@@ -701,6 +701,121 @@ function drawPlayer(
     }
 }
 
+/** One obstacle, pickup or checkpoint to draw, at its depth `z`. */
+export interface DrawItem {
+    z: number;
+    obstacle: Obstacle | null;
+    pickup: Pickup | null;
+    checkpoint: Checkpoint | null;
+}
+
+/** The frame's draw list: pooled entries, rewritten every frame rather than allocated. */
+const drawList: DrawItem[] = [];
+
+function pushItem(list: DrawItem[], n: number, z: number): DrawItem {
+    let item = list[n];
+    if (!item) {
+        item = { z, obstacle: null, pickup: null, checkpoint: null };
+        list[n] = item;
+    }
+    item.z = z;
+    item.obstacle = null;
+    item.pickup = null;
+    item.checkpoint = null;
+    return item;
+}
+
+/**
+ * Fills `list` from its start with the game's obstacles, uncollected pickups and checkpoints not
+ * yet reached, farthest first, and returns how many it wrote; entries past that are stale. A
+ * checkpoint stops drawing once it reaches the player, so the gate just flown through never
+ * covers the ship during the post-duel countdown. Entries are reused, so a frame allocates
+ * nothing once the list has grown to the frame's item count.
+ */
+export function collectItems(game: GameState, list: DrawItem[]): number {
+    let n = 0;
+    for (const o of game.obstacles) {
+        const item = pushItem(list, n++, o.z);
+        item.obstacle = o;
+    }
+    for (const p of game.pickups) {
+        if (p.collected) continue;
+        const item = pushItem(list, n++, p.z);
+        item.pickup = p;
+    }
+    for (const c of game.checkpoints) {
+        if (c.z <= 0) continue;
+        const item = pushItem(list, n++, c.z);
+        item.checkpoint = c;
+    }
+    // Insertion sort, farthest first: stable, in place, and near-linear on the nearly sorted
+    // lists the game produces.
+    for (let i = 1; i < n; i++) {
+        const item = list[i];
+        let j = i - 1;
+        while (j >= 0 && list[j].z < item.z) {
+            list[j + 1] = list[j];
+            j--;
+        }
+        list[j + 1] = item;
+    }
+    return n;
+}
+
+/** What `drawItem` needs from the frame, rewritten every frame rather than allocated. */
+interface ItemFrame {
+    ctx: CanvasRenderingContext2D;
+    g: SceneGeometry;
+    game: GameState;
+    view: FlightView;
+    timeMs: number;
+    dpr: number;
+    ship: ShipPlacement;
+    /** The ship's drawn centre, and its height above the track in lane widths. */
+    shipY: number;
+    shipHeight: number;
+    magnetOn: boolean;
+    /** The magnet's visibility (see `magnetVisibility`) and the beamed credits' count. */
+    magnet: number;
+    beams: number;
+    /** The opacity of the barriers at or past the ship while it explodes. */
+    wreckFade: number;
+}
+
+const itemFrame = {} as ItemFrame;
+
+function drawItem(f: ItemFrame, item: DrawItem): void {
+    const { ctx, g, game, view, timeMs } = f;
+    if (item.obstacle) {
+        const o = item.obstacle;
+        drawObstacle(ctx, g, o, timeMs, view.dying && o.z <= 0 ? f.wreckFade : 1);
+    } else if (item.pickup) {
+        const pk = item.pickup;
+        const { magnetOn, magnet, ship } = f;
+        const pulled = magnetOn && pullCredit(pullAt, pk, game.player, view.playerX, f.shipHeight);
+        if (!pulled) restingPull(pullAt, pk);
+        const slot = pulled ? beamScratch.indexOf(pk) : -1;
+        const beamed = slot >= 0 && slot < f.beams;
+        const t = 1 - pk.z / MAGNET_PULL_Z;
+        if (pulled) rememberPull(view.pulls, pk, pullAt, t, beamed, magnet);
+        // A credit the pull let go of eases back to its lane, its beam fading out.
+        const released = pulled ? null : releasePull(view.pulls, pk, pullAt, game.time);
+        const c = pickupCentre(pickupAt, g, pk, pullAt, timeMs);
+        // A beam draws under its credit, so the credit stays solid on top of it.
+        const vis = released ? released.visibility * released.fade : magnet;
+        if (beamed || (released && released.beamed)) {
+            const half = BEAM_WIDTH * PICKUP_RADIUS * c.width;
+            const reduced = view.reducedMotion;
+            const bt = released ? released.t : t;
+            drawTractorBeam(ctx, ship.x, f.shipY, c.x, c.y, half, bt, vis, game.time, reduced);
+        }
+        drawPickup(ctx, g, pk, c, pullAt, f.dpr);
+    } else if (item.checkpoint) {
+        const c = item.checkpoint;
+        drawCheckpoint(ctx, g, c, view.gateArt.get(c.id));
+    }
+}
+
 export function renderFlight(
     ctx: CanvasRenderingContext2D,
     game: GameState,
@@ -734,56 +849,28 @@ export function renderFlight(
     view.laneWedge = laneWedge(g);
     if (view.speedLines) drawSpeedLines(ctx, g, view.speedLines, game.speed);
 
-    const items: ({ z: number } & (
-        { obstacle: Obstacle } | { pickup: Pickup } | { checkpoint: Checkpoint }
-    ))[] = [
-        ...game.obstacles.map((o) => ({ z: o.z, obstacle: o })),
-        ...game.pickups.filter((p) => !p.collected).map((p) => ({ z: p.z, pickup: p })),
-        // A checkpoint stops drawing once it reaches the player, so the gate just flown through
-        // never covers the ship during the post-duel countdown.
-        ...game.checkpoints.filter((c) => c.z > 0).map((c) => ({ z: c.z, checkpoint: c })),
-    ];
-    items.sort((a, b) => b.z - a.z);
+    const count = collectItems(game, drawList);
     const ship = shipAt;
     placeShip(ship, g, game, view);
     const u = laneWidthAtPlayer(g);
     // The magnet pulls credits toward the ship's drawn centre (see `magnetFx`).
-    const shipY = ship.y + (ship.top + ship.bottom) / 2;
-    const shipHeight = (ship.baseY - shipY) / u;
-    const magnetOn = game.player.magnetTime > 0 && !view.dying && ship.intro === 1;
-    const magnet = magnetOn ? magnetVisibility(game.player.magnetTime, view.reducedMotion) : 0;
-    const beams = magnetOn ? nearestPulled(game.pickups, game.player, MAX_BEAMS, beamScratch) : 0;
+    const f = itemFrame;
+    f.ctx = ctx;
+    f.g = g;
+    f.game = game;
+    f.view = view;
+    f.timeMs = timeMs;
+    f.dpr = dpr;
+    f.ship = ship;
+    f.shipY = ship.y + (ship.top + ship.bottom) / 2;
+    f.shipHeight = (ship.baseY - f.shipY) / u;
+    f.magnetOn = game.player.magnetTime > 0 && !view.dying && ship.intro === 1;
+    f.magnet = f.magnetOn ? magnetVisibility(game.player.magnetTime, view.reducedMotion) : 0;
+    f.beams = f.magnetOn ? nearestPulled(game.pickups, game.player, MAX_BEAMS, beamScratch) : 0;
     beginPulls(view.pulls);
-    const wreckFade = Math.max(0, 1 - view.explosion.elapsed / WRECK_FADE_SECONDS);
-    const drawItem = (item: (typeof items)[number]) => {
-        if ('obstacle' in item) {
-            const o = item.obstacle;
-            drawObstacle(ctx, g, o, timeMs, view.dying && o.z <= 0 ? wreckFade : 1);
-        } else if ('pickup' in item) {
-            const pk = item.pickup;
-            const pulled =
-                magnetOn && pullCredit(pullAt, pk, game.player, view.playerX, shipHeight);
-            if (!pulled) restingPull(pullAt, pk);
-            const slot = pulled ? beamScratch.indexOf(pk) : -1;
-            const beamed = slot >= 0 && slot < beams;
-            const t = 1 - pk.z / MAGNET_PULL_Z;
-            if (pulled) rememberPull(view.pulls, pk, pullAt, t, beamed, magnet);
-            // A credit the pull let go of eases back to its lane, its beam fading out.
-            const released = pulled ? null : releasePull(view.pulls, pk, pullAt, game.time);
-            const c = pickupCentre(pickupAt, g, pk, pullAt, timeMs);
-            // A beam draws under its credit, so the credit stays solid on top of it.
-            const vis = released ? released.visibility * released.fade : magnet;
-            if (beamed || (released && released.beamed)) {
-                const half = BEAM_WIDTH * PICKUP_RADIUS * c.width;
-                const reduced = view.reducedMotion;
-                const bt = released ? released.t : t;
-                drawTractorBeam(ctx, ship.x, shipY, c.x, c.y, half, bt, vis, game.time, reduced);
-            }
-            drawPickup(ctx, g, pk, c, pullAt, dpr);
-        } else drawCheckpoint(ctx, g, item.checkpoint, view.gateArt.get(item.checkpoint.id));
-    };
+    f.wreckFade = Math.max(0, 1 - view.explosion.elapsed / WRECK_FADE_SECONDS);
     // Items already past the player are nearer the camera, so they draw over it.
-    for (const item of items) if (item.z >= 0) drawItem(item);
+    for (let i = 0; i < count; i++) if (drawList[i].z >= 0) drawItem(f, drawList[i]);
     const boom = view.explosion;
     if (view.dying) {
         if (!boom.started) {
@@ -813,9 +900,9 @@ export function renderFlight(
         drawScrapeStreak(ctx, g, view.scrape, view.playerX, view.trail, u);
         drawScrapeContact(ctx, view.scrape, contact, u);
     }
-    if (!view.dying) drawPlayer(ctx, ship, game, view, timeMs, dpr, magnet);
+    if (!view.dying) drawPlayer(ctx, ship, game, view, timeMs, dpr, f.magnet);
     if (view.scrape && !view.dying) drawScrapeSparks(ctx, view.scrape, u);
-    for (const item of items) if (item.z < 0) drawItem(item);
+    for (let i = 0; i < count; i++) if (drawList[i].z < 0) drawItem(f, drawList[i]);
     endPulls(view.pulls);
     if (view.dying) drawExplosion(ctx, g, boom, w, h);
 }
