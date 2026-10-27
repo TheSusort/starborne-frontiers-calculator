@@ -1,8 +1,7 @@
 import type { Ship } from '../../../types/ship';
-import type { ChallengeKind, DuelOutcome } from '../../../utils/arcade/types';
+import type { ChallengeKind } from '../../../utils/arcade/types';
 import type { CombatStatsDeps } from '../../../utils/ship/combatStats';
 import { shipFinalStats } from '../../../utils/ship/combatStats';
-import { nextRandom } from '../../../utils/arcade/rng';
 import { asFactionName } from '../../../constants/factions';
 import { buildShipAbilitiesWithEquipment } from '../../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { computeAffinityModifiers } from '../../../utils/calculators/affinityUtils';
@@ -27,41 +26,15 @@ import {
     healerStatsFromShip,
 } from '../../../utils/calculators/calculatorShipInputs';
 import type { RowPicks } from './pickOpponents';
-import { CHALLENGE_ROUNDS, runDuel, runTeamDuel, type DuelResult } from './runDuel';
-
-/** The challenges won by racing the gate ship at the same task rather than fighting it. */
-export type RaceKind = Extract<ChallengeKind, 'dps' | 'heal' | 'tank'>;
-
-/** One ship's run at a race. `byRound[i]` is the compared figure after round `i + 1` (damage
- *  dealt or healing done so far, or HP% left); `total` is the figure the race compares. Both are
- *  empty/0 for a skipped race. */
-export interface RaceSide {
-    byRound: number[];
-    total: number;
-}
-
-export interface RaceResult {
-    kind: RaceKind;
-    outcome: DuelOutcome;
-    flown: RaceSide;
-    rival: RaceSide;
-}
-
-/** A `duel` or `team` fight, played back turn by turn. */
-export interface FightResult extends DuelResult {
-    kind: Extract<ChallengeKind, 'duel' | 'team'>;
-}
-
-export type ChallengeResult = FightResult | RaceResult;
-
-export const isRace = (result: ChallengeResult): result is RaceResult =>
-    result.kind === 'dps' || result.kind === 'heal' || result.kind === 'tank';
-
-/** The seed every simulation of one checkpoint row uses: fixed by the run's seed and the row. */
-export function challengeSeed(runSeed: number, checkpointId: number): number {
-    const state = { rngState: (runSeed ^ Math.imul(checkpointId, 0x9e3779b1)) >>> 0 };
-    return Math.floor(nextRandom(state) * 4294967296) >>> 0;
-}
+import { CHALLENGE_ROUNDS, runDuel, runTeamDuel } from './runDuel';
+import {
+    raceOutcome,
+    skippedChallenge,
+    type ChallengeResult,
+    type RaceKind,
+    type RaceResult,
+    type RaceSide,
+} from './challengeResult';
 
 /** Runs `run` with the combat RNG pinned to `seed`, as `runSeededBattle` does for fights. */
 function seeded<T>(seed: number, run: () => T): T {
@@ -243,11 +216,6 @@ const RACES: Record<RaceKind, (ship: Ship, deps: CombatStatsDeps) => RaceSide> =
     tank: tankRace,
 };
 
-/** The flown ship wins when its figure is at least the rival's: ties go to the flown ship, so
- *  two ships that both score 0 is a win. */
-export const raceOutcome = (flown: RaceSide, rival: RaceSide): 'win' | 'lose' =>
-    flown.total >= rival.total ? 'win' : 'lose';
-
 /** Both ships run the same `kind` task under the same seed; any error, or a figure that is not a
  *  finite number, → skipped. */
 export function runRace(
@@ -269,15 +237,6 @@ export function runRace(
         if (import.meta.env.DEV) console.warn(`arcade ${kind} race skipped`, error);
         return skippedChallenge(kind);
     }
-}
-
-/** A challenge that applies no stakes, with nothing to play back. */
-export function skippedChallenge(kind: RaceKind): RaceResult;
-export function skippedChallenge(kind: ChallengeKind): ChallengeResult;
-export function skippedChallenge(kind: ChallengeKind): ChallengeResult {
-    if (kind === 'duel' || kind === 'team') return { kind, outcome: 'skipped', beats: [] };
-    const empty = (): RaceSide => ({ byRound: [], total: 0 });
-    return { kind, outcome: 'skipped', flown: empty(), rival: empty() };
 }
 
 /** Runs the challenge behind gate `slot` of a row: the flown ship against that gate's ship (or

@@ -110,3 +110,13 @@ export function canDuel(
 ): boolean {
     return flownId !== null && candidates(fleet, flownId, isCandidate).length >= 2;
 }
+
+/** The ship each gate shows: the gate's ship, or the first of its trio. */
+export const gateLeads = (picks: RowPicks): [Ship, Ship] =>
+    picks.kind === 'single' ? picks.gates : [picks.gates[0][0], picks.gates[1][0]];
+
+/** Every ship of `bundle` a gate may show, whichever challenge its row draws. */
+export function bundleGateShips(bundle: readonly Ship[]): Ship[] {
+    const shapes = [rowPicks('duel', bundle), rowPicks('team', bundle)];
+    return [...new Set(shapes.flatMap((picks) => (picks ? gateLeads(picks) : [])))];
+}

@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { runChallenge, runRace } from '../runChallenge';
 import {
-    challengeSeed,
     isRace,
     raceOutcome,
-    runChallenge,
-    runRace,
     skippedChallenge,
     type RaceKind,
     type RaceSide,
-} from '../runChallenge';
+} from '../challengeResult';
+import { challengeSeed } from '../../../../utils/arcade/rng';
 import { CHALLENGE_ROUNDS, duelOutcome } from '../runDuel';
 import type { RowPicks } from '../pickOpponents';
 import type { Ship } from '../../../../types/ship';

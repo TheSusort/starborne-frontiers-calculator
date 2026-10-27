@@ -9,7 +9,13 @@ import { createGame, step } from '../../utils/arcade/engine';
 import { STEP_SECONDS } from '../../utils/arcade/constants';
 import { computeScore, runResult } from '../../utils/arcade/scoring';
 import { resolveDuel } from '../../utils/arcade/checkpoints';
-import type { DuelEffect, DuelStakes, GameState, InputAction } from '../../utils/arcade/types';
+import type {
+    ChallengeKind,
+    DuelEffect,
+    DuelStakes,
+    GameState,
+    InputAction,
+} from '../../utils/arcade/types';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -21,6 +27,7 @@ import { beatPulse, TRACK_BEATS } from '../../utils/music/beats';
 import { useSynthwaveMusic } from '../../utils/music/useSynthwaveMusic';
 import { usePauseMusicOnUnmountOffTheme } from '../../utils/music/usePauseMusicOffTheme';
 import { useTheme } from '../../contexts/ThemeContext';
+import { challengeSeed } from '../../utils/arcade/rng';
 import { NO_NEAR_MISS, nextNearMissBadge, type NearMissBadge } from './nearMissBadge';
 import {
     advanceView,
@@ -45,12 +52,25 @@ import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { GuestNameModal } from './GuestNameModal';
 import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
-import { anyCandidate, canDuel, gearedCandidate, pickOpponents } from './duel/pickOpponents';
+import {
+    anyCandidate,
+    bundleGateShips,
+    canDuel,
+    canTeam,
+    gateLeads,
+    gearedCandidate,
+    pickBundle,
+    rowPicks,
+    TEAM_PICK_SHIPS,
+    type DuelCandidateTest,
+    type RowPicks,
+} from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
 import { zoneBanner, zoneIndexAt, zoneOf } from './zones';
 import { createShipTrail } from './shipTrails';
 import { createScrapeFx } from './scrapeFx';
 import type { DuelResult } from './duel/runDuel';
+import { isRace, skippedChallenge, type ChallengeResult } from './duel/challengeResult';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
 import { arcadeFleet } from './ships/arcadeFleet';
@@ -150,12 +170,45 @@ const renderShipModel = (ship: Ship, visual: ShipVisual): React.ReactNode => {
 interface DuelState {
     /** Distinguishes this duel from later ones, so a late render lands only in its own. */
     id: number;
+    challenge: ChallengeKind;
+    /** The row's ships; the opponent is `picks.gates[slot]`. */
+    picks: RowPicks;
+    slot: 0 | 1;
     player: DuelSide;
     opponent: DuelSide;
     stakes: DuelStakes;
-    result: DuelResult | null;
+    result: ChallengeResult | null;
     effect: DuelEffect | null;
 }
+
+/** What the duel screen plays back: a fight's turns, or for a race only its outcome. */
+const toDuelResult = (result: ChallengeResult): DuelResult =>
+    isRace(result) ? { outcome: result.outcome, beats: [] } : result;
+
+/** The game options for a run flown with `flownId`: duel rows when the fleet can field two
+ *  opponents, and `team` rows when it can field a whole team row. */
+const runOptions = (
+    fleet: readonly Ship[],
+    flownId: string | null,
+    isCandidate: DuelCandidateTest
+) => {
+    const duels = canDuel(fleet, flownId, isCandidate);
+    return { duels, teamChallenges: duels && canTeam(fleet, flownId, isCandidate) };
+};
+
+/** A pre-picked bundle (see `pickBundle`) big enough for whatever challenge a row draws. */
+const pickRowBundle = (
+    fleet: readonly Ship[],
+    flownId: string,
+    isCandidate: DuelCandidateTest
+): Ship[] | null =>
+    pickBundle(
+        fleet,
+        flownId,
+        Math.random,
+        isCandidate,
+        canTeam(fleet, flownId, isCandidate) ? TEAM_PICK_SHIPS : 2
+    );
 
 /** "x2" beside the credit count while the credit streak doubles credits. It pulses when the
  *  streak turns on and fades out red when it breaks. */
@@ -331,14 +384,14 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [initial] = useState(() => {
         const lastShipId = readLastShipId();
         const flown = startOrigin ? (ships.find((s) => s.id === lastShipId) ?? null) : null;
-        const duels = canDuel(ships, flown?.id ?? null, isCandidate);
+        const options = runOptions(ships, flown?.id ?? null, isCandidate);
         const phase: Phase = startOrigin ? 'intro' : ships.length > 0 ? 'select' : 'running';
         return {
             lastShipId,
             flown,
-            duels,
+            options,
             phase,
-            game: createGame(newSeed(), { duels }),
+            game: createGame(newSeed(), options),
             view: createFlightView(
                 startOrigin,
                 flown ? factionAccent(flown.faction) : null,
@@ -349,7 +402,8 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const gameRef = useRef<GameState>(initial.game);
     const viewRef = useRef<FlightView>(initial.view);
     const flownRef = useRef<Ship | null>(initial.flown);
-    const duelsRef = useRef(initial.duels);
+    /** The current run's game options; see `runOptions`. */
+    const optionsRef = useRef(initial.options);
     const rootRef = useRef<HTMLDivElement>(null);
     const inputsRef = useRef<InputAction[]>([]);
     const phaseRef = useRef<Phase>(initial.phase);
@@ -364,11 +418,12 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         if (openedFromOrigin) resumeArcadeMusic(musicRef.current);
     }, [openedFromOrigin]);
     const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
-    /** The two opponents behind each checkpoint's gates, in gate-slot order. */
-    const opponentsRef = useRef(new Map<number, [Ship, Ship]>());
-    /** The pair for the next checkpoint to appear, picked while the game is not being flown so
-     *  their sprites render before the gates are on screen; null → picked when it appears. */
-    const nextOpponentsRef = useRef<[Ship, Ship] | null>(null);
+    /** The ships behind each checkpoint's gates. */
+    const opponentsRef = useRef(new Map<number, RowPicks>());
+    /** The bundle for the next checkpoint to appear (see `pickBundle`), picked while the game is
+     *  not being flown so its gate sprites render before the gates are on screen; null → picked
+     *  when it appears. */
+    const nextOpponentsRef = useRef<Ship[] | null>(null);
     /** The flown ship whose opponents `nextOpponentsRef` holds. */
     const nextOpponentsForRef = useRef<string | null>(null);
     /** Bumped whenever a run is replaced; a duel simulation that finishes under an older
@@ -454,8 +509,12 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const refreshPins = useCallback(() => {
         const ahead = gameRef.current.checkpoints
             .filter((c) => !c.resolved)
-            .flatMap((c) => opponentsRef.current.get(c.id) ?? []);
-        const opponents = [...ahead, ...(nextOpponentsRef.current ?? [])];
+            .flatMap((c) => {
+                const picks = opponentsRef.current.get(c.id);
+                return picks ? gateLeads(picks) : [];
+            });
+        const next = nextOpponentsRef.current;
+        const opponents = [...ahead, ...(next ? bundleGateShips(next) : [])];
         const flown = flownRef.current;
         setArcadePins(flown && keyOf(flown), opponents.map(keyOf));
     }, [keyOf]);
@@ -506,16 +565,11 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const prepareNextOpponents = useCallback(
         (flown: Ship | null = flownRef.current, signal: AbortSignal = sessionSignal()) => {
             const pick = flown
-                ? pickOpponents(
-                      shipsRef.current,
-                      flown.id,
-                      Math.random,
-                      statsDepsRef.current.isCandidate
-                  )
+                ? pickRowBundle(shipsRef.current, flown.id, statsDepsRef.current.isCandidate)
                 : null;
             nextOpponentsRef.current = pick;
             nextOpponentsForRef.current = flown?.id ?? null;
-            pick?.forEach((ship) => warmGateArt(ship, signal));
+            if (pick) bundleGateShips(pick).forEach((ship) => warmGateArt(ship, signal));
             refreshPins();
         },
         [warmGateArt, refreshPins]
@@ -557,19 +611,26 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const flown = flownRef.current;
         if (flown) requestFlownFrames(flown);
         if (flown && nextOpponentsForRef.current !== flown.id) prepareNextOpponents(flown);
-        else nextOpponentsRef.current?.forEach((ship) => warmGateArt(ship));
+        else if (nextOpponentsRef.current) {
+            bundleGateShips(nextOpponentsRef.current).forEach((ship) => warmGateArt(ship));
+        }
         refreshPins();
     }, [visualOf, requestFlownFrames, prepareNextOpponents, warmGateArt, refreshPins]);
 
     // A run started from the background can begin before the fleet's gear has loaded. The intro
-    // never steps the game, so until it ends a fresh game with duels replaces one decided
-    // without them once the fleet and gear allow duels.
+    // never steps the game, so until it ends a fresh game replaces one decided without duels or
+    // without team rows once the fleet and gear allow them.
     useEffect(() => {
         const flown = flownRef.current;
-        if (phaseRef.current !== 'intro' || duelsRef.current || !flown) return;
-        if (!canDuel(ships, flown.id, isCandidate)) return;
-        duelsRef.current = true;
-        gameRef.current = createGame(newSeed(), { duels: true });
+        if (phaseRef.current !== 'intro' || !flown) return;
+        const options = runOptions(ships, flown.id, isCandidate);
+        const current = optionsRef.current;
+        const gains =
+            (options.duels && !current.duels) ||
+            (options.teamChallenges && !current.teamChallenges);
+        if (!gains) return;
+        optionsRef.current = options;
+        gameRef.current = createGame(newSeed(), options);
     }, [ships, isCandidate]);
 
     // Speed lines, the ship's trail and scrape and the magnet's motion follow a reduced-motion
@@ -602,9 +663,12 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         if (!flown || nextOpponentsForRef.current !== flown.id) prepareNextOpponents();
         setDuel(null);
         // Re-checked against the current fleet and inventory, which may have loaded since.
-        duelsRef.current =
-            !!flown && canDuel(shipsRef.current, flown.id, statsDepsRef.current.isCandidate);
-        gameRef.current = createGame(newSeed(), { duels: duelsRef.current });
+        optionsRef.current = runOptions(
+            shipsRef.current,
+            flown?.id ?? null,
+            statsDepsRef.current.isCandidate
+        );
+        gameRef.current = createGame(newSeed(), optionsRef.current);
         viewRef.current = createFlightView(
             undefined,
             flown ? factionAccent(flown.faction) : null,
@@ -706,10 +770,8 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         // Re-resolved so the duel uses the ship as ShipsContext currently enriches it.
         const flown =
             shipsRef.current.find((s) => s.id === flownRef.current?.id) ?? flownRef.current;
-        const opponent = pending
-            ? opponentsRef.current.get(pending.checkpointId)?.[pending.slot]
-            : undefined;
-        if (!pending || !flown || !opponent) {
+        const picks = pending ? opponentsRef.current.get(pending.checkpointId) : undefined;
+        if (!pending || !flown || !picks) {
             resolveDuel(game, 'skipped');
             prepareNextOpponents();
             setCountdown(COUNTDOWN_SECONDS);
@@ -721,10 +783,15 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const generation = runGenerationRef.current;
         const current = () => !session.aborted && generation === runGenerationRef.current;
         const id = ++duelSeqRef.current;
+        const { challenge, slot } = pending;
+        const seed = challengeSeed(game.seed, pending.checkpointId);
         const player = toSide(flown, 'right');
-        const rival = toSide(opponent, 'left');
+        const rival = toSide(gateLeads(picks)[slot], 'left');
         setDuel({
             id,
+            challenge,
+            picks,
+            slot,
             player: player.side,
             opponent: rival.side,
             stakes: pending.stakes,
@@ -749,13 +816,13 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         // The animation frame commits the "Simulating…" state; the timeout then runs the
         // synchronous simulation after that frame has been painted.
         const simulate = async () => {
-            let r: DuelResult;
+            let r: ChallengeResult;
             try {
-                const { runDuel } = await import('./duel/runDuel');
+                const { runChallenge } = await import('./duel/runChallenge');
                 if (!current()) return;
-                r = runDuel(flown, opponent, statsDepsRef.current, newSeed());
+                r = runChallenge(challenge, flown, picks, slot, statsDepsRef.current, seed);
             } catch {
-                r = { outcome: 'skipped', beats: [] };
+                r = skippedChallenge(challenge);
             }
             if (!current()) return;
             const effect = resolveDuel(gameRef.current, r.outcome);
@@ -805,9 +872,9 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         /** Checkpoints whose gates have been passed and handled. */
         const passed = new WeakSet<object>();
 
-        /** The pre-picked pair, re-resolved against the current fleet; null if a ship has left
+        /** The pre-picked bundle, re-resolved against the current fleet; null if a ship has left
          *  the fleet, is now the flown one or is no longer a duel candidate. */
-        const takePrepared = (flownId: string): [Ship, Ship] | null => {
+        const takePrepared = (flownId: string): Ship[] | null => {
             const prepared = nextOpponentsRef.current;
             nextOpponentsRef.current = null;
             nextOpponentsForRef.current = null;
@@ -817,7 +884,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     (s) => s.id === p.id && s.id !== flownId && statsDepsRef.current.isCandidate(s)
                 )
             );
-            return current[0] && current[1] ? [current[0], current[1]] : null;
+            return current.every((s) => s !== undefined) ? current : null;
         };
 
         /** A gate's art: the portrait, and the sprite as soon as it has rendered. */
@@ -892,21 +959,24 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 const flown = flownRef.current;
                 for (const c of game.checkpoints) {
                     if (view.gateArt.has(c.id) || c.resolved || !flown) continue;
-                    const pick =
-                        takePrepared(flown.id) ??
-                        pickOpponents(
+                    const prepared = takePrepared(flown.id);
+                    const fresh = () => {
+                        const bundle = pickRowBundle(
                             shipsRef.current,
                             flown.id,
-                            Math.random,
                             statsDepsRef.current.isCandidate
                         );
-                    if (!pick) {
+                        return bundle && rowPicks(c.challenge, bundle);
+                    };
+                    const picks = (prepared && rowPicks(c.challenge, prepared)) ?? fresh();
+                    if (!picks) {
                         // No opponents to show: the engine ignores a resolved checkpoint.
                         c.resolved = true;
                         continue;
                     }
-                    opponentsRef.current.set(c.id, pick);
-                    view.gateArt.set(c.id, [toGateArt(pick[0]), toGateArt(pick[1])]);
+                    opponentsRef.current.set(c.id, picks);
+                    const [left, right] = gateLeads(picks);
+                    view.gateArt.set(c.id, [toGateArt(left), toGateArt(right)]);
                     refreshPins();
                 }
 
@@ -1168,7 +1238,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     player={duel.player}
                     opponent={duel.opponent}
                     stakes={duel.stakes}
-                    result={duel.result}
+                    result={duel.result && toDuelResult(duel.result)}
                     effect={duel.effect}
                     onDone={onDuelDone}
                 />

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
     anyCandidate,
+    bundleGateShips,
+    gateLeads,
     canDuel,
     canTeam,
     gearedCandidate,
@@ -169,5 +171,21 @@ describe('team picks', () => {
         expect(rowPicks('team', bundle)).toBeNull();
         expect(rowPicks('duel', bundle)?.kind).toBe('single');
         expect(rowPicks('duel', bundle.slice(0, 1))).toBeNull();
+    });
+});
+
+describe('gate ships', () => {
+    const big = 'abcdefghij'.split('').map((id) => ship(id, []));
+    const ids = (ships: Ship[]) => ships.map((s) => s.id);
+
+    it('a gate shows its ship, or the first of its trio', () => {
+        const bundle = big.slice(1, 9);
+        expect(ids(gateLeads(rowPicks('dps', bundle)!))).toEqual(['b', 'c']);
+        expect(ids(gateLeads(rowPicks('team', bundle)!))).toEqual(['b', 'e']);
+    });
+
+    it('a bundle offers the gate ships of either shape', () => {
+        expect(ids(bundleGateShips(big.slice(1, 9)))).toEqual(['b', 'c', 'e']);
+        expect(ids(bundleGateShips(big.slice(1, 3)))).toEqual(['b', 'c']);
     });
 });
