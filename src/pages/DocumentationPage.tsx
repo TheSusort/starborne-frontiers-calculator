@@ -2654,6 +2654,21 @@ const DocumentationPage: React.FC = () => {
                                 </p>
                             </div>
                             <div className="card">
+                                <h4 className="font-semibold text-primary mb-2">Scenery</h4>
+                                <p className="text-theme-text">
+                                    Every 1,000 metres the run enters a new zone, and the sky, sun,
+                                    grid, barriers and speed lines fade into its colours: Sunset,
+                                    Neon Night, Red Alert and Ice, then Sunset again. A banner under
+                                    your score names each zone as it starts. While the music plays,
+                                    the grid and the sun&apos;s glow pulse on the beat. Near top
+                                    speed the speed lines stretch out and a pink and cyan fringe
+                                    lines the screen edges, and the screen shakes when your shield
+                                    breaks. With reduced motion turned on in your system settings
+                                    there is no shake and the sun&apos;s glow does not swell on the
+                                    beat.
+                                </p>
+                            </div>
+                            <div className="card">
                                 <h4 className="font-semibold text-primary mb-2">Leaderboard</h4>
                                 <p className="text-theme-text">
                                     Anyone can join the leaderboard. Signed-in players are ranked by
