@@ -73,11 +73,14 @@ export const DUEL_CREDIT_PENALTY = 0.25;
 export const PREVIEW_SCALE = 0.25;
 export const PREVIEW_EASE_SECONDS = 0.3;
 export const PREVIEW_SECONDS = 2;
-/** World units the whole preview covers at MAX_SPEED: each linear ease averages the two scales. */
-export const PREVIEW_TRAVEL_AT_MAX =
-    MAX_SPEED *
-    (PREVIEW_SECONDS * PREVIEW_SCALE + 2 * PREVIEW_EASE_SECONDS * ((1 + PREVIEW_SCALE) / 2));
-/** Depth ahead of the player at which a checkpoint row's preview starts. It exceeds
- *  PREVIEW_TRAVEL_AT_MAX, so the scale is back to 1 before the row reaches the player even at
- *  MAX_SPEED, and lies inside SPAWN_Z, so the row is on screen when it starts. */
+/** Seconds at speed 1 the whole preview covers: each linear ease averages the two scales. */
+export const PREVIEW_TRAVEL_SECONDS =
+    PREVIEW_SECONDS * PREVIEW_SCALE + 2 * PREVIEW_EASE_SECONDS * ((1 + PREVIEW_SCALE) / 2);
+/** World units the whole preview covers at MAX_SPEED. */
+export const PREVIEW_TRAVEL_AT_MAX = MAX_SPEED * PREVIEW_TRAVEL_SECONDS;
+/** Seconds at full speed between the preview's end and the row reaching the player. */
+export const PREVIEW_LEAD_SECONDS = 0.4;
+/** The deepest a checkpoint row's preview may start. It exceeds PREVIEW_TRAVEL_AT_MAX, so the
+ *  scale is back to 1 before the row reaches the player even at MAX_SPEED, and lies inside
+ *  SPAWN_Z, so the row is on screen when it starts. See `previewStartZ`. */
 export const PREVIEW_Z = 72;

@@ -16,7 +16,9 @@ import {
     NEAR_MISS_SECONDS,
     PREVIEW_EASE_SECONDS,
     PREVIEW_SCALE,
+    PREVIEW_LEAD_SECONDS,
     PREVIEW_SECONDS,
+    PREVIEW_TRAVEL_SECONDS,
     PREVIEW_Z,
     RAMP_SPEED,
     ROW_GAP,
@@ -109,11 +111,18 @@ function advancePreview(state: GameState, realDt: number): number {
     return state.timeScale;
 }
 
-/** Starts the preview of the first row to come within PREVIEW_Z, unless one is running. */
+/** Depth at which a checkpoint row's preview starts at `speed`: the preview ends
+ *  PREVIEW_LEAD_SECONDS before the row reaches the player, capped at PREVIEW_Z. */
+export function previewStartZ(speed: number): number {
+    return Math.min(PREVIEW_Z, speed * (PREVIEW_TRAVEL_SECONDS + PREVIEW_LEAD_SECONDS));
+}
+
+/** Starts the preview of the first row to come within `previewStartZ`, unless one is running. */
 function startPreview(state: GameState): void {
     if (state.preview) return;
+    const startZ = previewStartZ(state.speed);
     for (const c of state.checkpoints) {
-        if (c.previewed || c.resolved || c.z > PREVIEW_Z) continue;
+        if (c.previewed || c.resolved || c.z > startZ) continue;
         c.previewed = true;
         state.preview = { checkpointId: c.id, elapsed: 0 };
         return;

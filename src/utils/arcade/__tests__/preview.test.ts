@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createGame, PREVIEW_TOTAL_SECONDS, previewScale, step } from '../engine';
+import { createGame, PREVIEW_TOTAL_SECONDS, previewScale, previewStartZ, step } from '../engine';
 import { computeScore } from '../scoring';
 import {
     JUMP_SECONDS,
@@ -10,6 +10,7 @@ import {
     PREVIEW_TRAVEL_AT_MAX,
     PREVIEW_Z,
     SPAWN_Z,
+    START_SPEED,
     STEP_SECONDS,
 } from '../constants';
 import type { GameState, InputAction, Lane, RunEvent } from '../types';
@@ -53,6 +54,30 @@ describe('previewScale', () => {
 });
 
 describe('checkpoint preview', () => {
+    it('starts later at low speed and still ends before the row reaches the player', () => {
+        const g = rowAhead();
+        g.speed = START_SPEED;
+        const row = g.checkpoints[0];
+        let startedAt: number | null = null;
+        let startSpeed = 0;
+        let endedAt: number | null = null;
+        for (let i = 0; i < MAX_STEPS && row.z > 0; i++) {
+            const before = row.z;
+            const speed = g.speed;
+            step(g, [], STEP_SECONDS);
+            if (startedAt === null && g.preview) {
+                startedAt = before;
+                startSpeed = speed;
+            }
+            if (startedAt !== null && endedAt === null && !g.preview) endedAt = row.z;
+        }
+        expect(startedAt).not.toBeNull();
+        expect(startedAt!).toBeLessThan(PREVIEW_Z / 2);
+        expect(startedAt!).toBeLessThanOrEqual(previewStartZ(startSpeed) + 1);
+        expect(endedAt).not.toBeNull();
+        expect(endedAt!).toBeGreaterThan(0);
+    });
+
     it('reaches PREVIEW_SCALE and is back to 1 before the row crosses at MAX_SPEED', () => {
         const g = rowAhead();
         const row = g.checkpoints[0];
