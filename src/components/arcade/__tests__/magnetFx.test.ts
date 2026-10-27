@@ -26,12 +26,17 @@ const credit = (lane: number, z: number, kind: PickupKind = 'credit'): Pickup =>
     z,
     resolved: false,
     collected: false,
+    trailId: 0,
 });
 
 const player = (lane: number, magnetTime = 5): PlayerState => ({
     lane: lane as Lane,
     action: 'run',
     actionTime: 0,
+    dropArc: 0,
+    actionStartedAt: Number.NEGATIVE_INFINITY,
+    laneLeftAt: [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY],
+    buffered: null,
     shield: false,
     magnetTime,
 });

@@ -67,6 +67,8 @@ export function spawnRow(
                     : 'magnet'
                 : null;
         const start = z + ROW_GAP * 0.25;
+        const trailId = state.nextId++;
+        state.trails[trailId] = { pending: CREDITS_PER_TRAIL, missed: false };
         for (let i = 0; i < CREDITS_PER_TRAIL; i++) {
             pickups.push({
                 id: state.nextId++,
@@ -75,6 +77,7 @@ export function spawnRow(
                 z: start + i * CREDIT_SPACING,
                 resolved: false,
                 collected: false,
+                trailId,
             });
         }
     }

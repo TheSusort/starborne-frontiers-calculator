@@ -14,5 +14,7 @@ export function runResult(state: GameState): RunResult {
         score: computeScore(state),
         credits: state.credits,
         distance: metersTravelled(state.distance),
+        bestNearMissChain: state.bestNearMissChain,
+        nearMissPoints: state.nearMissPoints,
     };
 }

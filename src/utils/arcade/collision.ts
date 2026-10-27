@@ -11,7 +11,7 @@ export function jumpArc(actionTime: number): number {
     return Math.max(0, Math.sin(Math.PI * actionProgress(actionTime, JUMP_SECONDS)));
 }
 
-/** wall: only a lane change avoids it. low: jump over. high: duck under. */
+/** wall: only a lane change avoids it. low: jump over. high: duck under. A drop clears nothing. */
 export function blocks(kind: ObstacleKind, action: PlayerAction): boolean {
     if (kind === 'wall') return true;
     if (kind === 'low') return action !== 'jump';
