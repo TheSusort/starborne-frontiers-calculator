@@ -2,11 +2,11 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Ship } from '../types/ship';
 import type { Position } from '../types/encounters';
 import { asFactionName } from '../constants/factions';
-import { targetingOf } from '../utils/calculators/shipTargeting';
 import { buildShipAbilitiesWithEquipment } from '../utils/abilities/buildShipAbilitiesWithEquipment';
 import { EnemyAttackerConfig } from '../components/calculator/EnemyAttackersPanel';
 import { TeamShipConfig, TeamActorInput } from '../types/calculator';
 import { EnemyAttackerInput } from '../utils/calculators/healingEngineAdapter';
+import { enemyAttackerInput } from '../utils/calculators/calculatorShipInputs';
 import {
     DEFAULT_ENEMY_DEFENCE,
     DEFAULT_ENEMY_HP,
@@ -315,56 +315,7 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
 
     const enemyInputs = useMemo<EnemyAttackerInput[]>(
         () =>
-            enemies.map((e) => {
-                // The enemy's OWN parsed targeting, exactly as the healer gets its own (decision 4:
-                // targeting comes from every ACTOR's parsed skill targeting, not just the healer's).
-                // Without it every enemy defaulted to single-target FRONT, so an enemy AoE attacker hit
-                // exactly one player ship instead of its real footprint — understating incoming
-                // pressure on a spread board and making defensive placement inert against the enemy
-                // side. Undefined for a manual enemy (or an unparseable kit), and the adapter's
-                // synthetic front/base fallback then applies.
-                const enemyShip = e.shipId ? getShipById(e.shipId) : undefined;
-                const targeting = targetingOf(enemyShip);
-                return {
-                    id: e.id,
-                    // #363: this enemy's own faction — mirrors how the player-side team-ship/
-                    // target-ship branches above already thread `faction: asFactionName(ship.
-                    // faction)`. Without this an ENEMY-side Fuying grants Stealth to nobody
-                    // (unknown faction never matches a filter), the opposite-direction defect
-                    // from those branches missing it. A manual enemy (no `shipId`) stays
-                    // unknown-faction, same as before.
-                    faction: asFactionName(enemyShip?.faction),
-                    stats: {
-                        attack: e.attack,
-                        crit: e.crit,
-                        critDamage: e.critDamage,
-                        speed: e.speed,
-                        // The enemy's OWN numbers, no longer the adapter's legacy-sink fallbacks: its
-                        // defence is the basis for the healer's damage-dealt riders, its HP decides
-                        // whether it can be destroyed, and its security resists the healer's debuffs.
-                        hp: e.hp,
-                        defence: e.defence,
-                        security: e.security,
-                        defensePenetration: e.defensePenetration,
-                        shieldPenetration: e.shieldPenetration,
-                        healModifier: e.healModifier,
-                        hacking: e.hacking,
-                        // `Required`: a stat the input gains fails `tsc` until it is forwarded.
-                    } satisfies Required<EnemyAttackerInput['stats']>,
-                    // Identity derived from `shipId`, mirroring the team-ship branch's `name`.
-                    role: enemyShip?.type,
-                    name: enemyShip?.name,
-                    chargeCount: e.chargeCount,
-                    startCharged: e.startCharged,
-                    shipSkills: e.shipSkills,
-                    affinity: e.affinity,
-                    position: e.position,
-                    target: targeting?.active?.target,
-                    pattern: targeting?.active?.pattern,
-                    chargedTarget: targeting?.charged?.target,
-                    chargedPattern: targeting?.charged?.pattern,
-                };
-            }),
+            enemies.map((e) => enemyAttackerInput(e, e.shipId ? getShipById(e.shipId) : undefined)),
         [enemies, getShipById]
     );
 

@@ -6,3 +6,9 @@ export function nextRandom(state: { rngState: number }): number {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
+
+/** The seed every simulation of one checkpoint row uses: fixed by the run's seed and the row. */
+export function challengeSeed(runSeed: number, checkpointId: number): number {
+    const state = { rngState: (runSeed ^ Math.imul(checkpointId, 0x9e3779b1)) >>> 0 };
+    return Math.floor(nextRandom(state) * 4294967296) >>> 0;
+}

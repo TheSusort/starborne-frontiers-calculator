@@ -4,12 +4,15 @@ import { DuelSummary } from '../DuelSummary';
 import { DUEL_RESULT_HOLD_MS } from '../stakesText';
 import { MAX_PLAYBACK_SECONDS, type DuelBeat, type DuelSideState } from '../duelPlayback';
 import type { DuelResult } from '../runDuel';
+import type { RaceResult } from '../challengeResult';
+import { RACE_ROUND_SECONDS } from '../racePlayback';
 import type { DuelEffect } from '../../../../utils/arcade/types';
 
 const player = { name: 'Nova', level: 60, imageUrl: null };
 const opponent = { name: 'Rook', level: 60, imageUrl: null };
 
 const sideState = (s: Partial<DuelSideState> = {}): DuelSideState => ({
+    position: 'M2',
     hpPct: 100,
     shieldPct: 0,
     buffs: [],
@@ -21,10 +24,11 @@ const sideState = (s: Partial<DuelSideState> = {}): DuelSideState => ({
 const beat = (b: Partial<DuelBeat> = {}): DuelBeat => ({
     round: 1,
     actor: 'player',
+    actorShip: 0,
     charged: null,
     hits: [],
-    player: sideState(),
-    enemy: sideState(),
+    player: [sideState()],
+    enemy: [sideState()],
     ...b,
 });
 
@@ -34,8 +38,8 @@ const result: DuelResult = {
         beat({
             round: Math.floor(i / 2) + 1,
             actor: i % 2 === 0 ? 'player' : 'enemy',
-            player: sideState({ hpPct: 100 - i * 2 }),
-            enemy: sideState({ hpPct: 100 - i * 9 }),
+            player: [sideState({ hpPct: 100 - i * 2 })],
+            enemy: [sideState({ hpPct: 100 - i * 9 })],
         })
     ),
 };
@@ -45,10 +49,11 @@ const PLAYBACK_MS = MAX_PLAYBACK_SECONDS * 1000 + 500;
 function show(effect: DuelEffect | null, onDone: () => void, r: DuelResult = result) {
     return render(
         <DuelSummary
-            player={player}
-            opponent={opponent}
+            challenge="duel"
+            players={[player]}
+            opponents={[opponent]}
             stakes="power-up"
-            result={r}
+            result={{ kind: 'duel', ...r }}
             effect={effect}
             onDone={onDone}
         />
@@ -159,8 +164,8 @@ describe('DuelSummary playback', () => {
         const r: DuelResult = {
             outcome: 'win',
             beats: [
-                beat({ player: sideState({ shieldPct: 40 }) }),
-                beat({ player: sideState({ shieldPct: 0 }) }),
+                beat({ player: [sideState({ shieldPct: 40 })] }),
+                beat({ player: [sideState({ shieldPct: 0 })] }),
             ],
         };
         const { getByRole, getByText, queryByText } = show({ kind: 'shield' }, vi.fn(), r);
@@ -184,10 +189,12 @@ describe('DuelSummary playback', () => {
             outcome: 'win',
             beats: [
                 beat({
-                    player: sideState({
-                        buffs: ['Attack Up III', 'Hacking Up III', 'Overclock III', 'Stealth'],
-                        debuffs: ['Provoke'],
-                    }),
+                    player: [
+                        sideState({
+                            buffs: ['Attack Up III', 'Hacking Up III', 'Overclock III', 'Stealth'],
+                            debuffs: ['Provoke'],
+                        }),
+                    ],
                 }),
             ],
         };
@@ -213,16 +220,16 @@ describe('DuelSummary playback', () => {
             beats: [
                 beat({
                     hits: [
-                        { side: 'enemy', kind: 'damage', amount: 1234.4, crit: true },
-                        { side: 'enemy', kind: 'damage', amount: 98765, crit: false },
-                        { side: 'player', kind: 'shield', amount: 500, crit: false },
+                        { side: 'enemy', ship: 0, kind: 'damage', amount: 1234.4, crit: true },
+                        { side: 'enemy', ship: 0, kind: 'damage', amount: 98765, crit: false },
+                        { side: 'player', ship: 0, kind: 'shield', amount: 500, crit: false },
                     ],
                 }),
                 beat({
                     actor: 'enemy',
                     hits: [
-                        { side: 'player', kind: 'miss', amount: 0, crit: false },
-                        { side: 'enemy', kind: 'heal', amount: 2500, crit: false },
+                        { side: 'player', ship: 0, kind: 'miss', amount: 0, crit: false },
+                        { side: 'enemy', ship: 0, kind: 'heal', amount: 2500, crit: false },
                     ],
                 }),
             ],
@@ -264,7 +271,7 @@ describe('DuelSummary playback', () => {
     it('fills the charge meter from the latest turn start', () => {
         const r: DuelResult = {
             outcome: 'win',
-            beats: [beat({ player: sideState({ charge: { value: 1, max: 4 } }) })],
+            beats: [beat({ player: [sideState({ charge: { value: 1, max: 4 } })] })],
         };
         const { getByRole } = show({ kind: 'shield' }, vi.fn(), r);
         act(() => void vi.advanceTimersByTime(100));
@@ -275,5 +282,191 @@ describe('DuelSummary playback', () => {
         expect(getByRole('progressbar', { name: 'Rook charge' }).parentElement).toHaveClass(
             'invisible'
         );
+    });
+});
+
+describe('DuelSummary team fight', () => {
+    fakeTimers();
+
+    it('puts each ship on its cell of a seven-hex board, each with its own bars and numbers', () => {
+        const allies = [
+            player,
+            { name: 'Ash', level: 50, imageUrl: null },
+            { name: 'Bix', level: 50, imageUrl: null },
+        ];
+        const trio = [
+            opponent,
+            { name: 'Cog', level: 50, imageUrl: null },
+            { name: 'Dax', level: 50, imageUrl: null },
+        ];
+        const r = {
+            kind: 'team' as const,
+            outcome: 'win' as const,
+            beats: [
+                beat({
+                    actorShip: 1,
+                    hits: [{ side: 'enemy', ship: 2, kind: 'damage', amount: 777, crit: false }],
+                    player: [
+                        sideState({ position: 'B3' }),
+                        sideState({ position: 'T2', hpPct: 80 }),
+                        sideState({ position: 'M4' }),
+                    ],
+                    enemy: [
+                        sideState({ position: 'M3' }),
+                        sideState({ position: 'T3' }),
+                        sideState({ position: 'B2', hpPct: 30, buffs: ['Stealth', 'Taunt'] }),
+                    ],
+                }),
+            ],
+        };
+        const { getByRole, getByText } = render(
+            <DuelSummary
+                challenge="team"
+                players={allies}
+                opponents={trio}
+                stakes="win-or-die"
+                result={r}
+                effect={{ kind: 'none' }}
+                onDone={vi.fn()}
+            />
+        );
+        act(() => void vi.advanceTimersByTime(100));
+        expect(getByText('3v3 · WIN OR DIE')).toBeInTheDocument();
+        expect(getByRole('progressbar', { name: 'Ash hull' })).toHaveAttribute(
+            'aria-valuenow',
+            '80'
+        );
+        expect(getByRole('progressbar', { name: 'Dax hull' })).toHaveAttribute(
+            'aria-valuenow',
+            '30'
+        );
+        expect(getByRole('progressbar', { name: 'Cog hull' })).toHaveAttribute(
+            'aria-valuenow',
+            '100'
+        );
+        const mine = getByRole('group', { name: 'Your board' });
+        const theirs = getByRole('group', { name: 'Enemy board' });
+        const cell = (board: HTMLElement, position: string) =>
+            board.querySelector<HTMLElement>(`[data-cell="${position}"]`)!;
+        for (const board of [mine, theirs]) {
+            expect(board.querySelectorAll('[data-cell]')).toHaveLength(7);
+        }
+        // The flown ship is ship 0 of `player` and stands where its state says, not first.
+        expect(
+            within(cell(mine, 'B3')).getByRole('progressbar', { name: 'Nova hull' })
+        ).toBeTruthy();
+        expect(
+            within(cell(mine, 'T2')).getByRole('progressbar', { name: 'Ash hull' })
+        ).toBeTruthy();
+        expect(within(cell(mine, 'M2')).queryByRole('progressbar')).toBeNull();
+        const dax = cell(theirs, 'B2');
+        expect(within(dax).getByText('777')).toBeTruthy();
+        expect(within(dax).getByRole('progressbar', { name: 'Dax hull' })).toBeTruthy();
+        // A board cell shows the count of its buffs, the names in the tooltip.
+        const buffs = within(dax).getByRole('list', { name: 'Dax buffs' });
+        expect(
+            within(buffs)
+                .getAllByRole('listitem')
+                .map((i) => i.textContent)
+        ).toEqual(['+2']);
+        expect(within(buffs).getByRole('listitem')).toHaveAttribute('title', 'Stealth, Taunt');
+        // Both fronts face the middle: the player's front (M4) is right of its back (M2), the
+        // enemy's left of it.
+        const left = (el: HTMLElement) => parseFloat(el.style.left);
+        expect(left(cell(mine, 'M4'))).toBeGreaterThan(left(cell(mine, 'M2')));
+        expect(left(cell(theirs, 'M4'))).toBeLessThan(left(cell(theirs, 'M2')));
+    });
+});
+
+describe('DuelSummary race', () => {
+    fakeTimers();
+
+    const race: RaceResult = {
+        kind: 'dps',
+        outcome: 'win',
+        flown: { byRound: [100, 300, 600, 900, 1200], total: 1200 },
+        rival: { byRound: [200, 400, 500, 700, 800], total: 800 },
+    };
+    const showRace = (r: RaceResult, reducedMotion = false) =>
+        render(
+            <DuelSummary
+                challenge={r.kind}
+                players={[player]}
+                opponents={[opponent]}
+                stakes="win-or-die"
+                result={r}
+                effect={{ kind: 'none' }}
+                reducedMotion={reducedMotion}
+                onDone={vi.fn()}
+            />
+        );
+    const bar = (q: ReturnType<typeof showRace>, name: string) =>
+        q.getByRole('progressbar', { name: `${name} damage dealt` });
+
+    it('fills each bar round by round against the leader, then stamps WIN and LOSE', () => {
+        const q = showRace(race);
+        expect(q.getByText('DPS · WIN OR DIE')).toBeInTheDocument();
+        act(() => void vi.advanceTimersByTime(100));
+        expect(q.getByText('Round 1')).toBeInTheDocument();
+        expect(bar(q, 'Rook')).toHaveAttribute('aria-valuenow', '17');
+        expect(q.getByText('200')).toBeInTheDocument();
+        expect(q.queryByRole('status')).toBeNull();
+        act(() => void vi.advanceTimersByTime(RACE_ROUND_SECONDS * 1000));
+        expect(q.getByText('Round 2')).toBeInTheDocument();
+        expect(bar(q, 'Nova')).toHaveAttribute('aria-valuenow', '25');
+        act(() => void vi.advanceTimersByTime(RACE_ROUND_SECONDS * 4000));
+        expect(bar(q, 'Nova')).toHaveAttribute('aria-valuenow', '100');
+        expect(q.getByText('1,200')).toBeInTheDocument();
+        expect(q.getAllByRole('status').map((s) => s.textContent)).toEqual(['WIN', 'LOSE']);
+        expect(q.getByText('Victory')).toBeInTheDocument();
+    });
+
+    it('shows the final bars at once under reduced motion', () => {
+        const q = showRace(
+            {
+                ...race,
+                kind: 'tank',
+                flown: { byRound: [90, 70, 50, 40, 30], total: 30 },
+                rival: { byRound: [95, 80, 60, 50, 45], total: 45 },
+                outcome: 'lose',
+            },
+            true
+        );
+        act(() => void vi.advanceTimersByTime(50));
+        expect(q.getByRole('progressbar', { name: 'Nova hp left' })).toHaveAttribute(
+            'aria-valuenow',
+            '30'
+        );
+        expect(q.getByText('45%')).toBeInTheDocument();
+        expect(q.getAllByRole('status').map((s) => s.textContent)).toEqual(['LOSE', 'WIN']);
+        expect(q.getByText('Defeat')).toBeInTheDocument();
+    });
+
+    it('a drawn race stamps both ships DRAW and says nothing was won or lost', () => {
+        const q = showRace(
+            {
+                kind: 'tank',
+                outcome: 'draw',
+                flown: { byRound: [50, 0], total: 0, endRound: 2 },
+                rival: { byRound: [40, 0], total: 0, endRound: 2 },
+            },
+            true
+        );
+        act(() => void vi.advanceTimersByTime(50));
+        expect(q.getAllByRole('status').map((s) => s.textContent)).toEqual(['DRAW', 'DRAW']);
+        expect(q.getByText('Draw')).toBeInTheDocument();
+        expect(q.getByText('No reward, no penalty')).toBeInTheDocument();
+    });
+
+    it('a skipped race goes straight to its outcome with no stamps', () => {
+        const q = showRace({
+            kind: 'heal',
+            outcome: 'skipped',
+            flown: { byRound: [], total: 0 },
+            rival: { byRound: [], total: 0 },
+        });
+        act(() => void vi.advanceTimersByTime(50));
+        expect(q.getByText('Challenge skipped')).toBeInTheDocument();
+        expect(q.queryByRole('status')).toBeNull();
     });
 });

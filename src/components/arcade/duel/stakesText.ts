@@ -1,4 +1,9 @@
-import type { DuelEffect, DuelStakes } from '../../../utils/arcade/types';
+import type {
+    ChallengeKind,
+    DuelEffect,
+    DuelOutcome,
+    DuelStakes,
+} from '../../../utils/arcade/types';
 
 export function stakesBanner(stakes: DuelStakes): string {
     switch (stakes) {
@@ -10,6 +15,26 @@ export function stakesBanner(stakes: DuelStakes): string {
             return 'POWER-UP';
     }
 }
+
+/** A challenge's short name: its format for the fights, its task for the races. */
+export function challengeLabel(challenge: ChallengeKind): string {
+    switch (challenge) {
+        case 'duel':
+            return '1v1';
+        case 'team':
+            return '3v3';
+        case 'dps':
+            return 'DPS';
+        case 'tank':
+            return 'TANK';
+        case 'heal':
+            return 'HEAL';
+    }
+}
+
+/** "TANK · WIN OR DIE": the challenge and what rides on it. */
+export const challengeBanner = (challenge: ChallengeKind, stakes: DuelStakes): string =>
+    `${challengeLabel(challenge)} · ${stakesBanner(stakes)}`;
 
 export function effectText(effect: DuelEffect): string {
     switch (effect.kind) {
@@ -31,6 +56,10 @@ export function effectText(effect: DuelEffect): string {
             return 'No reward';
     }
 }
+
+/** The effect line under an outcome: a draw wins and loses nothing, whatever the stakes. */
+export const outcomeEffectText = (outcome: DuelOutcome, effect: DuelEffect): string =>
+    outcome === 'draw' ? 'No reward, no penalty' : effectText(effect);
 
 /** How long the outcome stays up before the run moves on by itself. */
 export const DUEL_RESULT_HOLD_MS = 1500;

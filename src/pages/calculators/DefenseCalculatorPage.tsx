@@ -22,59 +22,15 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useEnemyTeamRoster } from '../../hooks/useEnemyTeamRoster';
-import { shipFinalStats, detectShipCharged } from '../../utils/calculators/rosterHelpers';
+import { shipFinalStats } from '../../utils/calculators/rosterHelpers';
 import { Ship } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
-import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
+import { mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 import { gatedAutoFilledBuffs, GatedBuffsPageState } from '../../utils/calculators/gatedBuffs';
-import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
-import { asFactionName } from '../../constants/factions';
 import { targetingOf } from '../../utils/calculators/shipTargeting';
-
-/** Engine stats + kit for a defender built from a real ship. Shared by the URL-param initial
- *  config and the ship-picker, which previously duplicated the stat mapping.
- *
- *  The auto-filled kit `buffs` are part of this shape ON PURPOSE (#414). The two builders used to
- *  disagree — the picker ran `buildSkillBuffAutoFill`/`mergeAutoFill` while the `?shipId=` branch
- *  set `buffs: []` — so the same ship gave two different Theoretical EHPs depending on how you
- *  reached the page, and a URL-arrived defender never showed #391's "Not counted (conditional):"
- *  disclosure because it had no auto-filled buffs to gate. Returning them here means a new call
- *  site gets the kit by default instead of having to remember to ask for it; the picker still
- *  overrides `buffs` after the spread to MERGE with whatever the user had added by hand. */
-const defenderFieldsFromShip = (
-    ship: Ship,
-    final: ReturnType<typeof shipFinalStats>,
-    getGearPiece: Parameters<typeof buildShipAbilitiesWithEquipment>[1]
-) => ({
-    shipId: ship.id,
-    name: ship.name,
-    hp: Math.round(final.hp),
-    defense: Math.round(final.defence),
-    security: Math.round(final.security ?? 0),
-    attack: Math.round(final.attack ?? 0),
-    crit: Math.round(final.crit ?? 0),
-    critDamage: Math.round(final.critDamage ?? 0),
-    // NOT `?? 0` for these two. A speed-0 defender never takes a turn, so its self-shields and
-    // self-buffs never fire and its damage absorbed is silently understated; hacking 0 would also
-    // misreport its own outbound landing. These fallbacks match `healerStatsFromShip` in
-    // HealingCalculatorPage.tsx:173-174, which is the reference implementation.
-    speed: Math.round(final.speed ?? 100),
-    hacking: Math.round(final.hacking ?? 200),
-    healModifier: Math.round(final.healModifier ?? 0),
-    chargeCount: ship.chargeSkillCharge ?? 0,
-    // The ship's own kit text decides this, exactly as it does for this page's enemy and team
-    // rosters (via `useEnemyTeamRoster`) and for the healing page's healer picker — this defender
-    // was previously the only actor on the page whose charged-at-start text was ignored.
-    startCharged: detectShipCharged(ship),
-    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
-    affinity: ship.affinity,
-    role: ship.type,
-    faction: asFactionName(ship.faction),
-    // Player-side kit grants only — `enemyDebuffs` belong to the enemy roster, not the defender.
-    buffs: buildSkillBuffAutoFill(ship).selfBuffs,
-});
+import { defenderFieldsFromShip } from '../../utils/calculators/calculatorShipInputs';
 
 const DefenseCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();

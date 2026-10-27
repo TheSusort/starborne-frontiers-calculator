@@ -63,6 +63,10 @@ export function neighbors(pos: Position): Position[] {
     return out;
 }
 
+/** The small grid: M3 and its six neighbours, a hex "flower" of seven cells (two on top, three
+ *  in the middle, two at the bottom). Pinned against `neighbors('M3')` by `board.test.ts`. */
+export const SMALL_GRID_POSITIONS: readonly Position[] = ['T2', 'T3', 'M2', 'M3', 'M4', 'B2', 'B3'];
+
 /** The row letter of a Position ('T1' -> 'T'). */
 export function rowOf(pos: Position): BoardRow {
     return pos[0] as BoardRow;

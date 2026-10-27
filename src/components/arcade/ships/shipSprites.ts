@@ -11,7 +11,6 @@ import { LightRigOptions, PILOT_LIGHTING } from './lightRig';
 import {
     CHASE_CAMERA,
     FRAME_GRID_POSES,
-    LEVEL_CHASE_POSE,
     officialViewerCamera,
     poseRotation,
     ShipPose,
@@ -317,22 +316,6 @@ export function renderChaseSweeps(
         let at = 0;
         return perSweep.map((poses) => frames.slice(at, (at += poses.length)));
     });
-}
-
-/** The level chase-camera frame alone (nose straight up the screen), framed like the run's grid
- *  so it sits inside a gate's circle. */
-export function renderGateSprite(
-    key: string,
-    { size = 128, signal }: { size?: number; signal?: AbortSignal } = {}
-): Promise<HTMLCanvasElement> {
-    return renderPoses(key, {
-        camera: CHASE_CAMERA,
-        poses: [LEVEL_CHASE_POSE],
-        framing: FRAME_GRID_POSES,
-        width: size,
-        height: size,
-        signal,
-    }).then(([frame]) => frame);
 }
 
 /** The ship at the official viewer's default angle, bow toward `facing`. */

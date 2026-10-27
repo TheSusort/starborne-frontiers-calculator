@@ -376,6 +376,20 @@
         animation: arcade-duel-charged 0.9s ease-out both;
     }
 
+    /* A hex board cell's flash when its ship is struck; opacity only, so reduced motion keeps it. */
+    .board-hit-flash {
+        animation: board-hit-flash 0.35s ease-out both;
+    }
+
+    @keyframes board-hit-flash {
+        0% {
+            opacity: 0.45;
+        }
+        100% {
+            opacity: 0;
+        }
+    }
+
     /* Arcade HUD: the credit streak chip pulses when the streak turns on and fades out when it
        breaks. Reduced motion keeps the fade and drops the pulse. */
     .arcade-streak-on {

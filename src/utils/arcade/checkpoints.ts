@@ -13,10 +13,19 @@ import {
 } from './constants';
 import { nextRandom } from './rng';
 import { shuffledLanes, spawnRow } from './spawner';
-import type { DuelEffect, DuelOutcome, DuelStakes, GameState } from './types';
+import type { ChallengeKind, DuelEffect, DuelOutcome, DuelStakes, GameState } from './types';
 
 const ROW_METERS = ROW_GAP * METERS_PER_UNIT;
 const STAKES: readonly DuelStakes[] = ['win-or-die', 'bonus-or-penalty', 'power-up'];
+/** The challenges every fleet with duels can field; `team` joins them when the fleet is eligible. */
+const SOLO_CHALLENGES: readonly ChallengeKind[] = ['duel', 'dps', 'tank', 'heal'];
+const ALL_CHALLENGES: readonly ChallengeKind[] = [...SOLO_CHALLENGES, 'team'];
+
+/** A uniform draw over the challenges `state` allows. */
+export function drawChallenge(state: GameState): ChallengeKind {
+    const kinds = state.teamChallenges ? ALL_CHALLENGES : SOLO_CHALLENGES;
+    return kinds[Math.floor(nextRandom(state) * kinds.length)];
+}
 
 /** A uniform draw over the whole row counts whose length lies inside `minMeters..maxMeters`. */
 function drawRows(state: GameState, minMeters: number, maxMeters: number): number {
@@ -43,6 +52,8 @@ function spawnCheckpoint(state: GameState, z: number): void {
         z,
         gates: [lanes[0], lanes[1]],
         stakes: STAKES[Math.floor(nextRandom(state) * STAKES.length)],
+        challenge: drawChallenge(state),
+        previewed: false,
         resolved: false,
     });
 }
@@ -109,6 +120,6 @@ export function resolveDuel(state: GameState, outcome: DuelOutcome): DuelEffect 
     if (!pending) return { kind: 'none' };
     state.pendingDuel = null;
     state.status = 'running';
-    if (outcome === 'skipped') return { kind: 'none' };
+    if (outcome === 'skipped' || outcome === 'draw') return { kind: 'none' };
     return applyStakes(state, pending.stakes, outcome === 'win');
 }

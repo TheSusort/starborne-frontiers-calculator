@@ -4,7 +4,13 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Arcade: checkpoints now include DPS, TANK and HEAL races against the gate ship.',
+    'Arcade: new 3v3 checkpoint challenge with two random allies from your fleet.',
+    'Arcade: time slows before each checkpoint so you can read the challenge.',
+    'Arcade: checkpoint gates now show the rival ships as portraits.',
+    'Arcade: tied checkpoint challenges are now a draw with no reward or penalty.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

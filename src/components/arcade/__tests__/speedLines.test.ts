@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+    slowedBlur,
+    slowedStreak,
     activeSpeedLines,
     advanceSpeedLines,
     BLUR_EXTRA_LINES,
@@ -101,5 +103,17 @@ describe('speed lines', () => {
         expect(wide).toBeGreaterThan(tall);
         expect(tall).toBeGreaterThan(0);
         expect(wide).toBeLessThan(Math.PI / 2);
+    });
+
+    it('shrinks the blur and the streaks with the time scale, unchanged at 1', () => {
+        expect(slowedBlur(MAX_SPEED, 1)).toBe(blurStrength(MAX_SPEED));
+        expect(slowedBlur(MAX_SPEED, 0.25)).toBeCloseTo(blurStrength(MAX_SPEED) * 0.25);
+        expect(slowedBlur(START_SPEED, 0.25)).toBe(0);
+        expect(slowedStreak(START_SPEED, 1)).toBe(streakLength(START_SPEED));
+        expect(slowedStreak(MAX_SPEED, 0.25)).toBeLessThan(
+            slowedStreak(MAX_SPEED, 1) * 0.25 + 1e-9
+        );
+        expect(slowedStreak(MAX_SPEED, 0.25)).toBeGreaterThan(0);
+        expect(Number.isFinite(slowedStreak(MAX_SPEED, 0))).toBe(true);
     });
 });

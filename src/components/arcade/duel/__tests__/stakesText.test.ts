@@ -1,11 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { afterPlayback, DUEL_RESULT_HOLD_MS, effectText, stakesBanner } from '../stakesText';
+import {
+    afterPlayback,
+    challengeBanner,
+    challengeLabel,
+    DUEL_RESULT_HOLD_MS,
+    effectText,
+    outcomeEffectText,
+    stakesBanner,
+} from '../stakesText';
 
 describe('stakesText', () => {
     it('labels every stakes kind', () => {
         expect(stakesBanner('win-or-die')).toBe('WIN OR DIE');
         expect(stakesBanner('bonus-or-penalty')).toBe('CREDITS ON THE LINE');
         expect(stakesBanner('power-up')).toBe('POWER-UP');
+    });
+
+    it('names every challenge and joins it with the stakes', () => {
+        expect(challengeLabel('duel')).toBe('1v1');
+        expect(challengeLabel('team')).toBe('3v3');
+        expect(challengeLabel('dps')).toBe('DPS');
+        expect(challengeLabel('heal')).toBe('HEAL');
+        expect(challengeBanner('tank', 'win-or-die')).toBe('TANK · WIN OR DIE');
+        expect(challengeBanner('team', 'power-up')).toBe('3v3 · POWER-UP');
     });
 
     it('describes every effect', () => {
@@ -18,6 +35,15 @@ describe('stakesText', () => {
         expect(effectText({ kind: 'shield-absorbed' })).toBe('Shield absorbed the defeat');
         expect(effectText({ kind: 'game-over' })).toBe('Destroyed');
         expect(effectText({ kind: 'none' })).toBe('No reward');
+    });
+});
+
+describe('outcomeEffectText', () => {
+    it('a draw says nothing was won or lost; any other outcome describes its effect', () => {
+        expect(outcomeEffectText('draw', { kind: 'none' })).toBe('No reward, no penalty');
+        expect(outcomeEffectText('skipped', { kind: 'none' })).toBe('No reward');
+        expect(outcomeEffectText('lose', { kind: 'none' })).toBe('No reward');
+        expect(outcomeEffectText('win', { kind: 'bonus', amount: 500 })).toBe('+500');
     });
 });
 

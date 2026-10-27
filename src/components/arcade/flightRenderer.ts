@@ -72,10 +72,10 @@ import {
 } from './magnetFx';
 import {
     advanceSpeedLines,
-    blurStrength,
     createSpeedLines,
     drawSpeedLines,
     laneWedge,
+    slowedBlur,
     SpeedLinePool,
 } from './speedLines';
 import {
@@ -100,6 +100,7 @@ import type { NeonAccent } from './ships/factionTint';
 import { DRIFT_YAW_DEG, duckSkid, SKID_TWIST, skidLean, skidRoll } from './skidTilt';
 import { cachedPortrait } from './ships/portraitSprite';
 import { stakesBanner } from './duel/stakesText';
+import { previewAlphaFor, previewCardSize, spreadLabels } from './previewHud';
 import {
     actionPitchDeg,
     duckDip,
@@ -135,13 +136,18 @@ export const SHIP_UNIT = 0.16;
 
 export type PlayerFrames = FrameSweeps<HTMLCanvasElement>;
 
-/** What a duel gate shows: the opponent waiting behind it. */
-export interface GateArt {
+/** One ship waiting behind a duel gate. */
+export interface GateShip {
     name: string;
     level: number | undefined;
+    /** The ship's role as players read it ("Attacker"). */
+    role: string;
     portraitUrl: string | null;
-    /** Rendered 3D sprite; preferred over the portrait once it is set. */
-    sprite?: HTMLCanvasElement | null;
+}
+
+/** What a duel gate shows: its one ship, or the trio of a `team` row, as portraits. */
+export interface GateArt {
+    ships: GateShip[];
 }
 
 export interface FlightView {
@@ -328,6 +334,54 @@ function drawObstacle(
     ctx.globalAlpha = 1;
 }
 
+/** Draws `url`'s portrait cropped to fill the box at (`x`, `y`), `w` by `h`, inside a neon frame;
+ *  a portrait still loading shows the frame's tint alone. */
+function drawFramedPortrait(
+    ctx: CanvasRenderingContext2D,
+    url: string | null,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    glow: number
+): void {
+    const img = url ? cachedPortrait(url) : null;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+        ctx.save();
+        ctx.clip();
+        const fit = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+        const iw = img.naturalWidth * fit;
+        const ih = img.naturalHeight * fit;
+        ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+        ctx.restore();
+    } else {
+        ctx.fillStyle = GATE_COLOUR;
+        ctx.globalAlpha *= 0.35;
+        ctx.fill();
+        ctx.globalAlpha /= 0.35;
+    }
+    ctx.strokeStyle = GATE_COLOUR;
+    ctx.shadowColor = GATE_COLOUR;
+    ctx.shadowBlur = glow;
+    ctx.lineWidth = Math.max(1, glow / 4);
+    ctx.stroke();
+    ctx.restore();
+}
+
+/** A gate's arch top and inner width at depth `z`, in screen pixels. */
+function gateShape(g: SceneGeometry, lane: number, z: number) {
+    const p = project(g, laneOffset(lane), z);
+    const u = p.width;
+    const half = 0.42 * u;
+    const shoulder = p.y - 0.9 * u;
+    return { p, u, half, shoulder, top: shoulder - half };
+}
+
+/** A neon arch with the ship's portrait framed inside it, or three side by side for a trio, and
+ *  under a single ship its name and level. */
 function drawGate(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
@@ -335,10 +389,7 @@ function drawGate(
     z: number,
     art: GateArt
 ): void {
-    const p = project(g, laneOffset(lane), z);
-    const u = p.width;
-    const half = 0.42 * u;
-    const shoulder = p.y - 0.9 * u;
+    const { p, u, half, shoulder } = gateShape(g, lane, z);
 
     ctx.save();
     ctx.strokeStyle = GATE_COLOUR;
@@ -353,50 +404,142 @@ function drawGate(
     ctx.stroke();
     ctx.restore();
 
-    const cx = p.x;
     const cy = shoulder + 0.05 * u;
-    const r = 0.3 * u;
-    const sprite = art.sprite ?? null;
-    const img = sprite ? null : art.portraitUrl ? cachedPortrait(art.portraitUrl) : null;
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.closePath();
-    if (sprite) {
-        // The sprite's frame is square with the ship centred, so it fits the circle unclipped.
-        ctx.drawImage(sprite, cx - r * 1.2, cy - r * 1.2, r * 2.4, r * 2.4);
-    } else if (img) {
-        ctx.clip();
-        const fit = Math.max((2 * r) / img.naturalWidth, (2 * r) / img.naturalHeight);
-        const w = img.naturalWidth * fit;
-        const h = img.naturalHeight * fit;
-        ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+    const glow = 8 * p.scale;
+    const n = art.ships.length;
+    if (n === 1) {
+        const side = 0.58 * u;
+        drawFramedPortrait(
+            ctx,
+            art.ships[0].portraitUrl,
+            p.x - side / 2,
+            cy - side / 2,
+            side,
+            side,
+            glow
+        );
     } else {
-        ctx.fillStyle = GATE_COLOUR;
-        ctx.globalAlpha *= 0.6;
-        ctx.fill();
+        const gap = 0.03 * u;
+        const w = (2 * half - 0.08 * u - gap * (n - 1)) / n;
+        const h = w * 1.3;
+        const left = p.x - (n * w + (n - 1) * gap) / 2;
+        art.ships.forEach((ship, i) =>
+            drawFramedPortrait(ctx, ship.portraitUrl, left + i * (w + gap), cy - h / 2, w, h, glow)
+        );
+        return;
     }
-    ctx.restore();
 
     const fontPx = 0.075 * u;
     if (fontPx < MIN_TEXT_PX) return;
+    const ship = art.ships[0];
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.font = `600 ${fontPx}px sans-serif`;
-    const textTop = cy + r + 0.04 * u;
-    ctx.fillText(art.name, cx, textTop, 2 * half - 4);
-    if (art.level !== undefined) {
+    const textTop = cy + 0.29 * u + 0.04 * u;
+    ctx.fillText(ship.name, p.x, textTop, 2 * half - 4);
+    if (ship.level !== undefined) {
         ctx.font = `${fontPx * 0.85}px sans-serif`;
-        ctx.fillText(`Lv ${art.level}`, cx, textTop + fontPx * 1.15, 2 * half - 4);
+        ctx.fillText(`Lv ${ship.level}`, p.x, textTop + fontPx * 1.15, 2 * half - 4);
     }
+}
+
+/** The preview label's portrait size in CSS pixels at the least: far away the gate itself is
+ *  only a few pixels across. */
+const PREVIEW_PORTRAIT_PX = 64;
+const PREVIEW_TEAM_PORTRAIT_PX = 44;
+const PREVIEW_PAD_PX = 6;
+const PREVIEW_GAP_PX = 12;
+/** Keeps a preview label clear of the screen edges, and its top below the preview banner (see
+ *  `PreviewBanner`, placed under the HUD). */
+const PREVIEW_MARGIN_PX = 8;
+const PREVIEW_TOP_PX = 236;
+
+/**
+ * Over each gate of the previewed row, a card with each rival's portrait, name and role, joined
+ * to its gate by a line; cards that would overlap are spread apart (see `spreadLabels`). Sized in
+ * screen pixels with a floor, so it reads while the row is still far away. Drawn at `alpha` (see
+ * `previewAlpha`).
+ */
+function drawPreviewLabels(
+    ctx: CanvasRenderingContext2D,
+    g: SceneGeometry,
+    c: Checkpoint,
+    art: [GateArt, GateArt],
+    alpha: number
+): void {
+    if (alpha <= 0) return;
+    const team = art[0].ships.length > 1;
+    const shapes = c.gates.map((lane) => gateShape(g, lane, c.z));
+    const wanted = team
+        ? Math.max(PREVIEW_TEAM_PORTRAIT_PX, 0.24 * shapes[0].u)
+        : Math.max(PREVIEW_PORTRAIT_PX, 0.5 * shapes[0].u);
+    const n = art[0].ships.length;
+    const { colW, portrait, width } = previewCardSize(g.w, n, wanted, team, {
+        pad: PREVIEW_PAD_PX,
+        gap: PREVIEW_GAP_PX,
+        margin: PREVIEW_MARGIN_PX,
+    });
+    const namePx = team ? 11 : 14;
+    const rolePx = team ? 10 : 12;
+    const height = 2 * PREVIEW_PAD_PX + portrait * (team ? 1.3 : 1) + 4 + namePx + 2 + rolePx;
+    const xs = spreadLabels(
+        [shapes[0].p.x, shapes[1].p.x],
+        width,
+        PREVIEW_GAP_PX,
+        g.w,
+        PREVIEW_MARGIN_PX
+    );
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    art.forEach((gate, k) => {
+        const shape = shapes[k];
+        const bottom = Math.max(PREVIEW_TOP_PX + height, shape.top - 10);
+        const top = bottom - height;
+        const left = xs[k] - width / 2;
+
+        ctx.strokeStyle = GATE_COLOUR;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(xs[k], bottom);
+        ctx.lineTo(shape.p.x, shape.top);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(10, 4, 24, 0.85)';
+        ctx.fillRect(left, top, width, height);
+        ctx.save();
+        ctx.strokeStyle = GATE_COLOUR;
+        ctx.shadowColor = GATE_COLOUR;
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(left, top, width, height);
+        ctx.restore();
+
+        gate.ships.forEach((ship, i) => {
+            const cx = left + PREVIEW_PAD_PX + i * (colW + PREVIEW_PAD_PX) + colW / 2;
+            const ph = portrait * (team ? 1.3 : 1);
+            const py = top + PREVIEW_PAD_PX;
+            drawFramedPortrait(ctx, ship.portraitUrl, cx - portrait / 2, py, portrait, ph, 6);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `700 ${namePx}px sans-serif`;
+            const nameY = py + ph + 4;
+            ctx.fillText(ship.name, cx, nameY, colW);
+            ctx.fillStyle = '#d8b4fe';
+            ctx.font = `${rolePx}px sans-serif`;
+            ctx.fillText(ship.role, cx, nameY + namePx + 2, colW);
+        });
+    });
+    ctx.restore();
 }
 
 function drawCheckpoint(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
     c: Checkpoint,
-    art: [GateArt, GateArt] | undefined
+    art: [GateArt, GateArt] | undefined,
+    preview: number
 ): void {
     if (!art) return;
     ctx.save();
@@ -404,10 +547,12 @@ function drawCheckpoint(
     drawGate(ctx, g, c.gates[0], c.z, art[0]);
     drawGate(ctx, g, c.gates[1], c.z, art[1]);
 
+    // The preview's banner names the stakes, so the row's own label gives way to it.
     const centre = project(g, 0, c.z);
     const u = centre.width;
     const fontPx = 0.11 * u;
-    if (fontPx >= MIN_TEXT_PX) {
+    if (fontPx >= MIN_TEXT_PX && preview < 1) {
+        ctx.globalAlpha *= 1 - preview;
         ctx.font = `bold ${fontPx}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
@@ -826,7 +971,7 @@ function drawItem(f: ItemFrame, item: DrawItem): void {
         drawPickup(ctx, g, pk, c, pullAt, f.dpr);
     } else if (item.checkpoint) {
         const c = item.checkpoint;
-        drawCheckpoint(ctx, g, c, view.gateArt.get(c.id));
+        drawCheckpoint(ctx, g, c, view.gateArt.get(c.id), previewAlphaFor(game, c.id));
     }
 }
 
@@ -878,7 +1023,9 @@ export function renderFlight(
     if (intro < 1) drawGridFan(ctx, g, introGridLayers(g, intro), scene);
     else drawBackdropFan(ctx, g, view.backdrop, dpr, scene, beat);
     view.laneWedge = laneWedge(g);
-    if (view.speedLines) drawSpeedLines(ctx, g, view.speedLines, game.speed, palette.speedLines);
+    if (view.speedLines) {
+        drawSpeedLines(ctx, g, view.speedLines, game.speed, palette.speedLines, game.timeScale);
+    }
 
     const count = collectItems(game, drawList);
     const ship = shipAt;
@@ -937,6 +1084,13 @@ export function renderFlight(
     for (let i = 0; i < count; i++) if (drawList[i].z < 0) drawItem(f, drawList[i]);
     endPulls(view.pulls);
     if (view.dying) drawExplosion(ctx, g, boom, w, h);
+    const previewed =
+        game.preview && game.checkpoints.find((c) => c.id === game.preview?.checkpointId);
+    const previewArt = previewed && view.gateArt.get(previewed.id);
+    if (previewed && previewArt) {
+        drawPreviewLabels(ctx, g, previewed, previewArt, previewAlphaFor(game, previewed.id));
+    }
     if (shake > 0) ctx.restore();
-    drawSpeedFringe(ctx, g, view.fringe, dpr, view.laneWedge, blurStrength(game.speed));
+    const blur = slowedBlur(game.speed, game.timeScale);
+    drawSpeedFringe(ctx, g, view.fringe, dpr, view.laneWedge, blur);
 }

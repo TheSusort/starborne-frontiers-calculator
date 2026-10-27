@@ -20,6 +20,11 @@ import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShip
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
 import { shipFinalStats, combatStatsFromShip } from '../../utils/ship/combatStats';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
+import {
+    DEFAULT_DPS_ENEMY_AFFINITY,
+    defaultDpsEnemyConfig,
+    dpsConfigFromShip,
+} from '../../utils/calculators/calculatorShipInputs';
 import { rankDpsConfigs, describeBestVsSecond } from '../../utils/calculators/rankDpsConfigs';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -59,29 +64,9 @@ const DPSCalculatorPage: React.FC = () => {
         if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
-                // Drop healModifier — it's not part of DPSShipConfig (attacker config).
-                const { healModifier: _healModifier, ...stats } = combatStatsFromShip(
-                    shipFinalStats(ship, statsDeps)
-                );
                 return {
                     configs: [
-                        {
-                            id: '1',
-                            shipId: ship.id,
-                            name: ship.name,
-                            ...stats,
-                            allyChargePerRound: 0,
-                            chargeCount: ship.chargeSkillCharge ?? 0,
-                            affinity: ship.affinity,
-                            startCharged: detectFullyCharged([
-                                ship.activeSkillText,
-                                ship.chargeSkillText,
-                                ship.firstPassiveSkillText,
-                                ship.secondPassiveSkillText,
-                                ship.thirdPassiveSkillText,
-                            ]),
-                            shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
-                        },
+                        { id: '1', ...dpsConfigFromShip(ship, statsDeps), allyChargePerRound: 0 },
                     ],
                     nextId: 2,
                 };
@@ -117,28 +102,8 @@ const DPSCalculatorPage: React.FC = () => {
     // original scalars live on here as its stats, so every existing read site is unchanged (see the
     // destructure below) — only the setters and the new fields (attack/crit/critDamage/skills) are
     // new. A blank `shipSkills` still acts: the engine synthesizes one basic attack per turn.
-    const [enemyConfig, setEnemyConfig] = useState<EnemyShipConfig>({
-        name: 'Enemy',
-        hp: 500000,
-        defense: 10000,
-        security: 100,
-        speed: 50,
-        // Attack defaults to 0 so a DPS comparison stays a clean measure of output: the attacker
-        // cannot be worn down or killed, and every config faces identical conditions.
-        //
-        // VERIFIED TRADE-OFF: a 0-attack enemy emits NO `attacked` events at all (a zero-damage
-        // hit is skipped, not emitted as a 0), so on-attacked / counter / reflect reactions do NOT
-        // fire at this default. The reaction-kit fidelity this sub-project unlocked is therefore
-        // OPT-IN — raise the enemy's attack to see those kits contribute.
-        attack: 0,
-        crit: 0,
-        critDamage: 150,
-        hacking: 200,
-        defensePenetration: 0,
-        shieldPenetration: 0,
-        healModifier: 0,
-        shipSkills: buildDefaultShipSkills(),
-    });
+    // See `defaultDpsEnemyConfig` for why its attack starts at 0.
+    const [enemyConfig, setEnemyConfig] = useState<EnemyShipConfig>(defaultDpsEnemyConfig);
     const [enemyShip, setEnemyShip] = useState<Ship | null>(null);
     const updateEnemy = (field: EnemyShipConfigNumericField, value: number) =>
         setEnemyConfig((prev) => ({ ...prev, [field]: value }));
@@ -187,7 +152,7 @@ const DPSCalculatorPage: React.FC = () => {
             chargeCount: 0,
         },
     ]);
-    const [enemyAffinity, setEnemyAffinity] = useState<AffinityName>('antimatter');
+    const [enemyAffinity, setEnemyAffinity] = useState<AffinityName>(DEFAULT_DPS_ENEMY_AFFINITY);
     const [enemySettingsOpen, setEnemySettingsOpen] = useState(false);
     const [teamOpen, setTeamOpen] = useState(false);
 
@@ -472,39 +437,16 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
-        // healModifier is a team/heal-target concern, not part of DPSShipConfig — drop it
-        // from the attacker config spread (mirrors how team slots keep it separately).
-        const { healModifier: _healModifier, ...stats } = combatStatsFromShip(
-            shipFinalStats(ship, statsDeps)
-        );
-
         setConfigs((prev) =>
-            prev.map((c) => {
-                if (c.id !== configId) return c;
-                return {
-                    ...c,
-                    shipId: ship.id,
-                    name: ship.name,
-                    ...stats,
-                    allyChargePerRound: c.allyChargePerRound ?? 0,
-                    // Reset (not carry over) when the new ship has no charge metadata —
-                    // a stale threshold from the previous ship would mis-pace the sim.
-                    chargeCount: ship.chargeSkillCharge ?? 0,
-                    startCharged: detectFullyCharged([
-                        ship.activeSkillText,
-                        ship.chargeSkillText,
-                        ship.firstPassiveSkillText,
-                        ship.secondPassiveSkillText,
-                        ship.thirdPassiveSkillText,
-                    ]),
-                    affinity: ship.affinity,
-                    // #363 follow-up: thread the picked ship's faction for faction-scoped ally
-                    // grants (Fuying's "grants Tianchen allies Stealth") — mirrors the healing
-                    // page's selectShipForConfig/selectShipForTeamSlot.
-                    faction: asFactionName(ship.faction),
-                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
-                };
-            })
+            prev.map((c) =>
+                c.id === configId
+                    ? {
+                          ...c,
+                          ...dpsConfigFromShip(ship, statsDeps),
+                          allyChargePerRound: c.allyChargePerRound ?? 0,
+                      }
+                    : c
+            )
         );
     };
 
