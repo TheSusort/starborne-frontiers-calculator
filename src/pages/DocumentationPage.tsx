@@ -4741,8 +4741,9 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         The small grid holds 7 ships per team, so a team with more
                                         has to lose some before you can switch; a loaded encounter
-                                        that does not fit keeps the first 7 and says how many were
-                                        left out
+                                        that does not fit keeps the ships already on small-grid
+                                        cells first, fills the free cells from the rest, and says
+                                        how many were left out
                                     </li>
                                 </ul>
                             </div>
