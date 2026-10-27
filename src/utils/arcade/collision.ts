@@ -29,14 +29,14 @@ export function blocks(kind: ObstacleKind, action: PlayerAction): boolean {
 }
 
 /**
- * A pickup in the player's lane is collected unless a jump carries the ship clear over it: a
- * jump still passes through it while the arc is at most PICKUP_CATCH_ARC, which is just after
- * take-off and just before landing. An active magnet collects credits in the own and adjacent
+ * A pickup in the player's lane is collected unless a jump or a drop carries the ship clear over
+ * it: the ship still passes through it while `liftArc` is at most PICKUP_CATCH_ARC, which is just
+ * after take-off and just before landing. An active magnet collects credits in the own and adjacent
  * lanes at any height; it never reaches power-ups.
  */
 export function canCollect(pickup: Pickup, player: PlayerState): boolean {
     const magnet = pickup.kind === 'credit' && player.magnetTime > 0;
     if (magnet) return Math.abs(pickup.lane - player.lane) <= 1;
     if (pickup.lane !== player.lane) return false;
-    return player.action !== 'jump' || jumpArc(player.actionTime) <= PICKUP_CATCH_ARC;
+    return liftArc(player) <= PICKUP_CATCH_ARC;
 }

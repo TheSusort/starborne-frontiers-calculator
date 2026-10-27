@@ -170,6 +170,28 @@ describe('cancels', () => {
         }
     );
 
+    it('a drop from the peak flies over a credit at first, and collects it near the ground', () => {
+        const dropWithCreditAfter = (seconds: number) => {
+            const g = inAction('jump', JUMP_SECONDS / 2);
+            step(g, ['duck'], STEP_SECONDS);
+            run(g, steps(seconds));
+            g.pickups.push({
+                id: g.nextId++,
+                kind: 'credit',
+                lane: 1,
+                z: 0.01,
+                resolved: false,
+                collected: false,
+                trailId: -1,
+            });
+            step(g, [], STEP_SECONDS);
+            expect(g.player.action).toBe('drop');
+            return g.credits;
+        };
+        expect(dropWithCreditAfter(0)).toBe(0);
+        expect(dropWithCreditAfter(DROP_SECONDS * 0.8)).toBe(1);
+    });
+
     it('a jump mid-duck jumps at once', () => {
         const g = inAction('duck', DUCK_SECONDS / 2);
         step(g, ['jump'], STEP_SECONDS);
