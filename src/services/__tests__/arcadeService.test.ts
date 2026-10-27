@@ -4,7 +4,7 @@ import { submitArcadeScore } from '../arcadeService';
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock('../../config/supabase', () => ({ supabase: { rpc } }));
 
-const run = { score: 1200, credits: 30, distance: 450 };
+const run = { score: 1200, credits: 30, distance: 450, bestNearMissChain: 3, nearMissPoints: 150 };
 
 describe('submitArcadeScore', () => {
     beforeEach(() => {

@@ -41,6 +41,20 @@ export const GameOverPanel: React.FC<GameOverPanelProps> = ({
                         <div className="text-xl font-semibold">{result.credits}</div>
                     </div>
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                    <div>
+                        <div className="text-theme-text-secondary text-sm">
+                            Best near-miss chain
+                        </div>
+                        <div className="text-lg font-semibold">{result.bestNearMissChain}</div>
+                    </div>
+                    <div>
+                        <div className="text-theme-text-secondary text-sm">Near-miss points</div>
+                        <div className="text-lg font-semibold">
+                            {result.nearMissPoints.toLocaleString()}
+                        </div>
+                    </div>
+                </div>
                 <p className={isBest ? 'text-primary font-semibold' : 'text-theme-text-secondary'}>
                     {isBest ? 'New personal best' : `Personal best: ${localBest.toLocaleString()}`}
                 </p>

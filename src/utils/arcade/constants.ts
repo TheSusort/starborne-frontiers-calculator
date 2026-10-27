@@ -30,6 +30,19 @@ export const PICKUP_CATCH_ARC =
     (PICKUP_HEIGHT - SHIP_RIDE_HEIGHT + PICKUP_RADIUS + SHIP_HALF_HEIGHT) /
     (JUMP_PEAK - SHIP_HALF_HEIGHT * JUMP_SCALE_GAIN);
 export const DUCK_SECONDS = 0.75;
+/** A duck pressed mid-jump first drops to the ground for DROP_SECONDS, then ducks in full. */
+export const DROP_SECONDS = 0.1;
+/** How long a jump or duck press that cannot start yet waits for the current action to allow it. */
+export const INPUT_BUFFER_SECONDS = 0.15;
+/** A dodge counts as a near miss when it came at most this long before the obstacle crossed. */
+export const NEAR_MISS_SECONDS = 0.2;
+/** The n-th near miss of a chain pays `min(NEAR_MISS_POINTS · n, NEAR_MISS_MAX_POINTS)`. */
+export const NEAR_MISS_POINTS = 25;
+export const NEAR_MISS_MAX_POINTS = 150;
+/** Finished credit trails in a row that switch the streak on. */
+export const STREAK_TRAILS = 2;
+/** Credits each credit pickup is worth while the streak is on. */
+export const STREAK_CREDIT_VALUE = 2;
 export const MAGNET_SECONDS = 8;
 export const SHIELD_BREAK_FLASH = 0.5;
 export const METERS_PER_UNIT = 0.25;

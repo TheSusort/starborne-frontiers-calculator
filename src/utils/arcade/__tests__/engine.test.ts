@@ -35,7 +35,7 @@ function withPickup(kind: PickupKind, lane: Lane, playerLane: Lane, magnet: numb
     const g = quietGame();
     g.player.lane = playerLane;
     g.player.magnetTime = magnet;
-    g.pickups.push({ id: 98, kind, lane, z: 0.01, resolved: false, collected: false });
+    g.pickups.push({ id: 98, kind, lane, z: 0.01, resolved: false, collected: false, trailId: 0 });
     return step(g, [], STEP_SECONDS);
 }
 
@@ -57,6 +57,7 @@ function withPickupAction(
         z: 0.01,
         resolved: false,
         collected: false,
+        trailId: 0,
     });
     return step(g, [], STEP_SECONDS);
 }
@@ -84,12 +85,12 @@ describe('jump and duck', () => {
         expect(g.player.action).toBe('run');
     });
 
-    it('cannot start a duck or restart a jump mid-jump', () => {
+    it('cannot restart a jump mid-jump', () => {
         const g = quietGame();
         step(g, ['jump'], STEP_SECONDS);
         for (let i = 0; i < 10; i++) step(g, [], STEP_SECONDS);
         const remaining = g.player.actionTime;
-        step(g, ['duck', 'jump'], STEP_SECONDS);
+        step(g, ['jump'], STEP_SECONDS);
         expect(g.player.action).toBe('jump');
         expect(g.player.actionTime).toBeLessThan(remaining);
     });
@@ -106,6 +107,9 @@ describe('collision', () => {
         ['high', 'run', 'over'],
         ['high', 'jump', 'over'],
         ['high', 'duck', 'running'],
+        ['wall', 'drop', 'over'],
+        ['low', 'drop', 'over'],
+        ['high', 'drop', 'over'],
     ];
     it.each(cases)('%s in your lane while you %s → %s', (kind, action, expected) => {
         expect(withObstacle(kind, 1, action).status).toBe(expected);
@@ -183,6 +187,7 @@ describe('pickups', () => {
             z: 0.01,
             resolved: false,
             collected: false,
+            trailId: 0,
         });
         g.pickups.push({
             id: 2,
@@ -191,6 +196,7 @@ describe('pickups', () => {
             z: 0.01,
             resolved: false,
             collected: false,
+            trailId: 0,
         });
         step(g, [], STEP_SECONDS);
         expect(g.credits).toBe(1);
@@ -233,6 +239,7 @@ describe('resolve once', () => {
             z: 0.01,
             resolved: false,
             collected: false,
+            trailId: 0,
         });
         step(g, [], STEP_SECONDS);
         step(g, ['right'], STEP_SECONDS);
@@ -250,6 +257,7 @@ describe('resolve once', () => {
             z: 0.01,
             resolved: false,
             collected: false,
+            trailId: 0,
         });
         step(g, [], STEP_SECONDS);
         expect(g.status).toBe('over');

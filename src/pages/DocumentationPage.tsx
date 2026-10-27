@@ -2605,6 +2605,16 @@ const DocumentationPage: React.FC = () => {
                                         under raised blocks
                                     </li>
                                     <li>
+                                        <strong>Down in mid-air</strong> — drop straight to the
+                                        ground and duck; you clear nothing on the way down.{' '}
+                                        <strong>Up while ducking</strong> — jump at once
+                                    </li>
+                                    <li>
+                                        A jump or duck pressed a moment too early, while the
+                                        previous one is still running, is remembered for 0.15
+                                        seconds and happens as soon as it can
+                                    </li>
+                                    <li>
                                         <strong>P</strong> — pause; <strong>M</strong> — toggle the
                                         synthwave music and the crash sound, which start on by
                                         default (your choice is remembered); <strong>Esc</strong> —
@@ -2615,16 +2625,32 @@ const DocumentationPage: React.FC = () => {
                             <div className="card">
                                 <h4 className="font-semibold text-primary mb-2">Scoring</h4>
                                 <p className="text-theme-text">
-                                    Score is metres flown plus 10 points per credit. Walls can only
-                                    be dodged by changing lane, and raised blocks are too tall to
-                                    jump. A shield absorbs one hit; a magnet collects credits from
-                                    the neighbouring lanes for 8 seconds. A jump carries you over
-                                    credits and power-ups at its height, but you still collect them
-                                    just after take-off and as you land; an active magnet pulls in
-                                    credits at any height. Your personal best is saved in this
-                                    browser. When a run ends your ship explodes and a YOU DIED
-                                    screen shows before your score; press Space, Enter or click to
-                                    go straight to the score.
+                                    Score is metres flown plus 10 points per credit, plus duel and
+                                    near-miss bonuses. Walls can only be dodged by changing lane,
+                                    and raised blocks are too tall to jump. A shield absorbs one
+                                    hit; a magnet collects credits from the neighbouring lanes for 8
+                                    seconds. A jump carries you over credits and power-ups at its
+                                    height, but you still collect them just after take-off and as
+                                    you land; an active magnet pulls in credits at any height. Your
+                                    personal best is saved in this browser. When a run ends your
+                                    ship explodes and a YOU DIED screen shows before your score;
+                                    press Space, Enter or click to go straight to the score.
+                                </p>
+                                <p className="text-theme-text mt-2">
+                                    <strong>Near misses.</strong> Dodging at the last moment pays
+                                    bonus points: change lane, or start the jump or duck that clears
+                                    an obstacle, within 0.2 seconds of reaching it. Near misses
+                                    chain: the first pays 25, the next 50, and so on up to 150 each.
+                                    The chain ends when a row of obstacles passes without a near
+                                    miss, or when a hit breaks your shield. The game-over screen
+                                    shows your best chain and the points near misses earned.
+                                </p>
+                                <p className="text-theme-text mt-2">
+                                    <strong>Credit streak.</strong> Collect every credit of two
+                                    trails in a row and each credit after that counts double, shown
+                                    by x2 beside your credits. Missing a credit, or a whole trail,
+                                    ends the streak. Power-ups in a trail do not count, and duel
+                                    credits are never doubled.
                                 </p>
                             </div>
                             <div className="card">

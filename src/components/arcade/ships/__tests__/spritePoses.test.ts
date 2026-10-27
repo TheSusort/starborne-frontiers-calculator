@@ -324,6 +324,11 @@ describe('actionPitchDeg', () => {
     it('is level while running', () => {
         expect(actionPitchDeg('run', 0)).toBe(0);
     });
+    it('dives a drop nose down at the landing pitch throughout', () => {
+        expect(actionPitchDeg('drop', 0.08)).toBeCloseTo(jumpAt(1));
+        expect(actionPitchDeg('drop', 0.01)).toBeCloseTo(jumpAt(1));
+        expect(jumpAt(1)).toBeLessThan(0);
+    });
     const duckAt = (t: number) => actionPitchDeg('duck', (1 - t) * DUCK_SECONDS);
 
     it('mirrors the jump in a duck: nose down diving, level at the bottom, up climbing back', () => {

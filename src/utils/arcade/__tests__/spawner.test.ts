@@ -49,4 +49,22 @@ describe('spawnRow', () => {
         expect([...kinds].sort()).toEqual(['high', 'low', 'wall']);
         expect([...pickups].sort()).toEqual(['credit', 'magnet', 'shield']);
     });
+
+    it('gives every pickup of a trail one trailId and registers the trail', () => {
+        const g = createGame(13);
+        g.distance = 5000;
+        let trails = 0;
+        for (let i = 0; i < 200; i++) {
+            const { pickups } = spawnRow(g, SPAWN_Z);
+            if (pickups.length === 0) continue;
+            trails++;
+            const ids = new Set(pickups.map((p) => p.trailId));
+            expect(ids.size).toBe(1);
+            expect(g.trails[pickups[0].trailId]).toEqual({
+                pending: pickups.length,
+                missed: false,
+            });
+        }
+        expect(trails).toBeGreaterThan(50);
+    });
 });
