@@ -1,6 +1,7 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Volume2, VolumeX, SkipForward } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { Chip } from '../ui/Chip';
 import FallbackErrorBoundary from '../error/FallbackErrorBoundary';
 import { useBodyScrollLock } from '../ui/layout/useBodyScrollLock';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -82,6 +83,33 @@ const ARCADE_MAX_DPR = 1;
 const NO_INPUT: readonly InputAction[] = [];
 
 const newSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0;
+
+/** The credit streak's HUD chip: shown while on, fading out once lost; `pulse` counts the
+ *  changes, so each one replays the chip's animation. */
+interface StreakChip {
+    state: 'off' | 'on' | 'lost';
+    pulse: number;
+}
+
+interface Hud {
+    score: number;
+    credits: number;
+    shield: boolean;
+    magnet: number;
+    streak: StreakChip;
+}
+
+const NO_STREAK: StreakChip = { state: 'off', pulse: 0 };
+const EMPTY_HUD: Hud = { score: 0, credits: 0, shield: false, magnet: 0, streak: NO_STREAK };
+
+const hudOf = (game: GameState, streak: StreakChip): Hud => ({
+    score: computeScore(game),
+    credits: game.credits,
+    shield: game.player.shield,
+    magnet: game.player.magnetTime,
+    streak,
+});
+
 /** How long a ship stays focused on the select screen before its own sprites start rendering. */
 const FOCUS_PREWARM_MS = 400;
 /** How long it stays focused before its first opponents are picked and their art loads too. */
@@ -116,6 +144,22 @@ interface DuelState {
     result: DuelResult | null;
     effect: DuelEffect | null;
 }
+
+/** "x2" beside the credit count while the credit streak doubles credits. It pulses when the
+ *  streak turns on and fades out red when it breaks. */
+const StreakBadge: React.FC<{ chip: StreakChip }> = ({ chip }) => {
+    if (chip.state === 'off') return null;
+    const on = chip.state === 'on';
+    return (
+        <Chip
+            key={chip.pulse}
+            variant={on ? 'accent' : 'debuff'}
+            className={on ? 'arcade-streak-on' : 'arcade-streak-lost'}
+        >
+            x2
+        </Chip>
+    );
+};
 
 const SubmissionLine: React.FC<{
     status: SubmissionStatus;
@@ -289,7 +333,8 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const duelSeqRef = useRef(0);
 
     const [phase, setPhaseState] = useState<Phase>(phaseRef.current);
-    const [hud, setHud] = useState({ score: 0, credits: 0, shield: false, magnet: 0 });
+    const [hud, setHud] = useState<Hud>(EMPTY_HUD);
+    const streakRef = useRef<StreakChip>(NO_STREAK);
     const [countdown, setCountdown] = useState(0);
     const [finished, setFinished] = useState<FinishedRun | null>(null);
     const result = finished?.result ?? null;
@@ -517,7 +562,8 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         setFinished(null);
         youDiedRef.current = false;
         setYouDied(false);
-        setHud({ score: 0, credits: 0, shield: false, magnet: 0 });
+        streakRef.current = NO_STREAK;
+        setHud(EMPTY_HUD);
         setPhase('running');
     }, [setPhase, prepareNextOpponents, keyOf, refreshPins]);
 
@@ -668,12 +714,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         // A duel still being simulated has not been resolved yet.
         if (game.status === 'duel') return;
         setDuel(null);
-        setHud({
-            score: computeScore(game),
-            credits: game.credits,
-            shield: game.player.shield,
-            magnet: game.player.magnetTime,
-        });
+        setHud(hudOf(game, streakRef.current));
         if (game.status === 'over') {
             finishRun();
             return;
@@ -744,6 +785,24 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             return art;
         };
 
+        /** Moves the steps' events into the view and the HUD, once per frame. */
+        const drainEvents = (game: GameState, view: FlightView) => {
+            let streak = streakRef.current;
+            for (const e of game.events) {
+                if (e.kind === 'near-miss') {
+                    view.nearMissLabels.push({ points: e.points, at: game.time });
+                } else {
+                    const state = e.kind === 'streak-on' ? 'on' : 'lost';
+                    streak = { state, pulse: streak.pulse + 1 };
+                }
+            }
+            game.events.length = 0;
+            if (streak !== streakRef.current) {
+                streakRef.current = streak;
+                setHud(hudOf(game, streak));
+            }
+        };
+
         const frame = (now: number) => {
             const dt = Math.min((now - last) / 1000, MAX_FRAME_SECONDS);
             last = now;
@@ -764,6 +823,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     acc -= STEP_SECONDS;
                 }
                 if (inputs.length > 0) inputsRef.current.unshift(...inputs);
+                drainEvents(game, view);
 
                 const flown = flownRef.current;
                 for (const c of game.checkpoints) {
@@ -807,12 +867,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 hudTimer += dt;
                 if (hudTimer >= HUD_INTERVAL_SECONDS) {
                     hudTimer = 0;
-                    setHud({
-                        score: computeScore(game),
-                        credits: game.credits,
-                        shield: game.player.shield,
-                        magnet: game.player.magnetTime,
-                    });
+                    setHud(hudOf(game, streakRef.current));
                 }
             } else if (phaseRef.current === 'dying') {
                 acc = 0;
@@ -968,7 +1023,10 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 ) : (
                     <div>
                         <div className="text-2xl">{hud.score.toLocaleString()}</div>
-                        <div className="text-sm text-yellow-300">{hud.credits} credits</div>
+                        <div className="flex items-center gap-2 text-sm text-yellow-300">
+                            <span>{hud.credits} credits</span>
+                            <StreakBadge chip={hud.streak} />
+                        </div>
                     </div>
                 )}
                 <div className="flex gap-2 items-center pointer-events-auto">

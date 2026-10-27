@@ -19,7 +19,7 @@ import {
     SHIP_RIDE_HEIGHT,
     SPAWN_Z,
 } from '../../utils/arcade/constants';
-import { jumpArc } from '../../utils/arcade/collision';
+import { liftArc } from '../../utils/arcade/collision';
 import type { Checkpoint, GameState, Obstacle, Pickup } from '../../utils/arcade/types';
 import {
     gridOffsetDelta,
@@ -95,6 +95,7 @@ import {
 import type { NeonAccent } from './ships/factionTint';
 import { DRIFT_YAW_DEG, duckSkid, SKID_TWIST, skidLean, skidRoll } from './skidTilt';
 import { cachedPortrait } from './ships/portraitSprite';
+import { drawNearMissLabels, NearMissLabel, pruneNearMissLabels } from './nearMissLabels';
 import { stakesBanner } from './duel/stakesText';
 import {
     actionPitchDeg,
@@ -181,6 +182,9 @@ export interface FlightView {
     reducedMotion: boolean;
     /** The credits the magnet pulled lately, to ease back to their lanes if let go. */
     pulls: PullMemory;
+    /** Near-miss labels still showing, oldest first; the frame loop adds them from the game's
+     *  events. */
+    nearMissLabels: NearMissLabel[];
 }
 
 /** Lane wedge used before the first frame has measured the screen. */
@@ -213,6 +217,7 @@ export function createFlightView(
         explosion: createExplosion(),
         reducedMotion,
         pulls: createPullMemory(),
+        nearMissLabels: [],
     };
 }
 
@@ -477,11 +482,9 @@ const showsSprite = (view: FlightView): boolean =>
     !!view.playerFrames?.[LEVEL_PITCH_ROW]?.[LEVEL_BANK];
 
 /** The ship's height above the track, in lane widths at the player row: its ride height, raised
- *  by a jump's arc and lowered by a duck's dip, `duckDepth` deep at its bottom. */
+ *  by a jump's or drop's `liftArc` and lowered by a duck's dip, `duckDepth` deep at its bottom. */
 function shipLift(game: GameState, view: FlightView, duckDepthU: number): number {
-    const { action, actionTime } = game.player;
-    const arc = action === 'jump' ? jumpArc(actionTime) : 0;
-    return SHIP_RIDE_HEIGHT + arc * JUMP_PEAK - duckDepthU * view.pose.duck;
+    return SHIP_RIDE_HEIGHT + liftArc(game.player) * JUMP_PEAK - duckDepthU * view.pose.duck;
 }
 
 /** The shield's placement, rewritten every frame rather than allocated. */
@@ -545,8 +548,7 @@ function placeShip(out: ShipPlacement, g: SceneGeometry, game: GameState, view: 
     let x = base.x;
     let y = base.y - u * shipLift(game, view, depth);
 
-    const { action, actionTime } = game.player;
-    if (action === 'jump') s *= 1 + jumpArc(actionTime) * JUMP_SCALE_GAIN;
+    s *= 1 + liftArc(game.player) * JUMP_SCALE_GAIN;
     const squash = showsSprite(view) ? 1 : 1 - (1 - DUCK_SQUASH) * view.pose.duck;
 
     const e = introProgress(view);
@@ -821,4 +823,17 @@ export function renderFlight(
     for (const item of items) if (item.z < 0) drawItem(item);
     endPulls(view.pulls);
     if (view.dying) drawExplosion(ctx, g, boom, w, h);
+    pruneNearMissLabels(view.nearMissLabels, game.time);
+    if (!view.dying) {
+        const labels = view.nearMissLabels;
+        drawNearMissLabels(
+            ctx,
+            labels,
+            game.time,
+            ship.x,
+            ship.y + ship.top,
+            u,
+            view.reducedMotion
+        );
+    }
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createGame, step } from '../engine';
 import { resolveDuel } from '../checkpoints';
-import { jumpArc } from '../collision';
+import { jumpArc, liftArc } from '../collision';
 import { computeScore, runResult } from '../scoring';
 import {
     CREDIT_SPACING,
@@ -144,6 +144,18 @@ describe('cancels', () => {
         expect(g.player.action).toBe('duck');
         run(g, 2);
         expect(g.player.action).toBe('run');
+    });
+
+    it('a drop descends in a straight line from the height at the cancel to the ground', () => {
+        const g = inAction('jump', JUMP_SECONDS / 2);
+        step(g, ['duck'], STEP_SECONDS);
+        const start = g.player.dropArc;
+        expect(liftArc(g.player)).toBeCloseTo(start * (1 - STEP_SECONDS / DROP_SECONDS), 9);
+        run(g, steps(DROP_SECONDS / 2) - 1);
+        expect(liftArc(g.player)).toBeCloseTo(start / 2, 1);
+        run(g, steps(DROP_SECONDS));
+        expect(g.player.action).toBe('duck');
+        expect(liftArc(g.player)).toBe(0);
     });
 
     it.each<[ObstacleKind]>([['wall'], ['low'], ['high']])(

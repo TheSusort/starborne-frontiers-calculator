@@ -9,6 +9,12 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Vindicator no longer reports Provoke when no adjacent enemy exists.',
     'Combat simulator: purging or stealing Taunt no longer moves the hit that follows.',
     "Combat simulator: Bayah's and Bizon's passive debuffs now need the hit to deal damage.",
+    'Arcade: a jump or duck pressed slightly early now still happens.',
+    'Arcade: pressing duck mid-jump now drops you straight into a duck.',
+    'Arcade: pressing jump while ducking now jumps at once.',
+    'Arcade: last-moment dodges now pay chained near-miss bonus points.',
+    'Arcade: collecting two full credit trails in a row now doubles credits.',
+    'Arcade: the game-over screen now shows your best near-miss chain.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

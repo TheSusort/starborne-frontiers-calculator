@@ -376,6 +376,52 @@
         animation: arcade-duel-charged 0.9s ease-out both;
     }
 
+    /* Arcade HUD: the credit streak chip pulses when the streak turns on and fades out when it
+       breaks. Reduced motion keeps the fade and drops the pulse. */
+    .arcade-streak-on {
+        animation: arcade-streak-pulse 0.5s ease-out both;
+    }
+
+    .arcade-streak-lost {
+        animation: arcade-streak-lost 0.9s ease-out both;
+    }
+
+    @keyframes arcade-streak-pulse {
+        0% {
+            transform: scale(1.5);
+            box-shadow: 0 0 12px rgba(255, 79, 216, 0.9);
+        }
+        100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 rgba(255, 79, 216, 0);
+        }
+    }
+
+    @keyframes arcade-streak-lost {
+        0% {
+            opacity: 1;
+            transform: scale(1.25);
+        }
+        30% {
+            opacity: 1;
+            transform: scale(1);
+        }
+        100% {
+            opacity: 0;
+            transform: scale(1);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .arcade-streak-on {
+            animation: none;
+        }
+
+        .arcade-streak-lost {
+            animation: arcade-duel-fade-out 0.9s ease-out both;
+        }
+    }
+
     @keyframes arcade-duel-float {
         0% {
             opacity: 0;

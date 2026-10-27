@@ -273,10 +273,12 @@ export function duckDip(actionTime: number): number {
     return Math.sin((Math.PI / 2) * Math.min(1, Math.min(t, 1 - t) / DUCK_EDGE));
 }
 
-/** An action's vertical speed scaled to -1..1, positive rising: a jump's `cos(πt)`, and a
- *  duck's, falling into its dip, 0 at the bottom and rising back out of it. */
+/** An action's vertical speed scaled to -1..1, positive rising: a jump's `cos(πt)`, a drop's
+ *  full-speed fall, and a duck's, falling into its dip, 0 at the bottom and rising back out of
+ *  it. */
 function actionClimb(action: PlayerAction, actionTime: number): number {
     if (action === 'jump') return Math.cos(Math.PI * actionProgress(actionTime, JUMP_SECONDS));
+    if (action === 'drop') return -1;
     if (action !== 'duck') return 0;
     const t = actionProgress(actionTime, DUCK_SECONDS);
     if (t < DUCK_EDGE) return -Math.cos((Math.PI / 2) * (t / DUCK_EDGE));
@@ -287,7 +289,8 @@ function actionClimb(action: PlayerAction, actionTime: number): number {
 /**
  * Nose pitch for the player's action, following its vertical speed: nose up while rising, level
  * at the top or bottom, down while falling. A jump rises then falls, landing at
- * `JUMP_DIVE_DEG`; a duck mirrors it, diving at `DUCK_PITCH_DEG` and climbing back nose up.
+ * `JUMP_DIVE_DEG`, and a drop dives at it throughout; a duck mirrors a jump, diving at
+ * `DUCK_PITCH_DEG` and climbing back nose up.
  */
 export function actionPitchDeg(action: PlayerAction, actionTime: number): number {
     const climb = actionClimb(action, actionTime);
