@@ -78,8 +78,9 @@ not count as rows. (Owner playtest 2026-10-27 replaced the original 3 s timeout.
 
 ## UI
 
-- A floating "NEAR MISS +75" label near the ship. It rises and fades over ~0.8 s, and with reduced
-  motion it fades without moving.
+- A "NEAR MISS +75" callout beside the score, with "x3" once the chain passes one. It pops on each
+  near miss (no pop under reduced motion) and fades out when the chain ends. (Owner playtest
+  2026-10-27 moved it from a small label over the ship.)
 - A "x2" chip beside the credit count in the HUD while the streak is on, with a short pulse when it
   turns on or breaks.
 - The game-over panel adds "Best near-miss chain" and "Near-miss points".

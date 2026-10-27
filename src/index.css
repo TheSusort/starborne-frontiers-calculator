@@ -412,7 +412,36 @@
         }
     }
 
+    .arcade-near-miss {
+        text-shadow:
+            0 0 8px rgba(255, 79, 216, 0.9),
+            0 0 2px rgba(255, 79, 216, 1);
+        transform-origin: left center;
+    }
+
+    .arcade-near-miss-pop {
+        animation: arcade-near-miss-pop 0.35s ease-out both;
+    }
+
+    .arcade-near-miss-lost {
+        animation: arcade-duel-fade-out 0.6s ease-out both;
+    }
+
+    @keyframes arcade-near-miss-pop {
+        0% {
+            transform: scale(1.6);
+            color: #fff;
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
+
     @media (prefers-reduced-motion: reduce) {
+        .arcade-near-miss-pop {
+            animation: none;
+        }
+
         .arcade-streak-on {
             animation: none;
         }

@@ -95,7 +95,6 @@ import {
 import type { NeonAccent } from './ships/factionTint';
 import { DRIFT_YAW_DEG, duckSkid, SKID_TWIST, skidLean, skidRoll } from './skidTilt';
 import { cachedPortrait } from './ships/portraitSprite';
-import { drawNearMissLabels, NearMissLabel, pruneNearMissLabels } from './nearMissLabels';
 import { stakesBanner } from './duel/stakesText';
 import {
     actionPitchDeg,
@@ -182,9 +181,6 @@ export interface FlightView {
     reducedMotion: boolean;
     /** The credits the magnet pulled lately, to ease back to their lanes if let go. */
     pulls: PullMemory;
-    /** Near-miss labels still showing, oldest first; the frame loop adds them from the game's
-     *  events. */
-    nearMissLabels: NearMissLabel[];
 }
 
 /** Lane wedge used before the first frame has measured the screen. */
@@ -217,7 +213,6 @@ export function createFlightView(
         explosion: createExplosion(),
         reducedMotion,
         pulls: createPullMemory(),
-        nearMissLabels: [],
     };
 }
 
@@ -823,17 +818,4 @@ export function renderFlight(
     for (const item of items) if (item.z < 0) drawItem(item);
     endPulls(view.pulls);
     if (view.dying) drawExplosion(ctx, g, boom, w, h);
-    pruneNearMissLabels(view.nearMissLabels, game.time);
-    if (!view.dying) {
-        const labels = view.nearMissLabels;
-        drawNearMissLabels(
-            ctx,
-            labels,
-            game.time,
-            ship.x,
-            ship.y + ship.top,
-            u,
-            view.reducedMotion
-        );
-    }
 }
