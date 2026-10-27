@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     EXCLUDED_KINDS,
+    TIMING_SLACK_ROUNDS,
     diffPersists,
     lastFullAliveRound,
     oracleFingerprint,
@@ -121,6 +122,47 @@ describe('windowedDiff: alive window', () => {
         const d = diff(baseline, diesInRoundTwo);
         expect(d.window).toBe(1);
         expect(d.comparable).toBe(false);
+    });
+});
+
+describe('windowedDiff: timing demotion', () => {
+    // One arm runs only three rounds (or the subject dies after round 3), so the window is 3 and
+    // the other arm's later rounds are where the slack is read.
+    const healIn = (round: number, length = 8): RoundSpec[] =>
+        Array.from({ length }, (_, i) =>
+            i + 1 === round ? { entries: [attack, { kind: 'heal' }] } : { entries: [attack] }
+        );
+    const compDiesAfter3 = (spec: RoundSpec[]): BattleResult =>
+        result(spec.map((r, i) => (i >= 3 ? { ...r, alive: [ALLY, ENEMY] } : r)));
+
+    it('demotes a kind the other arm shows within the slack past the window', () => {
+        // Baseline heals in round 2, inside the window; the composition heals in round 5.
+        const d = diff(result(healIn(2, 3)), result(healIn(5)));
+        expect(d.window).toBe(3);
+        expect(d.restricted?.missingInComposition).toEqual(['heal']);
+        expect(d.demoted).toEqual([{ kind: 'heal', sign: '-', reason: 'timing' }]);
+        expect(d.reported).toBeNull();
+    });
+
+    it('reports a kind the other arm shows only after the slack', () => {
+        const comp = result(healIn(3 + TIMING_SLACK_ROUNDS + 1, 10));
+        const d = diff(result(healIn(2, 3)), comp);
+        expect(d.window).toBe(3);
+        expect(d.demoted).toEqual([]);
+        expect(d.reported?.missingInComposition).toEqual(['heal']);
+    });
+
+    it('reports a kind the other arm never shows', () => {
+        const d = diff(result(healIn(2, 3)), result(healIn(99, 8)));
+        expect(d.reported?.missingInComposition).toEqual(['heal']);
+    });
+
+    it('demotes an EXTRA kind the baseline shows within the slack', () => {
+        const d = diff(result(healIn(4, 8)), compDiesAfter3(healIn(1, 8)));
+        expect(d.window).toBe(3);
+        expect(d.restricted?.extraInComposition).toEqual(['heal']);
+        expect(d.demoted).toEqual([{ kind: 'heal', sign: '+', reason: 'timing' }]);
+        expect(d.reported).toBeNull();
     });
 });
 

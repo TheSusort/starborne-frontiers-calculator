@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { Finding, OracleKind } from '../../src/utils/combat/audit/types';
+import type { DriftReason, Finding, OracleKind } from '../../src/utils/combat/audit/types';
 
 /** `comparable` of `total` checks the oracle actually compared. */
 export interface Coverage {
@@ -50,6 +50,7 @@ export const LEDGER_BLIND_SPOTS: readonly string[] = [
     'Anything after the subject dies, or after the shorter of the two arms ends.',
     "Outputs that scale with the subject's max HP (shields, reflect hits): `SUBJECT_HP_SCALE` multiplies them equally in both arms.",
     'Recipient-booked kinds (`EXCLUDED_KINDS` in oracleKinds.ts): an ally changing what is done TO the subject is not reported.',
+    'An ally that only moves a kind by up to `TIMING_SLACK_ROUNDS` rounds, or whose effect a second draw of stand-ins also produces, is listed under Drift, not Confirmed.',
 ];
 
 export const pct = (c: Coverage): string =>
@@ -77,6 +78,9 @@ export interface FindingGroup {
     positions: string[];
     /** The member with the smallest minimal repro, lowest seed first among equals. */
     sample: Finding;
+    /** Drift tier: how many member findings each rule demoted. A confirmed group: how many
+     *  findings of the same (ships, kind) were demoted elsewhere (`tierGroups`). */
+    drift?: Partial<Record<DriftReason, number>>;
 }
 
 /** The kinds `finding` is grouped under (`FindingGroup.kind`). */
@@ -106,6 +110,7 @@ export function groupFindings(findings: readonly Finding[]): FindingGroup[] {
         const placed = f.slots.join(',');
         for (const kind of findingKinds(f)) {
             const key = `${f.oracle}|${ships.join('+')}|${kind}`;
+            const reason = f.drift?.find((d) => `${d.sign}${d.kind}` === kind)?.reason;
             const g = groups.get(key);
             if (!g) {
                 groups.set(key, {
@@ -116,9 +121,11 @@ export function groupFindings(findings: readonly Finding[]): FindingGroup[] {
                     seeds: [f.seed],
                     positions: [placed],
                     sample: f,
+                    ...(reason ? { drift: { [reason]: 1 } } : {}),
                 });
                 continue;
             }
+            if (reason) g.drift = { ...g.drift, [reason]: (g.drift?.[reason] ?? 0) + 1 };
             g.count++;
             if (!g.seeds.includes(f.seed)) g.seeds.push(f.seed);
             if (!g.positions.includes(placed)) g.positions.push(placed);
@@ -141,9 +148,11 @@ export interface LedgerJson {
     calibrationResidual: CalibrationResidual;
     blindSpots: readonly string[];
     confirmed: Finding[];
+    /** Differential findings a drift rule demoted (`Finding.drift`). */
+    drift: Finding[];
     needsTriage: Finding[];
-    /** `confirmed` and `needsTriage` grouped by (ships, kind) — see `groupFindings`. */
-    groups: { confirmed: FindingGroup[]; needsTriage: FindingGroup[] };
+    /** Each tier grouped by (ships, kind) — see `tierGroups`. */
+    groups: { confirmed: FindingGroup[]; drift: FindingGroup[]; needsTriage: FindingGroup[] };
     // Reserved for future use: nothing currently produces a "refuted" Finding (there's no
     // re-triage workflow yet that would move a needsTriage entry here), so this is always `[]`.
     // Kept in the shape rather than dropped since ledger consumers (docs/interaction-audit-
@@ -151,35 +160,70 @@ export interface LedgerJson {
     refuted: Finding[];
 }
 
-/**
- * Pure function: builds the ledger JSON structure.
- * Splits findings by oracle type: ablation → needsTriage, others → confirmed.
- */
-export function buildLedgerJson(findings: Finding[], meta: LedgerMeta): LedgerJson {
-    const confirmed = findings.filter((f) => f.oracle !== 'ablation');
-    const needsTriage = findings.filter((f) => f.oracle === 'ablation');
+interface Tiers {
+    confirmed: Finding[];
+    drift: Finding[];
+    needsTriage: Finding[];
+}
 
+/** Ablation → needsTriage, a demoted differential → drift, everything else → confirmed. */
+function splitTiers(findings: readonly Finding[]): Tiers {
+    return {
+        confirmed: findings.filter((f) => f.oracle !== 'ablation' && !f.drift),
+        drift: findings.filter((f) => f.oracle !== 'ablation' && f.drift),
+        needsTriage: findings.filter((f) => f.oracle === 'ablation'),
+    };
+}
+
+/**
+ * Each tier grouped. A (ships, kind) with even ONE confirmed finding stays a confirmed group and
+ * carries its demoted siblings' reason counts in `drift`; only a (ships, kind) whose every finding
+ * was demoted is listed under drift. A group is not single-cause, so one surviving finding is
+ * enough to keep it in front of a reader.
+ */
+export function tierGroups(tiers: Tiers): LedgerJson['groups'] {
+    const confirmed = groupFindings(tiers.confirmed);
+    const byKey = new Map(confirmed.map((g) => [`${g.ships.join('+')}|${g.kind}`, g] as const));
+    const drift: FindingGroup[] = [];
+    for (const g of groupFindings(tiers.drift)) {
+        const held = byKey.get(`${g.ships.join('+')}|${g.kind}`);
+        if (!held) {
+            drift.push(g);
+            continue;
+        }
+        for (const [reason, n] of Object.entries(g.drift ?? {}) as [DriftReason, number][]) {
+            held.drift = { ...held.drift, [reason]: (held.drift?.[reason] ?? 0) + n };
+        }
+    }
+    return { confirmed, drift, needsTriage: groupFindings(tiers.needsTriage) };
+}
+
+/** Pure function: builds the ledger JSON structure. */
+export function buildLedgerJson(findings: Finding[], meta: LedgerMeta): LedgerJson {
+    const tiers = splitTiers(findings);
     return {
         compositionsRun: meta.compositionsRun,
         coverage: meta.coverage,
         calibrationResidual: meta.calibrationResidual,
         blindSpots: LEDGER_BLIND_SPOTS,
-        confirmed,
-        needsTriage,
-        groups: { confirmed: groupFindings(confirmed), needsTriage: groupFindings(needsTriage) },
+        ...tiers,
+        groups: tierGroups(tiers),
         refuted: [],
     };
 }
 
+const driftNote = (drift: FindingGroup['drift']): string =>
+    Object.entries(drift ?? {})
+        .map(([reason, n]) => `${reason}×${n}`)
+        .join(', ');
+
 /**
  * Pure function: renders the ledger as human-readable markdown.
- * Header with counts, then sections for confirmed and needs-triage findings.
+ * Header with counts, then sections for confirmed, drift and needs-triage findings.
  */
 export function renderLedgerMarkdown(findings: Finding[], meta: LedgerMeta): string {
-    const confirmed = findings.filter((f) => f.oracle !== 'ablation');
-    const needsTriage = findings.filter((f) => f.oracle === 'ablation');
-    const confirmedGroups = groupFindings(confirmed);
-    const triageGroups = groupFindings(needsTriage);
+    const tiers = splitTiers(findings);
+    const groups = tierGroups(tiers);
 
     const lines: string[] = [];
 
@@ -188,10 +232,13 @@ export function renderLedgerMarkdown(findings: Finding[], meta: LedgerMeta): str
     lines.push('');
     lines.push(`- Compositions run: **${meta.compositionsRun}**`);
     lines.push(
-        `- Confirmed findings: **${confirmed.length}** in **${confirmedGroups.length}** (ships, kind) group(s)`
+        `- Confirmed findings: **${tiers.confirmed.length}** in **${groups.confirmed.length}** (ships, kind) group(s)`
     );
     lines.push(
-        `- Findings needing triage: **${needsTriage.length}** in **${triageGroups.length}** (ships, kind) group(s)`
+        `- Drift findings: **${tiers.drift.length}**, **${groups.drift.length}** (ships, kind) group(s) with no confirmed finding`
+    );
+    lines.push(
+        `- Findings needing triage: **${tiers.needsTriage.length}** in **${groups.needsTriage.length}** (ships, kind) group(s)`
     );
     lines.push('');
     lines.push('## Coverage');
@@ -215,16 +262,27 @@ export function renderLedgerMarkdown(findings: Finding[], meta: LedgerMeta): str
     for (const spot of LEDGER_BLIND_SPOTS) lines.push(`- ${spot}`);
     lines.push('');
 
-    if (confirmedGroups.length > 0) {
+    if (groups.confirmed.length > 0) {
         lines.push('## Confirmed');
         lines.push('');
-        for (const g of confirmedGroups) lines.push(renderGroup(g));
+        for (const g of groups.confirmed) lines.push(renderGroup(g));
     }
 
-    if (triageGroups.length > 0) {
+    if (groups.drift.length > 0) {
+        lines.push('## Drift');
+        lines.push('');
+        lines.push(
+            '`timing`: the other arm shows the kind within `TIMING_SLACK_ROUNDS` past the window. ' +
+                '`filler`: a second draw of stand-in allies does not reproduce the diff.'
+        );
+        lines.push('');
+        for (const g of groups.drift) lines.push(renderGroup(g));
+    }
+
+    if (groups.needsTriage.length > 0) {
         lines.push('## Needs Triage');
         lines.push('');
-        for (const g of triageGroups) lines.push(renderGroup(g));
+        for (const g of groups.needsTriage) lines.push(renderGroup(g));
     }
 
     return lines.join('\n');
@@ -241,6 +299,7 @@ function renderGroup(group: FindingGroup): string {
     lines.push(`**Severity:** ${finding.severity}`);
     lines.push(`**Seeds:** ${group.seeds.join(', ')}`);
     lines.push(`**Positions:** ${group.positions.join('; ')}`);
+    if (group.drift) lines.push(`**Demoted:** ${driftNote(group.drift)}`);
     lines.push('');
     lines.push(`Sample (seed ${finding.seed}, positions ${finding.slots.join(', ')}):`);
     lines.push('');

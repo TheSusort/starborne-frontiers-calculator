@@ -5,7 +5,7 @@ import { controlEffectLabel, dotFamilyLabel } from '../debuffImmunity';
 import type { ControlEffect } from '../../../types/abilities';
 import type { DoTType } from '../../../types/calculator';
 import { OVERCLOCK_HANGOVER_DEBUFFS } from '../overclockHangover';
-import type { FingerprintDiff } from './types';
+import type { DemotedKind, FingerprintDiff } from './types';
 
 /**
  * The kind policy the differential and ablation oracles share: which log entries count as the
@@ -181,18 +181,61 @@ export function diffPersists(
     );
 }
 
+/**
+ * Rounds past the window the OTHER arm is read when deciding whether a kind diff is only the same
+ * event shifted in time. A kind gated on a kill, a charged skill or an enemy's action lands one to
+ * three rounds earlier or later when an ally changes kill timing, and a short window cuts one arm
+ * of it. Triaged on the 2026-10-26 ledger: the window-edge rows sat one to three rounds out.
+ */
+export const TIMING_SLACK_ROUNDS = 3;
+
 export interface WindowedDiff {
     /** Rounds both arms were compared over: the shorter of the two `lastFullAliveRound`s. */
     window: number;
-    /** False when `window < MIN_WINDOW`; both diffs are then null. */
+    /** False when `window < MIN_WINDOW`; every diff is then null and `demoted` empty. */
     comparable: boolean;
     /** Normalised, windowed, NOT restricted. */
     raw: FingerprintDiff | null;
     restricted: FingerprintDiff | null;
+    /** `restricted` minus the kinds `demoted` names. */
+    reported: FingerprintDiff | null;
+    demoted: DemotedKind[];
+}
+
+function partitionKinds(
+    diff: FingerprintDiff | null,
+    named: readonly DemotedKind[],
+    keepNamed: boolean
+): FingerprintDiff | null {
+    if (!diff) return null;
+    const keep = (sign: '-' | '+', k: CombatLogEntryKind) =>
+        named.some((d) => d.sign === sign && d.kind === k) === keepNamed;
+    const missing = diff.missingInComposition.filter((k) => keep('-', k));
+    const extra = diff.extraInComposition.filter((k) => keep('+', k));
+    if (missing.length === 0 && extra.length === 0) return null;
+    return { ...diff, missingInComposition: missing, extraInComposition: extra };
+}
+
+/** `diff` without the kinds `drop` names; null when nothing is left. */
+export function withoutKinds(
+    diff: FingerprintDiff | null,
+    drop: readonly DemotedKind[]
+): FingerprintDiff | null {
+    return partitionKinds(diff, drop, false);
+}
+
+/** `diff` reduced to the kinds `keep` names; null when none of them is in it. */
+export function onlyKinds(
+    diff: FingerprintDiff | null,
+    keep: readonly DemotedKind[]
+): FingerprintDiff | null {
+    return partitionKinds(diff, keep, true);
 }
 
 /** Diff the subject's oracle fingerprint between a baseline run and a composition run, over the
- *  rounds the subject was alive for in BOTH. The diff's `actorId` is the composition-side id. */
+ *  rounds the subject was alive for in BOTH. The diff's `actorId` is the composition-side id.
+ *  A restricted kind the other arm shows within `TIMING_SLACK_ROUNDS` past the window is demoted
+ *  as `timing`. */
 export function windowedDiff(
     baseline: BattleResult,
     comp: BattleResult,
@@ -204,7 +247,16 @@ export function windowedDiff(
         lastFullAliveRound(baseline, baselineActorId),
         lastFullAliveRound(comp, compActorId)
     );
-    if (window < MIN_WINDOW) return { window, comparable: false, raw: null, restricted: null };
+    if (window < MIN_WINDOW) {
+        return {
+            window,
+            comparable: false,
+            raw: null,
+            restricted: null,
+            reported: null,
+            demoted: [],
+        };
+    }
     const base = oracleFingerprint(baseline, baselineActorId, window);
     const inComp = oracleFingerprint(comp, compActorId, window);
     const missing = [...base].filter((k) => !inComp.has(k));
@@ -218,5 +270,25 @@ export function windowedDiff(
                   missingInComposition: missing,
                   extraInComposition: extra,
               };
-    return { window, comparable: true, raw, restricted: restrictDiff(raw) };
+    const restricted = restrictDiff(raw);
+    const demoted: DemotedKind[] = [];
+    if (restricted) {
+        const slack = window + TIMING_SLACK_ROUNDS;
+        const compLater = oracleFingerprint(comp, compActorId, slack);
+        const baseLater = oracleFingerprint(baseline, baselineActorId, slack);
+        for (const kind of restricted.missingInComposition) {
+            if (compLater.has(kind)) demoted.push({ kind, sign: '-', reason: 'timing' });
+        }
+        for (const kind of restricted.extraInComposition) {
+            if (baseLater.has(kind)) demoted.push({ kind, sign: '+', reason: 'timing' });
+        }
+    }
+    return {
+        window,
+        comparable: true,
+        raw,
+        restricted,
+        reported: withoutKinds(restricted, demoted),
+        demoted,
+    };
 }

@@ -9,14 +9,24 @@ import {
 } from '../../src/utils/combat/audit/invariants';
 import { checkReproducibility } from '../../src/utils/combat/audit/reproducibility';
 import { minimizeComposition } from '../../src/utils/combat/audit/minimize';
-import { diffPersists, restrictDiff, windowedDiff } from '../../src/utils/combat/audit/oracleKinds';
-import type { BattleRunner, FingerprintDiff } from '../../src/utils/combat/audit/types';
+import {
+    diffPersists,
+    restrictDiff,
+    windowedDiff,
+    withoutKinds,
+} from '../../src/utils/combat/audit/oracleKinds';
+import type {
+    BattleRunner,
+    DemotedKind,
+    FingerprintDiff,
+} from '../../src/utils/combat/audit/types';
 import type {
     BattleResult,
     BattleSimulationInput,
 } from '../../src/utils/calculators/battleSimulator';
 import type { Position } from '../../src/types/encounters';
 import type { Ship } from '../../src/types/ship';
+import type { CombatLogEntryKind } from '../../src/utils/combat/log/types';
 
 /**
  * The subject's HP multiplier, applied in BOTH arms of a differential. A comparison covers only
@@ -80,28 +90,55 @@ function playerActorId(result: BattleResult, position: Position): string {
     return entry.actorId;
 }
 
+/** Added to the battle seed to draw the second baseline's stand-ins. The battle itself still
+ *  runs under the original seed, so only WHICH inert ships stand in differs between the two
+ *  baselines. */
+export const SECOND_FILLER_DRAW_OFFSET = 7919;
+
 export interface PlacementDifferential {
-    /** False when the subject's alive window was shorter than `MIN_WINDOW`; both diffs are null.
-     *  "no diff" and "never compared" are the same {null, null} without it. */
+    /** False when the subject's alive window was shorter than `MIN_WINDOW`; every diff is then
+     *  null. "no diff" and "never compared" are the same {null, null} without it. */
     comparable: boolean;
     window: number;
     raw: FingerprintDiff | null;
     restricted: FingerprintDiff | null;
-    /** The two boards actually run, subject HP scale applied. */
-    boards: { comp: BattleSimulationInput; baseline: BattleSimulationInput };
+    /** What the audit confirms: `restricted` minus every kind in `demoted`. */
+    reported: FingerprintDiff | null;
+    /** Restricted kinds moved to the drift tier, with the rule that moved each. */
+    demoted: DemotedKind[];
+    /** The boards built, subject HP scale applied. `secondBaseline` is null when the second draw
+     *  picked the same stand-ins as the first; it is built but NOT run when the first comparison
+     *  reported nothing. */
+    boards: {
+        comp: BattleSimulationInput;
+        baseline: BattleSimulationInput;
+        secondBaseline: BattleSimulationInput | null;
+    };
 }
+
+const fillerNames = (input: BattleSimulationInput): string =>
+    input.playerTeam.map((p) => p.ship.name).join('|');
 
 /**
  * The differential oracle for one PLAYER-side placement, identified by its INDEX in
  * `compInput.playerTeam` (ddmin rebuilds the array, and the index decides the actor id). Scales
  * the subject's HP, builds the `buildInertAllyBaseline` board from the scaled composition, runs
- * both under the SAME seed and diffs the subject over its alive window (`windowedDiff`).
+ * both under the SAME seed and diffs the subject over its alive window (`windowedDiff`, which
+ * also demotes `timing` kinds).
+ *
+ * A kind that survives is checked against a SECOND baseline whose stand-ins are drawn with
+ * `SECOND_FILLER_DRAW_OFFSET`. Stand-ins are inert, not absent: they attack, crit and provoke
+ * enemy reactions, and an "another ally crits" or "an enemy cleanses" clause on the subject can
+ * read them. A kind the second baseline does not report in the same direction was decided by
+ * which stand-ins were drawn, and is demoted as `filler`. When the second baseline is not
+ * comparable, or draws the same stand-ins, nothing is demoted on that rule.
  *
  * A one-ship player side diffs against a byte-identical battle and can never produce a finding:
  * no allies, no ally interference. That is also what stops ddmin from minimising a differential
  * down to a solo player team.
  *
- * `run` is the battle runner, injectable so a test can plant a defect in one arm.
+ * `run` is the battle runner, injectable so a test can plant a defect in one arm. Arms run in the
+ * order composition, baseline, second baseline.
  */
 export function playerDifferential(
     subjectIndex: number,
@@ -111,25 +148,65 @@ export function playerDifferential(
     run: BattleRunner = runSeededBattle
 ): PlacementDifferential {
     const comp = scaleSubjectHp(compInput, subjectIndex);
-    const baseline = buildInertAllyBaseline(
-        comp.playerTeam,
-        subjectIndex,
-        comp.enemyTeam,
-        inertPool,
-        seed,
-        comp.rounds
-    );
+    const baselineOf = (drawSeed: number) =>
+        buildInertAllyBaseline(
+            comp.playerTeam,
+            subjectIndex,
+            comp.enemyTeam,
+            inertPool,
+            drawSeed,
+            comp.rounds
+        );
+    const baseline = baselineOf(seed);
     const compResult = run(comp, seed);
     const baselineResult = run(baseline, seed);
     const position = comp.playerTeam[subjectIndex].position;
-    const diff = windowedDiff(
+    const shipName = comp.playerTeam[subjectIndex].ship.name;
+    const compActorId = playerActorId(compResult, position);
+    const first = windowedDiff(
         baselineResult,
         compResult,
-        comp.playerTeam[subjectIndex].ship.name,
+        shipName,
         playerActorId(baselineResult, position),
-        playerActorId(compResult, position)
+        compActorId
     );
-    return { ...diff, boards: { comp, baseline } };
+
+    let secondBaseline: BattleSimulationInput | null = baselineOf(seed + SECOND_FILLER_DRAW_OFFSET);
+    if (fillerNames(secondBaseline) === fillerNames(baseline)) secondBaseline = null;
+    if (!first.reported || !secondBaseline) {
+        return { ...first, boards: { comp, baseline, secondBaseline } };
+    }
+
+    const secondResult = run(secondBaseline, seed);
+    const second = windowedDiff(
+        secondResult,
+        compResult,
+        shipName,
+        playerActorId(secondResult, position),
+        compActorId
+    );
+    const demoted = [...first.demoted];
+    if (second.comparable) {
+        // Read against `reported`: a kind the second baseline shows only shifted in time is also
+        // decided by which stand-ins were drawn, so it is `filler` here.
+        const confirmedBySecond = (sign: '-' | '+', k: CombatLogEntryKind) =>
+            (sign === '-'
+                ? second.reported?.missingInComposition
+                : second.reported?.extraInComposition
+            )?.includes(k) ?? false;
+        for (const kind of first.reported.missingInComposition) {
+            if (!confirmedBySecond('-', kind)) demoted.push({ kind, sign: '-', reason: 'filler' });
+        }
+        for (const kind of first.reported.extraInComposition) {
+            if (!confirmedBySecond('+', kind)) demoted.push({ kind, sign: '+', reason: 'filler' });
+        }
+    }
+    return {
+        ...first,
+        reported: withoutKinds(first.restricted, demoted),
+        demoted,
+        boards: { comp, baseline, secondBaseline },
+    };
 }
 
 /**
@@ -171,8 +248,9 @@ export function minimizeDifferential(
  * target selection, and a target-conditioned clause on the subject can flip with it (Rys "when
  * damaging a debuffer or supporter", Thresh's buff steal that logs only when there is a buff to
  * take). Excluding those kinds would hide real findings of the same kinds, so the gate bounds the
- * rate instead. Measured on the inert battery at count 500 (2026-10-22): 3/1926 at seed 1,
- * 10/1929 at seed 5000; the threshold sits above that floor and fails a run that drifts well past it.
+ * rate instead. Measured on the inert battery with both drift rules applied (2026-10-27): 0/1932 at
+ * seed 1 and 0/1940 at seed 5000 (count 500), 6/7718 at seed 1 (count 2000); the threshold sits
+ * above that floor and fails a run that drifts well past it.
  */
 export const CALIBRATION_RESIDUAL_TOLERANCE = 0.01;
 
@@ -185,8 +263,9 @@ export interface CalibrationVerdict {
     rate: number;
 }
 
-/** The gate's verdict over the battery's raw diffs. The exclusion set is fixed: a residual is
- *  measured against the tolerance, never absorbed into the set. */
+/** The gate's verdict over the battery's reported diffs (`PlacementDifferential.reported`). The
+ *  exclusion set is fixed: a residual is measured against the tolerance, never absorbed into the
+ *  set. */
 export function calibrationVerdict(
     rawDiffs: readonly FingerprintDiff[],
     comparablePlacements: number,
@@ -281,10 +360,16 @@ export function runCalibration(
                 invariantFailures.push(`seed ${s}: ${v.detail}`);
             }
             for (let idx = 0; idx < compInput.playerTeam.length; idx++) {
-                const { comparable, raw } = playerDifferential(idx, compInput, s, inertPool, run);
+                const { comparable, reported } = playerDifferential(
+                    idx,
+                    compInput,
+                    s,
+                    inertPool,
+                    run
+                );
                 placementsChecked++;
                 if (comparable) comparablePlacements++;
-                if (raw) rawDiffs.push(raw);
+                if (reported) rawDiffs.push(reported);
             }
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);

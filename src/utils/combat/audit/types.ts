@@ -48,6 +48,19 @@ export interface AblationResult {
     compared: number;
 }
 
+/** Why a kind diff was demoted out of the confirmed findings into the drift tier.
+ *  - `timing`: the other arm shows the kind within `TIMING_SLACK_ROUNDS` past the window.
+ *  - `filler`: a second baseline, built with a different draw of stand-in allies, does not show
+ *    the diff, so the stand-ins rather than the subject's real allies decided it. */
+export type DriftReason = 'timing' | 'filler';
+
+export interface DemotedKind {
+    kind: CombatLogEntryKind;
+    /** `-`: missing in the composition; `+`: extra in the composition. */
+    sign: '-' | '+';
+    reason: DriftReason;
+}
+
 export interface Finding {
     oracle: OracleKind;
     ships: string[];
@@ -61,6 +74,9 @@ export interface Finding {
      *  the sampled seeds. */
     ablationGained?: { ship: string; kinds: CombatLogEntryKind[] }[];
     minimalRepro?: { playerShips: string[]; enemyShips: string[] };
+    /** Differential only: set when the finding's kinds were demoted to the drift tier, one entry
+     *  per kind. A drift finding is never minimised. */
+    drift?: DemotedKind[];
     severity: 'high' | 'med' | 'low';
 }
 
