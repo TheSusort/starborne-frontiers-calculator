@@ -5,20 +5,6 @@ import { ChangelogEntry } from '../types/changelog';
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
-    "Combat simulator: Nyxen's shield retaliation no longer fires on fully blocked hits.",
-    'Combat simulator: Vindicator no longer reports Provoke when no adjacent enemy exists.',
-    'Combat simulator: purging or stealing Taunt no longer moves the hit that follows.',
-    "Combat simulator: Bayah's and Bizon's passive debuffs now need the hit to deal damage.",
-    'Arcade: a jump or duck pressed slightly early now still happens.',
-    'Arcade: pressing duck mid-jump now drops you straight into a duck.',
-    'Arcade: pressing jump while ducking now jumps at once.',
-    'Arcade: last-moment dodges now pay chained near-miss bonus points.',
-    'Arcade: collecting two full credit trails in a row now doubles credits.',
-    'Arcade: the game-over screen now shows your best near-miss chain.',
-    'Arcade: the scenery now changes colour zone every 1,000 metres.',
-    'Arcade: the grid and sun now pulse in time with the music.',
-    'Arcade: speed lines stretch and screen edges fringe near top speed.',
-    'Arcade: the screen now shakes when your shield breaks.',
     'Arcade: checkpoints now include DPS, TANK and HEAL races against the gate ship.',
     'Arcade: new 3v3 checkpoint challenge with two random allies from your fleet.',
     'Arcade: time slows before each checkpoint so you can read the challenge.',
@@ -27,6 +13,18 @@ export const UNRELEASED_CHANGES: string[] = [
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.82.1',
+        date: '2026-10-27',
+        changes: [
+            '4 combat simulator fixes and adjustments.',
+            'Arcade: pressing duck mid-jump now drops you straight into a duck.',
+            'Arcade: pressing jump while ducking now jumps at once.',
+            'Arcade: last-moment dodges now pay chained near-miss bonus points.',
+            'Arcade: collecting two full credit trails in a row now doubles credits.',
+            '6 arcade tweaks and fixes.',
+        ],
+    },
     {
         version: '1.82.0',
         date: '2026-10-26',
