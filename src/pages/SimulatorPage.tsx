@@ -27,6 +27,7 @@ import {
     writeStoredSquadLeaderSelection,
 } from '../utils/simulator/squadLeaderSelection';
 import SimulatorSetupBar from '../components/simulator/SimulatorSetupBar';
+import { shipPortraitUrl } from '../components/board/shipPortrait';
 import { useShipIdResolver } from '../hooks/useShipIdResolver';
 import { useShips } from '../contexts/ShipsContext';
 import { useShipsData } from '../hooks/useShipsData';
@@ -71,6 +72,13 @@ const SimulatorPage: React.FC = () => {
     // re-runs on their sizes.
     const { loading: shipsLoading, ships: ownedShips } = useShips();
     const { loading: unitsLoading, ships: units } = useShipsData();
+
+    // A playback ship's portrait by its roster name, from the unit catalogue (a result carries no
+    // images, and is never re-derived from the live boards).
+    const portraitFor = useMemo(() => {
+        const keys = new Map(units.map((u) => [u.name.toLowerCase(), u.imageKey]));
+        return (name: string) => shipPortraitUrl(keys.get(name.toLowerCase()));
+    }, [units]);
 
     // Shared combat-stat resolution — see src/utils/ship/combatStats.ts (mirrors DPSCalculatorPage).
     const statsDeps = { getGearPiece, getEngineeringStatsForShipType };
@@ -560,9 +568,12 @@ const SimulatorPage: React.FC = () => {
                             baseline={divergence.baseline}
                             current={divergence.current}
                             onClose={handleCloseDivergence}
+                            portraitFor={portraitFor}
                         />
                     ) : (
-                        battleResult && <BattlePlayback result={battleResult} />
+                        battleResult && (
+                            <BattlePlayback result={battleResult} portraitFor={portraitFor} />
+                        )
                     )}
                 </div>
 

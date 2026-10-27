@@ -44,12 +44,15 @@ const ShipCell: React.FC<{
     ship: HexBoardShip;
     mirrored: boolean;
     tone: 'player' | 'enemy';
-}> = ({ ship, mirrored, tone }) => {
+    selected: boolean;
+}> = ({ ship, mirrored, tone, selected }) => {
     const { hpPct: hp, shieldPct: shield, chargePct } = ship;
     return (
         <>
             <HexTile
-                rimClassName={ship.acting ? 'bg-primary' : TONE_RIM[tone]}
+                rimClassName={
+                    selected ? 'bg-yellow-500' : ship.acting ? 'bg-primary' : TONE_RIM[tone]
+                }
                 className={ship.alive ? '' : 'opacity-40 grayscale'}
             >
                 <div className="absolute inset-x-[8%] top-[10%] bottom-[38%] flex items-center justify-center">
@@ -137,15 +140,25 @@ interface AnimatedHexBoardProps {
     tone: 'player' | 'enemy';
     /** Accessible name of the board. */
     label: string;
+    /** Makes each occupied cell a toggle button that reports its cell. */
+    onSelectCell?: (cell: Position) => void;
+    /** The cell drawn as selected (a yellow rim). */
+    selectedCell?: Position | null;
     className?: string;
 }
+
+/** A cell's accessible name when it is a button: who stands there and how they are doing. */
+const cellLabel = (ship: HexBoardShip, cell: Position) =>
+    `${ship.name} at ${cell}, ${Math.round(ship.hpPct)}% HP` +
+    `${ship.shieldPct > 0 ? `, ${Math.round(ship.shieldPct)}% shield` : ''}` +
+    `${ship.alive ? '' : ', destroyed'}`;
 
 /**
  * One side's hex board during a fight playback: `cells` laid out as on the real board, each
  * occupied cell showing its ship's image, hull, shield and charge bars inside the hex, buff and
  * debuff counts (names in the tooltip), and over it the floating numbers, a hit flash and a
  * banner. The caller drives the playback by re-rendering with each moment's `ships`; the board
- * holds no timing of its own. It fills its width and keeps the board's aspect ratio.
+ * holds no timing of its own. With `onSelectCell`, an occupied cell is a toggle button. It fills its width and keeps the board's aspect ratio.
  */
 export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
     cells,
@@ -153,6 +166,8 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
     mirrored = false,
     tone,
     label,
+    onSelectCell,
+    selectedCell = null,
     className = '',
 }) => {
     const layout = hexBoardLayout(cells);
@@ -178,8 +193,28 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
                             height: `${b.height}%`,
                         }}
                     >
-                        {ship ? (
-                            <ShipCell ship={ship} mirrored={mirrored} tone={tone} />
+                        {ship && onSelectCell ? (
+                            <button
+                                type="button"
+                                aria-pressed={selectedCell === cell}
+                                aria-label={cellLabel(ship, cell)}
+                                onClick={() => onSelectCell(cell)}
+                                className="relative block h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                            >
+                                <ShipCell
+                                    ship={ship}
+                                    mirrored={mirrored}
+                                    tone={tone}
+                                    selected={selectedCell === cell}
+                                />
+                            </button>
+                        ) : ship ? (
+                            <ShipCell
+                                ship={ship}
+                                mirrored={mirrored}
+                                tone={tone}
+                                selected={selectedCell === cell}
+                            />
                         ) : (
                             <HexTile rimClassName="bg-dark-border/50" faceClassName="bg-dark/60" />
                         )}

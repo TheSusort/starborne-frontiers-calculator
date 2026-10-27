@@ -4859,7 +4859,9 @@ const DocumentationPage: React.FC = () => {
                                         With a baseline pinned, the comparison also lists every seed
                                         where the two configurations picked a different winner;
                                         opening one replays both fights stacked and stepped
-                                        together, so the same round of each sits one above the other
+                                        together, so the same round of each sits one above the
+                                        other. These paired boards show round ends only, since the
+                                        two fights&apos; turns do not line up
                                     </li>
                                 </ul>
                             </div>
@@ -4999,19 +5001,32 @@ const DocumentationPage: React.FC = () => {
                                         shown at the top
                                     </li>
                                     <li>
-                                        Step through the battle round by round — First, Previous,
-                                        Next, Last, the slider, or auto-play
+                                        Pick a round with First, Previous, Next, Last or the slider:
+                                        the boards show how every ship stands at that round&apos;s
+                                        end
                                     </li>
                                     <li>
-                                        Each round, the boards show every ship&apos;s current HP,
-                                        damage dealt, and healing, with destroyed ships marked
+                                        Press Play to watch the fight turn by turn on animated hex
+                                        boards, through every round to the end; Pause stops it, and
+                                        the Turn arrows step one turn back or forward
                                     </li>
                                     <li>
-                                        Pin a ship to open a per-round detail card with its full
-                                        breakdown for that round, including its active buffs and
-                                        debuffs — Damage over Time effects (Corrosion, Inferno, and
-                                        converted-damage DoTs) and Bombs are listed among the
-                                        debuffs
+                                        Each ship&apos;s hex shows its hull, shield and charge bars
+                                        and its buff and debuff counts; the acting ship is outlined,
+                                        damage, heals and shields pop up as numbers, and a charged
+                                        skill shows a banner. The turn order highlights whose turn
+                                        it is
+                                    </li>
+                                    <li>
+                                        With reduced motion turned on in your system settings, the
+                                        boards jump from turn to turn without the numbers or flashes
+                                    </li>
+                                    <li>
+                                        Click a ship on the board to pin it and open a per-round
+                                        detail card with its full breakdown for that round,
+                                        including its active buffs and debuffs — Damage over Time
+                                        effects (Corrosion, Inferno, and converted-damage DoTs) and
+                                        Bombs are listed among the debuffs
                                     </li>
                                     <li>
                                         The event log lists every turn-by-turn action, reaction, and
