@@ -16,7 +16,8 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useShipsData } from '../../hooks/useShipsData';
 import type { Ship } from '../../types/ship';
-import { getSynthwaveMusic } from '../../utils/music/synthwaveMusic';
+import { getSynthwaveMusic, type MusicClock } from '../../utils/music/synthwaveMusic';
+import { beatPulse, TRACK_BEATS } from '../../utils/music/beats';
 import { useSynthwaveMusic } from '../../utils/music/useSynthwaveMusic';
 import { usePauseMusicOnUnmountOffTheme } from '../../utils/music/usePauseMusicOffTheme';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -46,6 +47,7 @@ import { ArcadeLeaderboard } from './ArcadeLeaderboard';
 import type { FlightOrigin } from './flightEvents';
 import { anyCandidate, canDuel, gearedCandidate, pickOpponents } from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
+import { zoneBanner, zoneIndexAt, zoneOf } from './zones';
 import { createShipTrail } from './shipTrails';
 import { createScrapeFx } from './scrapeFx';
 import type { DuelResult } from './duel/runDuel';
@@ -190,6 +192,25 @@ const NearMissCallout: React.FC<{ badge: NearMissBadge }> = ({ badge }) => {
         </div>
     );
 };
+
+/** "ZONE 2 · NEON NIGHT" under the score as a zone starts, in the zone's grid colour; it fades
+ *  in and out once (the fade stays under reduced motion). Keyed by the zone, so each one replays
+ *  it. */
+const ZoneBanner: React.FC<{ zone: number | null }> = ({ zone }) => {
+    if (zone === null) return null;
+    return (
+        <div
+            key={zone}
+            className="mt-1 text-sm sm:text-lg font-bold tracking-widest arcade-zone-banner"
+            style={{ color: `rgb(${zoneOf(zone).palette.scene.grid})` }}
+        >
+            {zoneBanner(zone)}
+        </div>
+    );
+};
+
+/** The playback position the frame loop reads the beat from, rewritten every frame. */
+const musicClock: MusicClock = { track: '/audio/disco.mp3', time: 0, playing: false };
 
 const SubmissionLine: React.FC<{
     status: SubmissionStatus;
@@ -366,6 +387,9 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     const [hud, setHud] = useState<Hud>(EMPTY_HUD);
     const streakRef = useRef<StreakChip>(NO_STREAK);
     const nearMissRef = useRef<NearMissBadge>(NO_NEAR_MISS);
+    /** The zone the run is in, and the one whose banner shows (none in zone 1). */
+    const zoneRef = useRef(0);
+    const [bannerZone, setBannerZone] = useState<number | null>(null);
     const [countdown, setCountdown] = useState(0);
     const [finished, setFinished] = useState<FinishedRun | null>(null);
     const result = finished?.result ?? null;
@@ -859,6 +883,11 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 }
                 if (inputs.length > 0) inputsRef.current.unshift(...inputs);
                 drainEvents(game);
+                const zone = zoneIndexAt(game.distance);
+                if (zone !== zoneRef.current) {
+                    zoneRef.current = zone;
+                    setBannerZone(zone > 0 ? zone : null);
+                }
 
                 const flown = flownRef.current;
                 for (const c of game.checkpoints) {
@@ -928,6 +957,8 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             }
 
             view.dpr = dpr;
+            const clock = getSynthwaveMusic().clock(musicClock);
+            view.beat = beatPulse(clock.time, TRACK_BEATS[clock.track], clock.playing);
             renderFlight(ctx, game, view, now, dt);
             raf = requestAnimationFrame(frame);
         };
@@ -1065,6 +1096,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                             <span>{hud.credits} credits</span>
                             <StreakBadge chip={hud.streak} />
                         </div>
+                        <ZoneBanner zone={bannerZone} />
                     </div>
                 )}
                 <div className="flex gap-2 items-center pointer-events-auto">

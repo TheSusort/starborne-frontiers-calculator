@@ -38,7 +38,7 @@ export function duckDepth(top: number, bottom: number): number {
     return Math.max(MIN_DUCK_DROP, SHIP_RIDE_HEIGHT - bottom + share * height);
 }
 
-interface Palette {
+export interface Palette {
     /** Gradient fill, top to bottom. */
     top: string;
     bottom: string;
@@ -65,6 +65,16 @@ const SUNSET: Palette = {
     glow: 'rgba(255, 150, 60, 0.38)',
     core: '#ffe2b0',
 };
+/** The colour sets of the three obstacles. A wall's top edge is lit in the low laser's set and a
+ *  high block's bottom edge in the wall's. */
+export interface BarrierColours {
+    wall: Palette;
+    low: Palette;
+    high: Palette;
+}
+
+export const SUNSET_BARRIERS: BarrierColours = { wall: PINK, low: CYAN, high: SUNSET };
+
 const POST_FILL = 'rgba(20, 8, 40, 0.92)';
 const SCANLINE = 'rgba(20, 0, 40, 0.28)';
 /** Scanline pitch in lane widths; scanlines are skipped once they would be closer than
@@ -72,8 +82,9 @@ const SCANLINE = 'rgba(20, 0, 40, 0.28)';
 const SCANLINE_PITCH = 0.06;
 const MIN_SCANLINE_PX = 3;
 
-/** Unit-square vertical gradients, one per palette, built on first use and reused every frame:
- *  `fillGradientRect` maps the unit square onto the rectangle with the transform. */
+/** Unit-square vertical gradients, one per palette object, built on first use and reused every
+ *  frame: `fillGradientRect` maps the unit square onto the rectangle with the transform. Callers
+ *  pass a bounded set of palette objects (see `zonePalette`), so the map stays small. */
 const gradients = new Map<Palette, CanvasGradient>();
 
 function gradientOf(ctx: CanvasRenderingContext2D, palette: Palette): CanvasGradient {
@@ -202,33 +213,35 @@ export function drawBarrier(
     y: number,
     u: number,
     scale: number,
-    pulse: number
+    pulse: number,
+    colours: BarrierColours = SUNSET_BARRIERS
 ): void {
+    const { wall, low, high } = colours;
     if (kind === 'wall') {
         const left = x - WALL.halfWidth * u;
         const top = y + WALL.top * u;
         const w = 2 * WALL.halfWidth * u;
         const h = -WALL.top * u;
-        fillGradientRect(ctx, PINK, left, top, w, h);
+        fillGradientRect(ctx, wall, left, top, w, h);
         scanlines(ctx, left, top, w, h, u);
-        neonOutline(ctx, PINK, left, top, w, h, scale, pulse);
+        neonOutline(ctx, wall, left, top, w, h, scale, pulse);
         // A bright top edge, like a horizon line.
-        neonLine(ctx, CYAN, left, left + w, top, Math.max(2, 5 * scale), Math.max(1, scale), pulse);
+        neonLine(ctx, low, left, left + w, top, Math.max(2, 5 * scale), Math.max(1, scale), pulse);
     } else if (kind === 'low') {
         const half = LOW.halfWidth * u;
         const post = LOW.post * u;
         const postTop = y + LOW.postTop * u;
         const drawPost = (px: number) =>
-            drawNeonPost(ctx, CYAN, px, postTop, post, u * -LOW.postTop, scale, pulse);
+            drawNeonPost(ctx, low, px, postTop, post, u * -LOW.postTop, scale, pulse);
         drawPost(x - half - post / 2);
         drawPost(x + half - post / 2);
         const barTop = y + LOW.barTop * u;
         const barH = (LOW.barTop - LOW.barBottom) * -u;
-        fillGradientRect(ctx, CYAN, x - half, barTop, 2 * half, barH);
+        fillGradientRect(ctx, low, x - half, barTop, 2 * half, barH);
         // The beam: a pulsing glow as tall as the bar, around a white-hot core.
         neonLine(
             ctx,
-            CYAN,
+            low,
             x - half,
             x + half,
             barTop + barH / 2,
@@ -242,16 +255,16 @@ export function drawBarrier(
         const barTop = y + HIGH.barTop * u;
         const barH = (HIGH.barBottom - HIGH.barTop) * u;
         const drawPost = (px: number) =>
-            drawNeonPost(ctx, SUNSET, px, barTop, post, u * -HIGH.barTop, scale, pulse);
+            drawNeonPost(ctx, high, px, barTop, post, u * -HIGH.barTop, scale, pulse);
         drawPost(x - half);
         drawPost(x + half - post);
-        fillGradientRect(ctx, SUNSET, x - half, barTop, 2 * half, barH);
+        fillGradientRect(ctx, high, x - half, barTop, 2 * half, barH);
         scanlines(ctx, x - half, barTop, 2 * half, barH, u);
-        neonOutline(ctx, SUNSET, x - half, barTop, 2 * half, barH, scale, pulse);
+        neonOutline(ctx, high, x - half, barTop, 2 * half, barH, scale, pulse);
         // The bottom edge is the gap a duck passes under; it reads brightest.
         neonLine(
             ctx,
-            PINK,
+            wall,
             x - half,
             x + half,
             barTop + barH,
