@@ -408,6 +408,22 @@ describe('DuelSummary race', () => {
         expect(q.getByText('Defeat')).toBeInTheDocument();
     });
 
+    it('a drawn race stamps both ships DRAW and says nothing was won or lost', () => {
+        const q = showRace(
+            {
+                kind: 'tank',
+                outcome: 'draw',
+                flown: { byRound: [50, 0], total: 0, endRound: 2 },
+                rival: { byRound: [40, 0], total: 0, endRound: 2 },
+            },
+            true
+        );
+        act(() => void vi.advanceTimersByTime(50));
+        expect(q.getAllByRole('status').map((s) => s.textContent)).toEqual(['DRAW', 'DRAW']);
+        expect(q.getByText('Draw')).toBeInTheDocument();
+        expect(q.getByText('No reward, no penalty')).toBeInTheDocument();
+    });
+
     it('a skipped race goes straight to its outcome with no stamps', () => {
         const q = showRace({
             kind: 'heal',

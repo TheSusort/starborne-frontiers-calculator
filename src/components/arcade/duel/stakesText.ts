@@ -1,4 +1,9 @@
-import type { ChallengeKind, DuelEffect, DuelStakes } from '../../../utils/arcade/types';
+import type {
+    ChallengeKind,
+    DuelEffect,
+    DuelOutcome,
+    DuelStakes,
+} from '../../../utils/arcade/types';
 
 export function stakesBanner(stakes: DuelStakes): string {
     switch (stakes) {
@@ -51,6 +56,10 @@ export function effectText(effect: DuelEffect): string {
             return 'No reward';
     }
 }
+
+/** The effect line under an outcome: a draw wins and loses nothing, whatever the stakes. */
+export const outcomeEffectText = (outcome: DuelOutcome, effect: DuelEffect): string =>
+    outcome === 'draw' ? 'No reward, no penalty' : effectText(effect);
 
 /** How long the outcome stays up before the run moves on by itself. */
 export const DUEL_RESULT_HOLD_MS = 1500;

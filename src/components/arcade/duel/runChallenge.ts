@@ -29,6 +29,7 @@ import type { RowPicks } from './pickOpponents';
 import { CHALLENGE_ROUNDS, runDuel, runTeamDuel } from './runDuel';
 import {
     cumulativeSide,
+    endRace,
     hpLeftSide,
     raceOutcome,
     skippedChallenge,
@@ -37,6 +38,10 @@ import {
     type RaceResult,
     type RaceSide,
 } from './challengeResult';
+
+/** `side` with `endRound` set when the task ended inside the race. */
+const withEndRound = (side: RaceSide, endRound: number | undefined): RaceSide =>
+    endRound !== undefined && endRound <= CHALLENGE_ROUNDS ? { ...side, endRound } : side;
 
 /** Runs `run` with the combat RNG pinned to `seed`, as `runSeededBattle` does for fights. */
 function seeded<T>(seed: number, run: () => T): T {
@@ -49,7 +54,7 @@ function seeded<T>(seed: number, run: () => T): T {
 }
 
 /** `ship` against the DPS page's default enemy for CHALLENGE_ROUNDS, built as the page builds a
- *  picked ship; compares total damage dealt. */
+ *  picked ship; compares total damage dealt. Its task ends on the round the enemy falls. */
 export function dpsRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
     const config = dpsConfigFromShip(ship, deps);
     const enemy = defaultDpsEnemyConfig();
@@ -110,14 +115,18 @@ export function dpsRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
             },
         ],
     });
-    return cumulativeSide(
-        result.rounds.map((r) => r.totalRoundDamage),
-        result.summary.totalDamage
+    return withEndRound(
+        cumulativeSide(
+            result.rounds.map((r) => r.totalRoundDamage),
+            result.summary.totalDamage
+        ),
+        result.summary.roundsToKill
     );
 }
 
 /** `ship` healing itself under the healing page's default enemy for CHALLENGE_ROUNDS, built as
- *  the page builds a picked healer; compares total healing done. */
+ *  the page builds a picked healer; compares total healing done. Its task ends on the round it is
+ *  destroyed. */
 export function healRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
     const stats = healerStatsFromShip(shipFinalStats(ship, deps));
     const result = simulateHealing({
@@ -159,9 +168,12 @@ export function healRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
         healerPosition: DEFAULT_HEALER_SLOT,
         healerTargeting: targetingOf(ship),
     });
-    return cumulativeSide(
-        result.rounds.map((r) => r.totalRoundHealing),
-        result.summary.totalHealing
+    return withEndRound(
+        cumulativeSide(
+            result.rounds.map((r) => r.totalRoundHealing),
+            result.summary.totalHealing
+        ),
+        result.summary.destroyedRound
     );
 }
 
@@ -205,8 +217,9 @@ const RACES: Record<RaceKind, (ship: Ship, deps: CombatStatsDeps) => RaceSide> =
     tank: tankRace,
 };
 
-/** Both ships run the same `kind` task under the same seed; any error, or a figure that is not a
- *  finite number, → skipped. */
+/** Both ships run the same `kind` task under the same seed, and the race lasts as `endRace`
+ *  decides; won as `raceOutcome` decides. Any error, or a figure that is not a finite number,
+ *  → skipped. */
 export function runRace(
     kind: RaceKind,
     flown: Ship,
@@ -221,7 +234,13 @@ export function runRace(
         if (!Number.isFinite(a.total) || !Number.isFinite(b.total)) {
             throw new Error(`arcade ${kind} race produced a non-finite figure`);
         }
-        return { kind, outcome: raceOutcome(a, b), flown: a, rival: b };
+        const [flownSide, rivalSide] = endRace(a, b, CHALLENGE_ROUNDS);
+        return {
+            kind,
+            outcome: raceOutcome(kind, flownSide, rivalSide),
+            flown: flownSide,
+            rival: rivalSide,
+        };
     } catch (error) {
         if (import.meta.env.DEV) console.warn(`arcade ${kind} race skipped`, error);
         return skippedChallenge(kind);

@@ -18,7 +18,12 @@ import {
     raceRoundSeconds,
     raceStamp,
 } from './racePlayback';
-import { afterPlayback, challengeBanner, DUEL_RESULT_HOLD_MS, effectText } from './stakesText';
+import {
+    afterPlayback,
+    challengeBanner,
+    DUEL_RESULT_HOLD_MS,
+    outcomeEffectText,
+} from './stakesText';
 
 /** Floating numbers shown per ship per turn; a multi-hit turn shows only its first ones. */
 const MAX_FLOATS = 4;
@@ -216,6 +221,7 @@ const IDLE: DuelSideState = {
 const outcomeTitle = (result: ChallengeResult) => {
     if (result.outcome === 'win') return 'Victory';
     if (result.outcome === 'lose') return 'Defeat';
+    if (result.outcome === 'draw') return 'Draw';
     return result.kind === 'duel' ? 'Duel skipped' : 'Challenge skipped';
 };
 
@@ -268,7 +274,7 @@ const FightBody: React.FC<{
 };
 
 /** One ship's lane of a race: its image, its bar filled to the figure after `round`, the figure
- *  itself and, once the race is over, its WIN/LOSE stamp. */
+ *  itself and, once the race is over, its WIN, LOSE or DRAW stamp. */
 const RaceLane: React.FC<{
     side: DuelSide;
     result: RaceResult;
@@ -289,7 +295,9 @@ const RaceLane: React.FC<{
                         className={`absolute inset-x-0 top-1/2 -translate-y-1/2 border-2 py-1 text-2xl font-extrabold tracking-widest ${
                             stamp === 'WIN'
                                 ? 'border-green-400 bg-green-500/20 text-green-300'
-                                : 'border-red-400 bg-red-500/20 text-red-300'
+                                : stamp === 'DRAW'
+                                  ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300'
+                                  : 'border-red-400 bg-red-500/20 text-red-300'
                         }`}
                     >
                         {stamp}
@@ -340,7 +348,7 @@ const RaceBody: React.FC<{
  * (`duel`, `team`) plays back turn by turn (`beatSeconds`) with each ship's HP, shield, charge,
  * buffs and debuffs, the numbers each turn lands and a banner on a charged skill; a `team` fight
  * shows three ships a side. A race (`dps`, `heal`, `tank`) fills a bar per ship round by round
- * (`raceRoundSeconds`) with the figure it compares, then stamps each ship WIN or LOSE.
+ * (`raceRoundSeconds`) with the figure it compares, then stamps each ship WIN, LOSE or DRAW.
  * After the playback the outcome and its effect are shown for `DUEL_RESULT_HOLD_MS` before
  * `onDone` is called (see `afterPlayback`: a loss that ends the run calls it as soon as the
  * playback ends, with no outcome shown). Space or a click skips the playback, and on the outcome
@@ -491,7 +499,9 @@ export const DuelSummary: React.FC<DuelSummaryProps> = ({
                 ) : closes ? null : (
                     <div className="space-y-3">
                         <h2 className="text-2xl font-bold">{outcomeTitle(result)}</h2>
-                        {effect && <p className="text-lg">{effectText(effect)}</p>}
+                        {effect && (
+                            <p className="text-lg">{outcomeEffectText(result.outcome, effect)}</p>
+                        )}
                     </div>
                 )}
             </div>

@@ -55,10 +55,12 @@ describe('racePlayback', () => {
         expect(raceBarFill(race('heal', [0, 0], [0, 0]), 0)).toBe(0);
     });
 
-    it('stamps the winner WIN and the other LOSE, and nothing on a skipped race', () => {
+    it('stamps the winner WIN and the other LOSE, both DRAW on a draw, and nothing on a skipped race', () => {
         expect(raceStamp(race('dps', [1], [1], 'win'), 'flown')).toBe('WIN');
         expect(raceStamp(race('dps', [1], [1], 'win'), 'rival')).toBe('LOSE');
         expect(raceStamp(race('dps', [1], [2], 'lose'), 'flown')).toBe('LOSE');
         expect(raceStamp(race('dps', [], [], 'skipped'), 'rival')).toBeNull();
+        expect(raceStamp(race('dps', [1], [1], 'draw'), 'flown')).toBe('DRAW');
+        expect(raceStamp(race('dps', [1], [1], 'draw'), 'rival')).toBe('DRAW');
     });
 });

@@ -250,6 +250,20 @@ describe('resolveDuel', () => {
         }
     });
 
+    it('a draw applies nothing for every stakes kind', () => {
+        for (const stakes of ['win-or-die', 'bonus-or-penalty', 'power-up'] as const) {
+            const g = gameAtDuel(stakes);
+            g.credits = 40;
+            expect(resolveDuel(g, 'draw')).toEqual({ kind: 'none' });
+            expect(g.credits).toBe(40);
+            expect(g.bonus).toBe(0);
+            expect(g.player.shield).toBe(false);
+            expect(g.player.magnetTime).toBe(0);
+            expect(g.status).toBe('running');
+            expect(g.pendingDuel).toBeNull();
+        }
+    });
+
     it('does nothing without a pending duel', () => {
         const g = createGame(1, { duels: true });
         expect(resolveDuel(g, 'win')).toEqual({ kind: 'none' });

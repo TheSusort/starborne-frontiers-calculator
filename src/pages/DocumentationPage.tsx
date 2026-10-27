@@ -2608,13 +2608,17 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                 </ul>
                                 <p className="text-theme-text mt-2">
-                                    Your ship wins every tie, including a race where neither ship
-                                    scores anything (an attacker in a healing race, say). As a
-                                    checkpoint row comes into view, time slows down for about two
-                                    seconds: a banner names the challenge and what is at stake (and,
-                                    for 3v3, your two allies), and a card over each gate shows the
-                                    rivals&apos; portraits, names and roles. You can still steer,
-                                    jump and duck while it is slowed. The stakes are{' '}
+                                    A race ends early once both ships are done: the enemy has fallen
+                                    in a DPS race, or the ship was destroyed in a TANK or HEAL race.
+                                    On equal figures, the earlier kill wins a DPS race and the later
+                                    destruction wins a TANK or HEAL race. Anything still level is a
+                                    draw, as is a 1v1 or 3v3 where both sides fall in the same round
+                                    or finish with equal HP; a draw brings no reward and no penalty.
+                                    As a checkpoint row comes into view, time slows down for about
+                                    two seconds: a banner names the challenge and what is at stake
+                                    (and, for 3v3, your two allies), and a card over each gate shows
+                                    the rivals&apos; portraits, names and roles. You can still
+                                    steer, jump and duck while it is slowed. The stakes are{' '}
                                     <strong>Win or die</strong> (a win adds 500 points, a loss ends
                                     the run unless a shield absorbs it),{' '}
                                     <strong>Credits on the line</strong> (win 25 credits, or lose a
@@ -2627,12 +2631,13 @@ const DocumentationPage: React.FC = () => {
                                     misses and repairs each turn lands, and a banner when it fires
                                     its charged skill. A race fills a bar for each ship round by
                                     round with its damage dealt, healing done or HP left, then
-                                    stamps WIN or LOSE. Press Space or click to skip the replay. The
-                                    result shows briefly (Space or a click moves on at once), then
-                                    the run resumes after a 3-2-1 countdown. A challenge that ends
-                                    the run closes as soon as its replay does, and your ship
-                                    explodes. Flying a bare ship from an empty fleet, the gates hold
-                                    random bare ships instead, and every ship uses base stats only.
+                                    stamps WIN, LOSE or DRAW. Press Space or click to skip the
+                                    replay. The result shows briefly (Space or a click moves on at
+                                    once), then the run resumes after a 3-2-1 countdown. A challenge
+                                    that ends the run closes as soon as its replay does, and your
+                                    ship explodes. Flying a bare ship from an empty fleet, the gates
+                                    hold random bare ships instead, and every ship uses base stats
+                                    only.
                                 </p>
                             </div>
                             <div className="card">

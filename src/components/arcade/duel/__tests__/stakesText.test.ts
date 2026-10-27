@@ -5,6 +5,7 @@ import {
     challengeLabel,
     DUEL_RESULT_HOLD_MS,
     effectText,
+    outcomeEffectText,
     stakesBanner,
 } from '../stakesText';
 
@@ -34,6 +35,15 @@ describe('stakesText', () => {
         expect(effectText({ kind: 'shield-absorbed' })).toBe('Shield absorbed the defeat');
         expect(effectText({ kind: 'game-over' })).toBe('Destroyed');
         expect(effectText({ kind: 'none' })).toBe('No reward');
+    });
+});
+
+describe('outcomeEffectText', () => {
+    it('a draw says nothing was won or lost; any other outcome describes its effect', () => {
+        expect(outcomeEffectText('draw', { kind: 'none' })).toBe('No reward, no penalty');
+        expect(outcomeEffectText('skipped', { kind: 'none' })).toBe('No reward');
+        expect(outcomeEffectText('lose', { kind: 'none' })).toBe('No reward');
+        expect(outcomeEffectText('win', { kind: 'bonus', amount: 500 })).toBe('+500');
     });
 });
 

@@ -38,9 +38,14 @@ export function raceBarFill(result: RaceResult, value: number): number {
     return top > 0 ? Math.max(0, Math.min(100, (100 * value) / top)) : 0;
 }
 
-/** The stamp a race side shows once the race is over; none for a skipped race. */
-export function raceStamp(result: RaceResult, side: 'flown' | 'rival'): 'WIN' | 'LOSE' | null {
+/** The stamp a race side shows once the race is over: DRAW on both for a draw, none for a
+ *  skipped race. */
+export function raceStamp(
+    result: RaceResult,
+    side: 'flown' | 'rival'
+): 'WIN' | 'LOSE' | 'DRAW' | null {
     if (result.outcome === 'skipped') return null;
+    if (result.outcome === 'draw') return 'DRAW';
     const flownWon = result.outcome === 'win';
     return (side === 'flown') === flownWon ? 'WIN' : 'LOSE';
 }

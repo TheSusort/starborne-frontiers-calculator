@@ -81,10 +81,18 @@ describe('duelOutcome', () => {
         ).toBe('lose');
     });
 
-    it('at the round cap, the player wins a tie', () => {
+    it('at the round cap, equal HP is a draw', () => {
         expect(
             duelOutcome(result('enemy', [{ player: [50, true], enemy: [50, true] }])).outcome
-        ).toBe('win');
+        ).toBe('draw');
+    });
+
+    it('both ships destroyed in the same round is a draw, whoever the simulator names', () => {
+        for (const winner of ['player', 'enemy'] as const) {
+            expect(
+                duelOutcome(result(winner, [{ player: [0, false], enemy: [0, false] }])).outcome
+            ).toBe('draw');
+        }
     });
 });
 
@@ -102,9 +110,16 @@ describe('runDuel', () => {
         expect(back.beats.at(-1)!.player[0].hpPct).toBe(0);
     });
 
-    it('a fight nobody can win reaches the cap and the tie goes to the player', () => {
+    it('the playback ends on the turn that destroys the last ship of a side', () => {
+        const r = runDuel(fighter('strong', 6000, 20000), fighter('weak', 500, 8000), deps, 123);
+        const wipe = r.beats.findIndex((b) => b.enemy.every((s) => !s.alive));
+        expect(wipe).toBeGreaterThanOrEqual(0);
+        expect(wipe).toBe(r.beats.length - 1);
+    });
+
+    it('a fight nobody can win reaches the cap as a draw', () => {
         const r = runDuel(fighter('a', 0, 1000, false), fighter('b', 0, 1000, false), deps, 1);
-        expect(r.outcome).toBe('win');
+        expect(r.outcome).toBe('draw');
     });
 
     it('a thrown error skips the duel and leaves a warning in development', () => {

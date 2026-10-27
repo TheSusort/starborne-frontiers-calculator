@@ -2,7 +2,8 @@ export type Lane = 0 | 1 | 2;
 export type ObstacleKind = 'wall' | 'low' | 'high';
 export type PickupKind = 'credit' | 'shield' | 'magnet';
 export type DuelStakes = 'win-or-die' | 'bonus-or-penalty' | 'power-up';
-export type DuelOutcome = 'win' | 'lose' | 'skipped';
+/** `draw` and `skipped` both apply no stakes; only the summary tells them apart. */
+export type DuelOutcome = 'win' | 'lose' | 'draw' | 'skipped';
 /** What a checkpoint row asks of the flown ship: a 1v1 (`duel`), a race against the gate ship
  *  (`dps`, `tank`, `heal`) or a 3v3 (`team`). Both gates of a row share it. */
 export type ChallengeKind = 'duel' | 'dps' | 'tank' | 'heal' | 'team';

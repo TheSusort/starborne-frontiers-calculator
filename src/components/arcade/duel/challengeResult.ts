@@ -12,10 +12,12 @@ export type RaceKind = Extract<ChallengeKind, 'dps' | 'heal' | 'tank'>;
 
 /** One ship's run at a race. `byRound[i]` is the compared figure after round `i + 1` (damage
  *  dealt or healing done so far, or HP% left); `total` is the figure the race compares. Both are
- *  empty/0 for a skipped race. */
+ *  empty/0 for a skipped race. `endRound` is the round the ship's task ended: the default enemy
+ *  fell (dps) or the ship was destroyed (tank, heal); absent while it ran the whole race. */
 export interface RaceSide {
     byRound: number[];
     total: number;
+    endRound?: number;
 }
 
 export interface RaceResult {
@@ -55,13 +57,46 @@ export function hpLeftSide(
         if (run.destroyedRound !== undefined && run.destroyedRound <= round) return 0;
         return run.rounds[round]?.hpPct ?? 0;
     });
-    return { byRound, total: byRound[rounds - 1] ?? 0 };
+    const destroyed = run.destroyedRound !== undefined && run.destroyedRound <= rounds;
+    return {
+        byRound,
+        total: byRound[rounds - 1] ?? 0,
+        ...(destroyed ? { endRound: run.destroyedRound } : {}),
+    };
 }
 
-/** The flown ship wins when its figure is at least the rival's: ties go to the flown ship, so
- *  two ships that both score 0 is a win. */
-export const raceOutcome = (flown: RaceSide, rival: RaceSide): 'win' | 'lose' =>
-    flown.total >= rival.total ? 'win' : 'lose';
+/** Both sides of a race of at most `rounds` rounds, cut or held to the race's length: when both
+ *  ships' tasks ended, the race ends at the later `endRound`; otherwise it runs all `rounds`. A
+ *  side shorter than that holds its last figure (0 if it has none). */
+export function endRace(flown: RaceSide, rival: RaceSide, rounds: number): [RaceSide, RaceSide] {
+    const length =
+        flown.endRound !== undefined && rival.endRound !== undefined
+            ? Math.min(rounds, Math.max(flown.endRound, rival.endRound))
+            : rounds;
+    const fit = (side: RaceSide): RaceSide => ({
+        ...side,
+        byRound: Array.from(
+            { length },
+            (_, i) => side.byRound[Math.min(i, side.byRound.length - 1)] ?? 0
+        ),
+    });
+    return [fit(flown), fit(rival)];
+}
+
+/** The higher figure wins. Equal figures go to the ship whose task ended better: in `dps` the
+ *  earlier kill (a kill beats none), in `tank` and `heal` the later destruction (surviving beats
+ *  both). Still equal, including two ships that both score 0 and never end, is a draw. */
+export function raceOutcome(
+    kind: RaceKind,
+    flown: RaceSide,
+    rival: RaceSide
+): 'win' | 'lose' | 'draw' {
+    if (flown.total !== rival.total) return flown.total > rival.total ? 'win' : 'lose';
+    const a = flown.endRound ?? Infinity;
+    const b = rival.endRound ?? Infinity;
+    if (a === b) return 'draw';
+    return (kind === 'dps' ? a < b : a > b) ? 'win' : 'lose';
+}
 
 /** A challenge that applies no stakes, with nothing to play back. */
 export function skippedChallenge(kind: RaceKind): RaceResult;

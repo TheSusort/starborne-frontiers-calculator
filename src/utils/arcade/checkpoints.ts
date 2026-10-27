@@ -120,6 +120,6 @@ export function resolveDuel(state: GameState, outcome: DuelOutcome): DuelEffect 
     if (!pending) return { kind: 'none' };
     state.pendingDuel = null;
     state.status = 'running';
-    if (outcome === 'skipped') return { kind: 'none' };
+    if (outcome === 'skipped' || outcome === 'draw') return { kind: 'none' };
     return applyStakes(state, pending.stakes, outcome === 'win');
 }

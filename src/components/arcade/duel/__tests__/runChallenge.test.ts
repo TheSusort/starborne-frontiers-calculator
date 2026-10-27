@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { runChallenge, runRace } from '../runChallenge';
 import {
     cumulativeSide,
+    endRace,
     hpLeftSide,
     isRace,
     raceOutcome,
@@ -26,20 +27,87 @@ const deps: CombatStatsDeps = {
 
 const side = (total: number): RaceSide => ({ byRound: [total], total });
 
+const ended = (total: number, endRound?: number): RaceSide => ({
+    byRound: [total],
+    total,
+    ...(endRound !== undefined ? { endRound } : {}),
+});
+
 describe('raceOutcome', () => {
     it('the higher figure wins', () => {
-        expect(raceOutcome(side(500), side(400))).toBe('win');
-        expect(raceOutcome(side(400), side(500))).toBe('lose');
+        expect(raceOutcome('dps', side(500), side(400))).toBe('win');
+        expect(raceOutcome('dps', side(400), side(500))).toBe('lose');
     });
 
-    it('the flown ship wins a tie', () => {
-        expect(raceOutcome(side(250), side(250))).toBe('win');
+    it('equal figures with nothing to break the tie are a draw', () => {
+        for (const kind of ['dps', 'heal', 'tank'] as const) {
+            expect(raceOutcome(kind, side(250), side(250))).toBe('draw');
+            expect(raceOutcome(kind, side(0), side(0))).toBe('draw');
+        }
     });
 
-    it('a ship that scores 0 loses, unless both score 0', () => {
-        expect(raceOutcome(side(0), side(1))).toBe('lose');
-        expect(raceOutcome(side(1), side(0))).toBe('win');
-        expect(raceOutcome(side(0), side(0))).toBe('win');
+    it('a ship that scores 0 loses to one that scores anything', () => {
+        expect(raceOutcome('heal', side(0), side(1))).toBe('lose');
+        expect(raceOutcome('heal', side(1), side(0))).toBe('win');
+    });
+
+    it('dps: on equal damage the earlier kill wins, and any kill beats none', () => {
+        expect(raceOutcome('dps', ended(900, 2), ended(900, 3))).toBe('win');
+        expect(raceOutcome('dps', ended(900, 4), ended(900, 3))).toBe('lose');
+        expect(raceOutcome('dps', ended(900, 4), ended(900))).toBe('win');
+        expect(raceOutcome('dps', ended(900, 3), ended(900, 3))).toBe('draw');
+    });
+
+    it('tank and heal: on equal figures the later destruction wins, and surviving beats both', () => {
+        for (const kind of ['tank', 'heal'] as const) {
+            expect(raceOutcome(kind, ended(0, 4), ended(0, 2))).toBe('win');
+            expect(raceOutcome(kind, ended(0, 2), ended(0, 4))).toBe('lose');
+            expect(raceOutcome(kind, ended(0), ended(0, 5))).toBe('win');
+            expect(raceOutcome(kind, ended(0, 3), ended(0, 3))).toBe('draw');
+        }
+    });
+});
+
+describe('endRace', () => {
+    it('when both ships are done, the race stops at the later of the two rounds', () => {
+        const [a, b] = endRace(
+            { byRound: [100, 300], total: 300, endRound: 2 },
+            { byRound: [50, 150, 250], total: 250, endRound: 3 },
+            CHALLENGE_ROUNDS
+        );
+        expect(a).toEqual({ byRound: [100, 300, 300], total: 300, endRound: 2 });
+        expect(b).toEqual({ byRound: [50, 150, 250], total: 250, endRound: 3 });
+    });
+
+    it('a tank race where both ships fall is cut at the later destruction', () => {
+        const [a, b] = endRace(
+            { byRound: [60, 0, 0, 0, 0], total: 0, endRound: 2 },
+            { byRound: [80, 40, 0, 0, 0], total: 0, endRound: 3 },
+            CHALLENGE_ROUNDS
+        );
+        expect(a.byRound).toEqual([60, 0, 0]);
+        expect(b.byRound).toEqual([80, 40, 0]);
+    });
+
+    it('when only one ship is done, both run the full race', () => {
+        const [a, b] = endRace(
+            { byRound: [100, 300], total: 300, endRound: 2 },
+            { byRound: [50, 100, 150, 200, 250], total: 250 },
+            CHALLENGE_ROUNDS
+        );
+        expect(a.byRound).toEqual([100, 300, 300, 300, 300]);
+        expect(b.byRound).toEqual([50, 100, 150, 200, 250]);
+        expect(a.byRound).toHaveLength(CHALLENGE_ROUNDS);
+    });
+
+    it('when neither ship is done, both run the full race', () => {
+        const [a, b] = endRace(
+            { byRound: [1, 2, 3, 4, 5], total: 5 },
+            { byRound: [2, 4, 6, 8, 10], total: 10 },
+            CHALLENGE_ROUNDS
+        );
+        expect(a.byRound).toHaveLength(CHALLENGE_ROUNDS);
+        expect(b.byRound).toHaveLength(CHALLENGE_ROUNDS);
     });
 });
 
@@ -74,7 +142,7 @@ describe('race figures', () => {
 
     it('a ship destroyed inside the race has 0 HP left from that round on', () => {
         const side = hpLeftSide(survivability([100, 60, 20, 0, 0, 0], 3), 5);
-        expect(side).toEqual({ byRound: [60, 20, 0, 0, 0], total: 0 });
+        expect(side).toEqual({ byRound: [60, 20, 0, 0, 0], total: 0, endRound: 3 });
     });
 
     it('a ship destroyed only in the extra round survived the race', () => {
@@ -146,7 +214,7 @@ describe('team outcome', () => {
         expect(duelOutcome(lost).outcome).toBe('lose');
     });
 
-    it('at the cap, the player wins a tie on summed HP%', () => {
+    it('at the cap, equal summed HP% is a draw', () => {
         const tie = fight(
             'enemy',
             [
@@ -160,7 +228,7 @@ describe('team outcome', () => {
                 [0, false],
             ]
         );
-        expect(duelOutcome(tie).outcome).toBe('win');
+        expect(duelOutcome(tie).outcome).toBe('draw');
     });
 
     it('a wiped side loses whatever the summed HP%', () => {
@@ -174,6 +242,67 @@ describe('team outcome', () => {
             [[1, true]]
         );
         expect(duelOutcome(wiped).outcome).toBe('lose');
+    });
+
+    it('both teams wiped in the same round is a draw, whoever the simulator names', () => {
+        const dead: [number, boolean][] = [
+            [0, false],
+            [0, false],
+            [0, false],
+        ];
+        expect(duelOutcome(fight('player', dead, dead)).outcome).toBe('draw');
+        expect(duelOutcome(fight('enemy', dead, dead)).outcome).toBe('draw');
+    });
+});
+
+describe('runRace length and ties', () => {
+    const attacker = (attack: number): Ship =>
+        ({
+            id: 'a',
+            name: 'a',
+            rarity: 'legendary',
+            faction: 'ATLAS_SYNDICATE',
+            type: 'ATTACKER',
+            baseStats: {
+                hp: 10000,
+                attack,
+                defence: 0,
+                hacking: 0,
+                security: 0,
+                crit: 0,
+                critDamage: 0,
+                speed: 100,
+                healModifier: 0,
+                hpRegen: 0,
+                shield: 0,
+                damageReduction: 0,
+                defensePenetration: 0,
+                shieldPenetration: 0,
+            },
+            equipment: {},
+            implants: {},
+            refits: [],
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            activeTarget: 'front',
+            activePattern: 'Pattern-Base',
+        }) as unknown as Ship;
+
+    it('dps: two identical ships that both kill in round 1 end the race there as a draw', () => {
+        const r = runRace('dps', attacker(1e7), attacker(1e7), deps, 7);
+        expect(r.flown.endRound).toBe(1);
+        expect(r.rival.endRound).toBe(1);
+        expect(r.flown.byRound).toHaveLength(1);
+        expect(r.rival.byRound).toHaveLength(1);
+        expect(r.outcome).toBe('draw');
+    });
+
+    it('dps: when only one ship kills, the race runs the full length', () => {
+        const r = runRace('dps', attacker(1e7), attacker(100), deps, 7);
+        expect(r.flown.endRound).toBe(1);
+        expect(r.rival.endRound).toBeUndefined();
+        expect(r.flown.byRound).toHaveLength(CHALLENGE_ROUNDS);
+        expect(r.rival.byRound).toHaveLength(CHALLENGE_ROUNDS);
+        expect(r.outcome).toBe('win');
     });
 });
 

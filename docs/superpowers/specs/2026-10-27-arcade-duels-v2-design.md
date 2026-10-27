@@ -45,21 +45,26 @@ choosing a lane, and gates show ship portraits instead of 3D models.
 ## Win rules (all 5 rounds)
 
 Each race runs the same existing calculator twice, once per ship, with identical scripted
-inputs, and compares one number. The flown ship wins ties in every race.
+inputs, and compares one number. 5 rounds is a fallback: a race ends at the later of the two
+ships' end rounds once both ships are done (dps: the default enemy fell, `summary.roundsToKill`;
+tank/heal: the racer was destroyed, `destroyedRound`); if only one or neither is done it runs
+all 5. On equal figures the tiebreak is dps → earlier kill wins, tank/heal → later destruction
+wins; still equal → `draw`. A draw applies no stakes (`resolveDuel` → `{kind:'none'}`) and
+shows "Draw", DRAW stamps and "No reward, no penalty".
 
 | Type | Engine | Compared number |
 |---|---|---|
-| `duel` | `runDuel` (unchanged: `runSeededBattle`, 1v1 at M2) but `rounds` capped at 5 | today's rule: sim winner, else higher final HP% at the cap |
+| `duel` | `runDuel` (unchanged: `runSeededBattle`, 1v1 at M2) but `rounds` capped at 5 | sim winner; both wiped in the same round → draw; at the cap, higher final HP% wins, equal → draw |
 | `dps` | `simulateDPS` (`src/utils/calculators/dpsSimulator.ts`) against the DPS page's default enemy (`SYNTHESIZED_DPS_ENEMY_ID` setup) | total damage over 5 rounds |
 | `heal` | `simulateHealing` (`healingEngineAdapter.ts`) with the healing page's default enemy (`healingDefaultEnemy.ts`) | total healing done over 5 rounds |
 | `tank` | `simulateDefenseSurvivability` (`defenseSurvivabilitySim.ts`) with the defence page's default attacker | HP % left after 5 rounds (a destroyed ship has 0) |
-| `team` | `runSeededBattle` with `buildTeam` of 3 per side, `rounds` capped at 5 | sim winner, else higher summed HP% at the cap |
+| `team` | `runSeededBattle` with `buildTeam` of 3 per side, `rounds` capped at 5 | sim winner; both wiped in the same round → draw; at the cap, higher summed HP% wins, equal → draw |
 
 - Each ship's inputs (stats, skills, gear, engineering) are built the same way the matching
   calculator page builds them for a selected ship; reuse those builders rather than re-deriving
   stats.
 - A ship whose kit cannot do the task (an attacker in a heal race) simply scores 0 and loses
-  unless the rival also scores 0 (then the flown ship wins the tie).
+  unless the rival also scores 0 (then, with no tiebreak, it is a draw).
 - Any engine error → `skipped`, as today.
 - Races use a seed derived from the run seed and checkpoint id, like today's duels.
 
@@ -69,7 +74,7 @@ inputs, and compares one number. The flown ship wins ties in every race.
   `team` shows three ships per side, each with its own HP/shield bars and buff chips.
 - Races (`dps`, `heal`, `tank`) show both ships side by side with a bar per ship that fills round
   by round with the compared number (damage dealt, healing done, HP left), the running figure
-  beside it, and a WIN/LOSE stamp at the end. Same ~10 s cap, reduced motion → no bar animation.
+  beside it, and a WIN/LOSE/DRAW stamp at the end; the playback stops at the race's last round. Same ~10 s cap, reduced motion → no bar animation.
 - The summary's stakes text and effect lines stay as today.
 
 ## Slow-motion preview
@@ -105,8 +110,8 @@ inputs, and compares one number. The flown ship wins ties in every race.
 ## Testing
 
 - Type draw: deterministic per seed; `team` never drawn when ineligible; roughly uniform.
-- Each win rule on fixed calculator results, including ties (flown ship wins) and a 0-scoring
-  ship.
+- Each win rule on fixed calculator results, including draws, each kind's tiebreak, the
+  both-ended cut and the one-ended full length, and a 0-scoring ship.
 - Team picks: all distinct, never the flown ship; fewer than 8 eligible → no `team`.
 - Engine slow-motion: same seed and inputs → same distance, score and events; the scale reaches
   0.25 and returns to 1 before the row crosses at `MAX_SPEED`; inputs during the preview apply.

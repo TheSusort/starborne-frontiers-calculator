@@ -18,19 +18,29 @@ export interface DuelResult {
 }
 
 /**
- * The simulator's winner, except when the fight reached the round cap with both sides alive (the
- * simulator calls that an enemy win): then the side with the higher summed final HP% wins and the
- * player wins ties.
+ * The simulator's winner, except in two cases where the simulator forces a winner and the arcade
+ * does not:
+ * - Both sides wiped in the same round (the simulator picks by kill order): a draw.
+ * - The round cap reached with both sides alive (the simulator calls that an enemy win): the side
+ *   with the higher summed final HP% wins; equal HP% is a draw.
  */
 export function duelOutcome(result: BattleResult): DuelResult {
+    const beats = buildDuelBeats(result);
     const last = result.rounds.at(-1);
-    const ships = last?.ships ?? [];
+    if (!last) return { outcome: result.outcome.winner === 'player' ? 'win' : 'lose', beats };
     const hpOf = (side: 'player' | 'enemy') =>
-        ships.filter((s) => s.side === side).reduce((sum, s) => sum + s.hpPct, 0);
-    const aliveOn = (side: 'player' | 'enemy') => ships.some((s) => s.side === side && s.alive);
-    const bothAlive = !!last && aliveOn('player') && aliveOn('enemy');
-    const won = bothAlive ? hpOf('player') >= hpOf('enemy') : result.outcome.winner === 'player';
-    return { outcome: won ? 'win' : 'lose', beats: buildDuelBeats(result) };
+        last.ships.filter((s) => s.side === side).reduce((sum, s) => sum + s.hpPct, 0);
+    const aliveOn = (side: 'player' | 'enemy') =>
+        last.ships.some((s) => s.side === side && s.alive);
+    const player = aliveOn('player');
+    const enemy = aliveOn('enemy');
+    let outcome: DuelOutcome;
+    if (!player && !enemy) outcome = 'draw';
+    else if (player && enemy) {
+        const diff = hpOf('player') - hpOf('enemy');
+        outcome = diff > 0 ? 'win' : diff < 0 ? 'lose' : 'draw';
+    } else outcome = player ? 'win' : 'lose';
+    return { outcome, beats };
 }
 
 /** Runs a capped fight between two boards; any error → skipped. */
