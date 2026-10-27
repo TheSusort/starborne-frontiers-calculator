@@ -53,6 +53,11 @@ function seeded<T>(seed: number, run: () => T): T {
     }
 }
 
+/** The heal and tank races' attacker: the healing and defence pages' default attacker with the
+ *  DPS page's default enemy HP, so a racer rarely kills it inside CHALLENGE_ROUNDS. */
+const raceAttacker = () =>
+    enemyAttackerInput({ ...defaultEnemyAttacker(), hp: defaultDpsEnemyConfig().hp });
+
 /** `ship` against the DPS page's default enemy for CHALLENGE_ROUNDS, built as the page builds a
  *  picked ship; compares total damage dealt. Its task ends on the round the enemy falls. */
 export function dpsRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
@@ -163,7 +168,7 @@ export function healRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
                 enemyDebuffs: [],
             },
         ],
-        enemies: [enemyAttackerInput(defaultEnemyAttacker())],
+        enemies: [raceAttacker()],
         rounds: CHALLENGE_ROUNDS,
         healerPosition: DEFAULT_HEALER_SLOT,
         healerTargeting: targetingOf(ship),
@@ -205,7 +210,7 @@ export function tankRace(ship: Ship, deps: CombatStatsDeps): RaceSide {
         faction: fields.faction,
         targeting: targetingOf(ship),
         teamActors: [],
-        enemies: [enemyAttackerInput(defaultEnemyAttacker())],
+        enemies: [raceAttacker()],
         rounds: CHALLENGE_ROUNDS + 1,
     });
     return hpLeftSide(result, CHALLENGE_ROUNDS);
