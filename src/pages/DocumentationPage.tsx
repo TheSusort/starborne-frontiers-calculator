@@ -2596,8 +2596,9 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         <strong>TANK</strong> — a race: each ship takes the Defense
-                                        Calculator&apos;s default attacker for 5 rounds. More HP
-                                        left wins; a destroyed ship has none.
+                                        Calculator&apos;s default attacker for 5 rounds. It ends as
+                                        soon as one ship is destroyed, and the survivor wins;
+                                        otherwise more HP left wins.
                                     </li>
                                     <li>
                                         <strong>3v3</strong> — you and two random geared ships from
@@ -2608,17 +2609,17 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                 </ul>
                                 <p className="text-theme-text mt-2">
-                                    A race ends early once both ships are done: the enemy has fallen
-                                    in a DPS race, or the ship was destroyed in a TANK or HEAL race.
-                                    On equal figures, the earlier kill wins a DPS race and the later
-                                    destruction wins a TANK or HEAL race. Anything still level is a
-                                    draw, as is a 1v1 or 3v3 where both sides fall in the same round
-                                    or finish with equal HP; a draw brings no reward and no penalty.
-                                    As a checkpoint row comes into view, time slows down for about
-                                    two seconds: a banner names the challenge and what is at stake
-                                    (and, for 3v3, your two allies), and a card over each gate shows
-                                    the rivals&apos; portraits, names and roles. You can still
-                                    steer, jump and duck while it is slowed. The stakes are{' '}
+                                    A DPS or HEAL race ends early once both ships are done: the
+                                    enemy has fallen in a DPS race, or the ship was destroyed in a
+                                    HEAL race. On equal figures, the earlier kill wins a DPS race
+                                    and the later destruction wins a HEAL race. Anything still level
+                                    is a draw, as is a 1v1 or 3v3 where both sides fall in the same
+                                    round or finish with equal HP; a draw brings no reward and no
+                                    penalty. As a checkpoint row comes into view, time slows down
+                                    for about two seconds: a banner names the challenge and what is
+                                    at stake (and, for 3v3, your two allies), and a card over each
+                                    gate shows the rivals&apos; portraits, names and roles. You can
+                                    still steer, jump and duck while it is slowed. The stakes are{' '}
                                     <strong>Win or die</strong> (a win adds 500 points, a loss ends
                                     the run unless a shield absorbs it),{' '}
                                     <strong>Credits on the line</strong> (win 25 credits, or lose a

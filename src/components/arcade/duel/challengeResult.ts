@@ -65,21 +65,32 @@ export function hpLeftSide(
     };
 }
 
-/** Both sides of a race of at most `rounds` rounds, cut or held to the race's length: when both
- *  ships' tasks ended, the race ends at the later `endRound`; otherwise it runs all `rounds`. A
- *  side shorter than that holds its last figure (0 if it has none). */
-export function endRace(flown: RaceSide, rival: RaceSide, rounds: number): [RaceSide, RaceSide] {
+/** Both sides of a race of at most `rounds` rounds, cut or held to the race's length. A `tank`
+ *  race ends at the first destruction, and each side's `total` becomes its HP left then; any
+ *  other race ends, when both ships' tasks ended, at the later `endRound`. Otherwise the race runs
+ *  all `rounds`. A side shorter than the race holds its last figure (0 if it has none). */
+export function endRace(
+    kind: RaceKind,
+    flown: RaceSide,
+    rival: RaceSide,
+    rounds: number
+): [RaceSide, RaceSide] {
+    const ends = [flown.endRound, rival.endRound].filter((r): r is number => r !== undefined);
     const length =
-        flown.endRound !== undefined && rival.endRound !== undefined
-            ? Math.min(rounds, Math.max(flown.endRound, rival.endRound))
-            : rounds;
-    const fit = (side: RaceSide): RaceSide => ({
-        ...side,
-        byRound: Array.from(
+        kind === 'tank'
+            ? Math.min(rounds, ...ends)
+            : ends.length === 2
+              ? Math.min(rounds, Math.max(...ends))
+              : rounds;
+    const fit = (side: RaceSide): RaceSide => {
+        const byRound = Array.from(
             { length },
             (_, i) => side.byRound[Math.min(i, side.byRound.length - 1)] ?? 0
-        ),
-    });
+        );
+        return kind === 'tank'
+            ? { ...side, byRound, total: byRound[length - 1] ?? 0 }
+            : { ...side, byRound };
+    };
     return [fit(flown), fit(rival)];
 }
 

@@ -45,11 +45,12 @@ choosing a lane, and gates show ship portraits instead of 3D models.
 ## Win rules (all 5 rounds)
 
 Each race runs the same existing calculator twice, once per ship, with identical scripted
-inputs, and compares one number. 5 rounds is a fallback: a race ends at the later of the two
-ships' end rounds once both ships are done (dps: the default enemy fell, `summary.roundsToKill`;
-tank/heal: the racer was destroyed, `destroyedRound`); if only one or neither is done it runs
-all 5. On equal figures the tiebreak is dps → earlier kill wins, tank/heal → later destruction
-wins; still equal → `draw`. A draw applies no stakes (`resolveDuel` → `{kind:'none'}`) and
+inputs, and compares one number. 5 rounds is a fallback: a tank race ends at the first
+destruction (`destroyedRound`), compared on HP % left then; a dps or heal race ends at the later
+of the two ships' end rounds once both ships are done (dps: the default enemy fell,
+`summary.roundsToKill`; heal: the racer was destroyed, `destroyedRound`); otherwise it runs all
+5. On equal figures the tiebreak is dps → earlier kill wins, tank/heal → later destruction wins;
+still equal → `draw`. A draw applies no stakes (`resolveDuel` → `{kind:'none'}`) and
 shows "Draw", DRAW stamps and "No reward, no penalty".
 
 | Type | Engine | Compared number |
@@ -57,7 +58,7 @@ shows "Draw", DRAW stamps and "No reward, no penalty".
 | `duel` | `runDuel` (unchanged: `runSeededBattle`, 1v1 at M2) but `rounds` capped at 5 | sim winner; both wiped in the same round → draw; at the cap, higher final HP% wins, equal → draw |
 | `dps` | `simulateDPS` (`src/utils/calculators/dpsSimulator.ts`) against the DPS page's default enemy (`SYNTHESIZED_DPS_ENEMY_ID` setup) | total damage over 5 rounds |
 | `heal` | `simulateHealing` (`healingEngineAdapter.ts`) with the healing page's default enemy (`healingDefaultEnemy.ts`) | total healing done over 5 rounds |
-| `tank` | `simulateDefenseSurvivability` (`defenseSurvivabilitySim.ts`) with the defence page's default attacker | HP % left after 5 rounds (a destroyed ship has 0) |
+| `tank` | `simulateDefenseSurvivability` (`defenseSurvivabilitySim.ts`) with the defence page's default attacker | HP % left when the race ends: at the first destruction (the survivor wins), else after 5 rounds |
 | `team` | `runSeededBattle` with `buildTeam` of 3 per side, `rounds` capped at 5 | sim winner; both wiped in the same round → draw; at the cap, higher summed HP% wins, equal → draw |
 
 - Each ship's inputs (stats, skills, gear, engineering) are built the same way the matching

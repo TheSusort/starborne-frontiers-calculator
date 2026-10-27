@@ -234,7 +234,7 @@ export function runRace(
         if (!Number.isFinite(a.total) || !Number.isFinite(b.total)) {
             throw new Error(`arcade ${kind} race produced a non-finite figure`);
         }
-        const [flownSide, rivalSide] = endRace(a, b, CHALLENGE_ROUNDS);
+        const [flownSide, rivalSide] = endRace(kind, a, b, CHALLENGE_ROUNDS);
         return {
             kind,
             outcome: raceOutcome(kind, flownSide, rivalSide),

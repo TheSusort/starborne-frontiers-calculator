@@ -71,6 +71,7 @@ describe('raceOutcome', () => {
 describe('endRace', () => {
     it('when both ships are done, the race stops at the later of the two rounds', () => {
         const [a, b] = endRace(
+            'dps',
             { byRound: [100, 300], total: 300, endRound: 2 },
             { byRound: [50, 150, 250], total: 250, endRound: 3 },
             CHALLENGE_ROUNDS
@@ -79,18 +80,55 @@ describe('endRace', () => {
         expect(b).toEqual({ byRound: [50, 150, 250], total: 250, endRound: 3 });
     });
 
-    it('a tank race where both ships fall is cut at the later destruction', () => {
+    it('a tank race ends at the first destruction, scored on HP left then', () => {
         const [a, b] = endRace(
+            'tank',
             { byRound: [60, 0, 0, 0, 0], total: 0, endRound: 2 },
             { byRound: [80, 40, 0, 0, 0], total: 0, endRound: 3 },
             CHALLENGE_ROUNDS
         );
-        expect(a.byRound).toEqual([60, 0, 0]);
-        expect(b.byRound).toEqual([80, 40, 0]);
+        expect(a).toEqual({ byRound: [60, 0], total: 0, endRound: 2 });
+        expect(b).toEqual({ byRound: [80, 40], total: 40, endRound: 3 });
+        expect(raceOutcome('tank', a, b)).toBe('lose');
+    });
+
+    it('a tank race where only one ship falls ends there and the survivor wins', () => {
+        const [a, b] = endRace(
+            'tank',
+            { byRound: [90, 70, 50, 30, 10], total: 10 },
+            { byRound: [60, 20, 0, 0, 0], total: 0, endRound: 3 },
+            CHALLENGE_ROUNDS
+        );
+        expect(a.byRound).toEqual([90, 70, 50]);
+        expect(a.total).toBe(50);
+        expect(b.byRound).toEqual([60, 20, 0]);
+        expect(raceOutcome('tank', a, b)).toBe('win');
+    });
+
+    it('a tank race where both ships fall in the same round is a draw', () => {
+        const [a, b] = endRace(
+            'tank',
+            { byRound: [60, 0, 0, 0, 0], total: 0, endRound: 2 },
+            { byRound: [30, 0, 0, 0, 0], total: 0, endRound: 2 },
+            CHALLENGE_ROUNDS
+        );
+        expect(raceOutcome('tank', a, b)).toBe('draw');
+    });
+
+    it('a tank race where no ship falls runs the full race', () => {
+        const [a] = endRace(
+            'tank',
+            { byRound: [90, 80, 70, 60, 50], total: 50 },
+            { byRound: [95, 85, 75, 65, 55], total: 55 },
+            CHALLENGE_ROUNDS
+        );
+        expect(a.byRound).toHaveLength(CHALLENGE_ROUNDS);
+        expect(a.total).toBe(50);
     });
 
     it('when only one ship is done, both run the full race', () => {
         const [a, b] = endRace(
+            'dps',
             { byRound: [100, 300], total: 300, endRound: 2 },
             { byRound: [50, 100, 150, 200, 250], total: 250 },
             CHALLENGE_ROUNDS
@@ -102,6 +140,7 @@ describe('endRace', () => {
 
     it('when neither ship is done, both run the full race', () => {
         const [a, b] = endRace(
+            'heal',
             { byRound: [1, 2, 3, 4, 5], total: 5 },
             { byRound: [2, 4, 6, 8, 10], total: 10 },
             CHALLENGE_ROUNDS
