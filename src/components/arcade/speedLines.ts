@@ -126,25 +126,38 @@ export function advanceSpeedLines(
     }
 }
 
+/** The speed blur's strength at `speed` while the world runs at `timeScale` (see the engine's
+ *  `GameState.timeScale`): a slow-motion world blurs proportionally less. */
+export const slowedBlur = (speed: number, timeScale: number): number =>
+    blurStrength(speed) * Math.max(0, Math.min(1, timeScale));
+
+/** A streak's length at `speed` and `timeScale`: the blur's stretch on top of `streakLength`, all
+ *  shortened in proportion to the time scale, so the streaks slow with the world. */
+export const slowedStreak = (speed: number, timeScale: number): number =>
+    Math.min(0.95, streakLength(speed) * (1 + BLUR_STREAK_GAIN * slowedBlur(speed, timeScale))) *
+    Math.max(0, Math.min(1, timeScale));
+
 /**
  * Draws the first `activeSpeedLines(speed)` lines, plus `BLUR_EXTRA_LINES` more and streaks up
  * to `BLUR_STREAK_GAIN` longer as the speed blur (`blurStrength`) rises, as streaks rushing out
  * of the vanishing point, fading in from it, with the double-stroke glow `drawGrid` uses (no
- * shadowBlur).
+ * shadowBlur). Under a `timeScale` below 1 the blur and the streaks shrink with it (see
+ * `slowedBlur`, `slowedStreak`).
  */
 export function drawSpeedLines(
     ctx: CanvasRenderingContext2D,
     g: SceneGeometry,
     pool: SpeedLinePool,
     speed: number,
-    colours: SpeedLineColours = SUNSET_SPEED_LINES
+    colours: SpeedLineColours = SUNSET_SPEED_LINES,
+    timeScale = 1
 ): void {
-    const blur = blurStrength(speed);
+    const blur = slowedBlur(speed, timeScale);
     const count = Math.min(
         pool.length,
         activeSpeedLines(speed) + Math.round(BLUR_EXTRA_LINES * blur)
     );
-    const streak = Math.min(0.95, streakLength(speed) * (1 + BLUR_STREAK_GAIN * blur));
+    const streak = slowedStreak(speed, timeScale);
     const reach = Math.hypot(
         Math.max(g.vanishX, g.w - g.vanishX),
         Math.max(g.horizonY, g.h - g.horizonY)

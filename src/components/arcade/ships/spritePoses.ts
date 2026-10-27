@@ -111,9 +111,6 @@ export const FRAME_GRID_POSES: readonly ShipPose[] = PITCH_ANGLES_DEG.flatMap((_
     BANK_ANGLES_DEG.flatMap((_, bank) => sweepPoses(pitch, bank))
 );
 
-/** The chase pose with the nose straight up the screen, wings level. */
-export const LEVEL_CHASE_POSE: ShipPose = chasePose(0, 0, 0);
-
 /** Rendered player frames: `[pitch row][bank]` holds one canvas per heading, or `null` while that
  *  sweep is still rendering. */
 export type FrameSweeps<T> = (T[] | null)[][];

@@ -22,6 +22,7 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useShipsData } from '../../hooks/useShipsData';
 import type { Ship } from '../../types/ship';
+import { SHIP_TYPES } from '../../constants/shipTypes';
 import { getSynthwaveMusic, type MusicClock } from '../../utils/music/synthwaveMusic';
 import { beatPulse, TRACK_BEATS } from '../../utils/music/beats';
 import { useSynthwaveMusic } from '../../utils/music/useSynthwaveMusic';
@@ -57,15 +58,17 @@ import {
     bundleGateShips,
     canDuel,
     canTeam,
-    gateLeads,
     gearedCandidate,
     pickBundle,
     rowPicks,
+    shipsOfPicks,
     TEAM_PICK_SHIPS,
     type DuelCandidateTest,
     type RowPicks,
 } from './duel/pickOpponents';
 import { createSpeedLines } from './speedLines';
+import { previewBannerContent } from './previewHud';
+import { PreviewBanner, type PreviewBannerContent } from './PreviewBanner';
 import { zoneBanner, zoneIndexAt, zoneOf } from './zones';
 import { createShipTrail } from './shipTrails';
 import { createScrapeFx } from './scrapeFx';
@@ -81,12 +84,10 @@ import { loadShipModelView, shipModelsEnabled } from './ships/arcadeFlags';
 import type { ShipVisual } from './ships/shipVisuals';
 import {
     anySignal,
-    cachedGateSprite,
     cachedPlayerFrames,
     cachedViewerSprite,
     endArcadeSession,
     Facing,
-    requestGateSprite,
     requestPlayerFrames,
     requestViewerSprite,
     setArcadePins,
@@ -442,6 +443,11 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
     /** The zone the run is in, and the one whose banner shows (none in zone 1). */
     const zoneRef = useRef(0);
     const [bannerZone, setBannerZone] = useState<number | null>(null);
+    /** The checkpoint whose slow-motion preview runs, and the banner it shows (kept after the
+     *  preview ends so the banner can fade out). */
+    const previewIdRef = useRef<number | null>(null);
+    const [previewBanner, setPreviewBanner] = useState<PreviewBannerContent | null>(null);
+    const [previewShown, setPreviewShown] = useState(false);
     const [countdown, setCountdown] = useState(0);
     const [finished, setFinished] = useState<FinishedRun | null>(null);
     const result = finished?.result ?? null;
@@ -502,16 +508,17 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         []
     );
 
-    /** Pins the models and renders of the flown ship and of every opponent still ahead. */
+    /** Pins the models of the flown ship and of every ship the duel screen may show for the rows
+     *  still ahead and the pre-picked next row. */
     const refreshPins = useCallback(() => {
         const ahead = gameRef.current.checkpoints
             .filter((c) => !c.resolved)
             .flatMap((c) => {
                 const picks = opponentsRef.current.get(c.id);
-                return picks ? gateLeads(picks) : [];
+                return picks ? shipsOfPicks(picks) : [];
             });
         const next = nextOpponentsRef.current;
-        const opponents = [...ahead, ...(next ? bundleGateShips(next) : [])];
+        const opponents = [...ahead, ...(next ?? [])];
         const flown = flownRef.current;
         setArcadePins(flown && keyOf(flown), opponents.map(keyOf));
     }, [keyOf]);
@@ -543,18 +550,27 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         [keyOf, warmPlayerSprites]
     );
 
-    /** Starts loading a ship's gate art under `signal`: its portrait and, with models on, its
-     *  sprite and duel render. */
+    /** Starts loading a ship's portrait for its gate and, with models on and `render` set, its
+     *  duel render, under `signal`. */
     const warmGateArt = useCallback(
-        (ship: Ship, signal: AbortSignal = sessionSignal()) => {
+        (ship: Ship, render: boolean, signal: AbortSignal = sessionSignal()) => {
             const { portraitUrl } = visualOfRef.current(ship);
             if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
             const key = keyOf(ship);
-            if (!key) return;
-            void requestGateSprite(key, signal).catch(() => {});
+            if (!key || !render) return;
             void requestViewerSprite(key, 'left', signal).catch(() => {});
         },
         [keyOf]
+    );
+
+    /** Warms every portrait of a pre-picked bundle, and the duel renders of the ships its gates
+     *  may lead with. */
+    const warmBundle = useCallback(
+        (bundle: readonly Ship[], signal: AbortSignal = sessionSignal()) => {
+            const leads = new Set(bundleGateShips(bundle));
+            for (const ship of bundle) warmGateArt(ship, leads.has(ship), signal);
+        },
+        [warmGateArt]
     );
 
     /** Picks the next checkpoint's opponents for `flown` now and starts rendering their art
@@ -566,10 +582,10 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                 : null;
             nextOpponentsRef.current = pick;
             nextOpponentsForRef.current = flown?.id ?? null;
-            if (pick) bundleGateShips(pick).forEach((ship) => warmGateArt(ship, signal));
+            if (pick) warmBundle(pick, signal);
             refreshPins();
         },
-        [warmGateArt, refreshPins]
+        [warmBundle, refreshPins]
     );
 
     /** On the select screen, a ship that stays focused has its own sprites rendered ahead and,
@@ -608,11 +624,9 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const flown = flownRef.current;
         if (flown) requestFlownFrames(flown);
         if (flown && nextOpponentsForRef.current !== flown.id) prepareNextOpponents(flown);
-        else if (nextOpponentsRef.current) {
-            bundleGateShips(nextOpponentsRef.current).forEach((ship) => warmGateArt(ship));
-        }
+        else if (nextOpponentsRef.current) warmBundle(nextOpponentsRef.current);
         refreshPins();
-    }, [visualOf, requestFlownFrames, prepareNextOpponents, warmGateArt, refreshPins]);
+    }, [visualOf, requestFlownFrames, prepareNextOpponents, warmBundle, refreshPins]);
 
     // A run started from the background can begin before the fleet's gear has loaded. The intro
     // never steps the game, so until it ends a fresh game replaces one decided without duels or
@@ -676,6 +690,8 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         refreshPins();
         inputsRef.current = [];
         setFinished(null);
+        previewIdRef.current = null;
+        setPreviewShown(false);
         youDiedRef.current = false;
         setYouDied(false);
         streakRef.current = NO_STREAK;
@@ -897,26 +913,19 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             return current.every((s) => s !== undefined) ? current : null;
         };
 
-        /** A gate's art: the portrait, and the sprite as soon as it has rendered. */
-        const toGateArt = (ship: Ship): GateArt => {
-            const { portraitUrl } = visualOfRef.current(ship);
-            if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
-            const key = keyOf(ship);
-            const art: GateArt = {
-                name: ship.name,
-                level: ship.level,
-                portraitUrl,
-                sprite: key ? cachedGateSprite(key) : null,
-            };
-            if (key && !art.sprite) {
-                requestGateSprite(key, session)
-                    .then((sprite) => {
-                        if (!session.aborted) art.sprite = sprite;
-                    })
-                    .catch(() => {});
-            }
-            return art;
-        };
+        /** A gate's art: the portraits of the ships behind it, loading if not yet cached. */
+        const toGateArt = (ships: readonly Ship[]): GateArt => ({
+            ships: ships.map((ship) => {
+                const { portraitUrl } = visualOfRef.current(ship);
+                if (portraitUrl) void loadPortrait(portraitUrl).catch(() => {});
+                return {
+                    name: ship.name,
+                    level: ship.level,
+                    role: SHIP_TYPES[ship.type]?.name ?? '',
+                    portraitUrl,
+                };
+            }),
+        });
 
         /** Moves the steps' events into the HUD, once per frame. */
         const drainEvents = (game: GameState) => {
@@ -985,9 +994,27 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                         continue;
                     }
                     opponentsRef.current.set(c.id, picks);
-                    const [left, right] = gateLeads(picks);
+                    const [left, right] =
+                        picks.kind === 'team' ? picks.gates : picks.gates.map((ship) => [ship]);
                     view.gateArt.set(c.id, [toGateArt(left), toGateArt(right)]);
                     refreshPins();
+                }
+
+                const previewId =
+                    game.status === 'running' ? (game.preview?.checkpointId ?? null) : null;
+                if (previewId !== previewIdRef.current) {
+                    previewIdRef.current = previewId;
+                    const row = game.checkpoints.find((c) => c.id === previewId);
+                    if (row) {
+                        setPreviewBanner(
+                            previewBannerContent(
+                                row,
+                                opponentsRef.current.get(row.id),
+                                (ship) => visualOfRef.current(ship).portraitUrl
+                            )
+                        );
+                    }
+                    setPreviewShown(!!row);
                 }
 
                 if (game.status === 'over') finishRun();
@@ -1229,6 +1256,9 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                     renderShip={shipModelsEnabled() ? renderShipModel : undefined}
                     onFocusShip={onFocusShip}
                 />
+            )}
+            {(phase === 'running' || phase === 'paused') && (
+                <PreviewBanner content={previewBanner} shown={previewShown} />
             )}
             {phase === 'paused' && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

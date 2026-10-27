@@ -132,7 +132,7 @@ const Ship: React.FC<ShipProps> = ({ side, state, floats, charged, mirrored, com
     const shield = state.shieldPct;
     const image = (
         <div
-            className={`relative flex items-center justify-center ${compact ? 'h-14 w-16 shrink-0' : 'h-28'}`}
+            className={`relative flex items-center justify-center ${compact ? 'h-16 w-24 shrink-0' : 'h-28'}`}
         >
             <ShipImage side={side} mirrored={mirrored} />
             <div className="absolute inset-0 pointer-events-none" aria-hidden="true">

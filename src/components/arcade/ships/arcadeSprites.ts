@@ -25,11 +25,9 @@ export type PlayerFrames = FrameSweeps<HTMLCanvasElement>;
 /** Player frame grids kept at once (about 12 MB each); the flown ship's and those still filling
  *  are never evicted. */
 const PLAYER_GRIDS_KEPT = 3;
-/** Gate sprites kept at once (128 px squares). */
-const GATE_SPRITES_KEPT = 16;
-/** Duel renders kept at once: the flown ship's own (never evicted), the pair at the open
- *  checkpoint and the pre-picked next pair, with room to spare. */
-const VIEWER_SPRITES_KEPT = 6;
+/** Duel renders kept at once: the flown ship's own (never evicted), the ships of the open row
+ *  and of the pre-picked next one; a `team` row shows up to seven others. */
+const VIEWER_SPRITES_KEPT = 16;
 
 /** A signal that aborts as soon as any of `signals` does. */
 export function anySignal(...signals: AbortSignal[]): AbortSignal {
@@ -143,19 +141,6 @@ export function createRequestCache<T>(
         },
     };
 }
-
-const gateSprites = createRequestCache<HTMLCanvasElement>(
-    GATE_SPRITES_KEPT,
-    () => false,
-    (key, signal) => spritesModule().then((m) => m.renderGateSprite(key, { signal }))
-);
-
-/** A ship's gate sprite: its level chase-camera frame. */
-export const requestGateSprite = (key: string, signal: AbortSignal) => {
-    reopenFor(signal);
-    return gateSprites.get(key, signal);
-};
-export const cachedGateSprite = (key: string) => gateSprites.cached(key);
 
 const viewerId = (key: string, facing: Facing) => `${key}:${facing}`;
 const viewerSprites = createRequestCache<string>(
