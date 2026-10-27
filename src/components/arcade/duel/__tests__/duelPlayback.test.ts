@@ -147,12 +147,14 @@ describe('buildDuelBeats (hand-built)', () => {
             )
         );
         expect(beats.map((b) => b.actor)).toEqual(['player', 'enemy']);
-        expect(beats[0].hits).toEqual([{ side: 'enemy', kind: 'miss', amount: 0, crit: false }]);
-        expect(beats[0].enemy.hpPct).toBe(100);
-        expect(beats[1].hits).toEqual([
-            { side: 'player', kind: 'damage', amount: 1234.6, crit: true },
+        expect(beats[0].hits).toEqual([
+            { side: 'enemy', ship: 0, kind: 'miss', amount: 0, crit: false },
         ]);
-        expect(beats[1].player.hpPct).toBe(60);
+        expect(beats[0].enemy[0].hpPct).toBe(100);
+        expect(beats[1].hits).toEqual([
+            { side: 'player', ship: 0, kind: 'damage', amount: 1234.6, crit: true },
+        ]);
+        expect(beats[1].player[0].hpPct).toBe(60);
     });
 
     it('a charged cast is flagged from any of its entries, and the charge then reads empty', () => {
@@ -193,12 +195,12 @@ describe('buildDuelBeats (hand-built)', () => {
             )
         );
         expect(beats[0].charged).toBeNull();
-        expect(beats[0].player.charge).toEqual({ value: 1, max: 2 });
-        expect(beats[0].enemy.charge).toBeNull();
+        expect(beats[0].player[0].charge).toEqual({ value: 1, max: 2 });
+        expect(beats[0].enemy[0].charge).toBeNull();
         expect(beats[1].charged).toEqual({});
-        expect(beats[1].player.charge).toEqual({ value: 0, max: 2 });
+        expect(beats[1].player[0].charge).toEqual({ value: 0, max: 2 });
         expect(beats[2].charged).toEqual({ skillName: 'Overload' });
-        expect(beats[2].enemy.charge).toEqual({ value: 0, max: 3 });
+        expect(beats[2].enemy[0].charge).toEqual({ value: 0, max: 3 });
     });
 
     it('a shield appears with its grant, shrinks by what a hit did not put through, then breaks', () => {
@@ -236,14 +238,14 @@ describe('buildDuelBeats (hand-built)', () => {
                 [{ player: { hpPct: 90 }, enemy: {} }]
             )
         );
-        expect(beats[0].player.shieldPct).toBe(50);
+        expect(beats[0].player[0].shieldPct).toBe(50);
         expect(beats[0].hits).toEqual([
-            { side: 'player', kind: 'shield', amount: 500, crit: false },
+            { side: 'player', ship: 0, kind: 'shield', amount: 500, crit: false },
         ]);
-        expect(beats[1].player.shieldPct).toBeCloseTo(30);
-        expect(beats[1].player.hpPct).toBe(90);
-        expect(beats[2].player.shieldPct).toBe(0);
-        expect(beats[1].player.shieldPct).toBeGreaterThan(0);
+        expect(beats[1].player[0].shieldPct).toBeCloseTo(30);
+        expect(beats[1].player[0].hpPct).toBe(90);
+        expect(beats[2].player[0].shieldPct).toBe(0);
+        expect(beats[1].player[0].shieldPct).toBeGreaterThan(0);
     });
 
     it("the actor's turn-start snapshot corrects its own HP and shield on the previous beat", () => {
@@ -258,7 +260,7 @@ describe('buildDuelBeats (hand-built)', () => {
                 [{ player: { hpPct: 70, shieldPct: 25 }, enemy: {} }]
             )
         );
-        expect(beats[0].player).toMatchObject({ hpPct: 70, shieldPct: 25 });
+        expect(beats[0].player[0]).toMatchObject({ hpPct: 70, shieldPct: 25 });
     });
 
     it('start-of-round effects already in the turn-start snapshot are not counted again', () => {
@@ -278,7 +280,7 @@ describe('buildDuelBeats (hand-built)', () => {
                 [{ player: { hpPct: 60, shieldPct: 10 }, enemy: {} }]
             )
         );
-        expect(beats[0].player).toMatchObject({ hpPct: 60, shieldPct: 10 });
+        expect(beats[0].player[0]).toMatchObject({ hpPct: 60, shieldPct: 10 });
         expect(beats[0].hits.map((h) => h.kind)).toEqual(['heal', 'shield']);
     });
 
@@ -294,8 +296,10 @@ describe('buildDuelBeats (hand-built)', () => {
                 [{ player: { hpPct: 60 }, enemy: {} }]
             )
         );
-        expect(beats[0].hits).toEqual([{ side: 'player', kind: 'heal', amount: 100, crit: false }]);
-        expect(beats[0].player.hpPct).toBe(60);
+        expect(beats[0].hits).toEqual([
+            { side: 'player', ship: 0, kind: 'heal', amount: 100, crit: false },
+        ]);
+        expect(beats[0].player[0].hpPct).toBe(60);
     });
 
     it('a ship destroyed mid-round reads 0 with no statuses and takes no later turn that round', () => {
@@ -316,8 +320,8 @@ describe('buildDuelBeats (hand-built)', () => {
             )
         );
         expect(beats).toHaveLength(1);
-        expect(beats[0].enemy).toMatchObject({ hpPct: 0, alive: false, buffs: [], debuffs: [] });
-        expect(beats[0].player.hpPct).toBe(100);
+        expect(beats[0].enemy[0]).toMatchObject({ hpPct: 0, alive: false, buffs: [], debuffs: [] });
+        expect(beats[0].player[0].hpPct).toBe(100);
     });
 
     it('buffs and debuffs change only at round end, compacted, and every value snaps there', () => {
@@ -345,15 +349,15 @@ describe('buildDuelBeats (hand-built)', () => {
                 ]
             )
         );
-        expect(beats[0].enemy.debuffs).toEqual([]);
-        expect(beats[1].enemy.debuffs).toEqual(['Provoke']);
-        expect(beats[1].player).toMatchObject({
+        expect(beats[0].enemy[0].debuffs).toEqual([]);
+        expect(beats[1].enemy[0].debuffs).toEqual(['Provoke']);
+        expect(beats[1].player[0]).toMatchObject({
             hpPct: 98.5,
             shieldPct: 12,
             buffs: ['Attack Up III'],
         });
-        expect(beats[2].player.buffs).toEqual(['Attack Up III']);
-        expect(beats[3].player.buffs).toEqual([]);
+        expect(beats[2].player[0].buffs).toEqual(['Attack Up III']);
+        expect(beats[3].player[0].buffs).toEqual([]);
     });
 
     it("start- and end-of-round effects join the round's first and last beats", () => {
@@ -366,9 +370,11 @@ describe('buildDuelBeats (hand-built)', () => {
             )
         );
         expect(beats[0].hits).toEqual([
-            { side: 'player', kind: 'damage', amount: 50, crit: false },
+            { side: 'player', ship: 0, kind: 'damage', amount: 50, crit: false },
         ]);
-        expect(beats[1].hits).toEqual([{ side: 'enemy', kind: 'damage', amount: 50, crit: false }]);
+        expect(beats[1].hits).toEqual([
+            { side: 'enemy', ship: 0, kind: 'damage', amount: 50, crit: false },
+        ]);
     });
 
     it('a round with effects but no turns is one beat with no actor', () => {
@@ -469,13 +475,20 @@ const fight = (player: Ship, enemy: Ship, seed: number) =>
 const loggedTurns = (r: BattleResult) =>
     r.combatLog.filter((round) => round.round <= r.outcome.lastRound).flatMap((x) => x.turns);
 
-/** Each round's last beat carries that round's end snapshot exactly. */
+/** The state `beat` shows for roster ship `actorId`: its side's ships are in roster order. */
+const shownFor = (r: BattleResult, beat: DuelBeat, actorId: string) => {
+    const entry = r.roster.find((x) => x.actorId === actorId)!;
+    const index = r.roster.filter((x) => x.side === entry.side).indexOf(entry);
+    return beat[entry.side][index];
+};
+
+/** Each round's last beat carries that round's end snapshot exactly, for every ship. */
 function expectRoundEndsSnap(r: BattleResult, beats: DuelBeat[]) {
     for (const round of r.rounds) {
         const last = beats.filter((b) => b.round === round.round).at(-1);
         expect(last, `round ${round.round} has a beat`).toBeDefined();
         for (const s of round.ships) {
-            const shown = last![s.side];
+            const shown = shownFor(r, last!, s.actorId);
             expect(shown.hpPct).toBeCloseTo(s.hpPct, 6);
             expect(shown.shieldPct).toBeCloseTo(s.shieldPct, 6);
             expect(shown.alive).toBe(s.alive);
@@ -487,14 +500,13 @@ function expectRoundEndsSnap(r: BattleResult, beats: DuelBeat[]) {
 
 /** Where a turn-start snapshot exists, the beat before it (same round) shows that ship exactly. */
 function expectTurnStartsMatch(r: BattleResult, beats: DuelBeat[]) {
-    const sideOf = new Map(r.roster.map((x) => [x.actorId, x.side]));
     let i = 0;
     let checked = 0;
     for (const round of r.combatLog.filter((x) => x.round <= r.outcome.lastRound)) {
         round.turns.forEach((t, k) => {
             const snapshot = t.statsSnapshot;
             if (k > 0 && snapshot) {
-                const shown = beats[i - 1][sideOf.get(t.actorId)!];
+                const shown = shownFor(r, beats[i - 1], t.actorId);
                 expect(shown.hpPct).toBeCloseTo((100 * snapshot.currentHp) / snapshot.maxHp, 6);
                 expect(shown.shieldPct).toBeCloseTo(
                     Math.min(100, (100 * snapshot.shieldPool) / snapshot.maxHp),
@@ -534,8 +546,123 @@ describe('buildDuelBeats (generic fighters, no corpus)', () => {
             const other = b.actor === 'player' ? 'enemy' : 'player';
             expect(b.hits.some((h) => h.side === other && h.kind !== 'heal')).toBe(true);
         }
-        expect(beats.at(-1)!.enemy).toMatchObject({ hpPct: 0, alive: false });
+        expect(beats.at(-1)!.enemy[0]).toMatchObject({ hpPct: 0, alive: false });
         expectRoundEndsSnap(r, beats);
+    });
+});
+
+describe('buildDuelBeats (three ships a side)', () => {
+    const roster = ['p0', 'p1', 'p2', 'e0', 'e1', 'e2'].map((actorId, i) => ({
+        actorId,
+        side: i < 3 ? 'player' : 'enemy',
+        name: actorId,
+        position: (['T2', 'M2', 'B2'] as const)[i % 3],
+    }));
+    const snapshotShip = (actorId: string, hpPct: number, alive = true) => ({
+        actorId,
+        side: actorId.startsWith('p') ? 'player' : 'enemy',
+        hpPct,
+        shieldPct: 0,
+        alive,
+        activeBuffs: [],
+        activeDebuffs: [],
+    });
+
+    it('gives every ship its own state and lands each number on the ship it struck', () => {
+        const r = {
+            outcome: { winner: 'player', lastRound: 1 },
+            roster,
+            combatLog: [
+                logRound(1, [
+                    turn('p1', [
+                        entry('attack', 'p1', [
+                            { targetId: 'e2', amount: 300, resultingHpPct: 40 },
+                        ]),
+                    ]),
+                    turn('e0', [entry('attack', 'e0', [{ targetId: 'p2', didHit: false }])]),
+                    turn('p0', [
+                        entry('attack', 'p0', [{ targetId: 'e1', amount: 900, resultingHpPct: 0 }]),
+                        entry('death', 'e1'),
+                    ]),
+                ]),
+            ],
+            rounds: [
+                {
+                    round: 1,
+                    turnOrder: [],
+                    ships: [
+                        snapshotShip('p0', 100),
+                        snapshotShip('p1', 100),
+                        snapshotShip('p2', 100),
+                        snapshotShip('e0', 100),
+                        snapshotShip('e1', 0, false),
+                        snapshotShip('e2', 40),
+                    ],
+                },
+            ],
+        } as unknown as BattleResult;
+        const beats = buildDuelBeats(r);
+        expect(beats.map((b) => [b.actor, b.actorShip])).toEqual([
+            ['player', 1],
+            ['enemy', 0],
+            ['player', 0],
+        ]);
+        expect(beats[0].hits).toEqual([
+            { side: 'enemy', ship: 2, kind: 'damage', amount: 300, crit: false },
+        ]);
+        expect(beats[1].hits).toEqual([
+            { side: 'player', ship: 2, kind: 'miss', amount: 0, crit: false },
+        ]);
+        expect(beats[0].enemy.map((s) => s.hpPct)).toEqual([100, 100, 40]);
+        const last = beats.at(-1)!;
+        expect(last.player).toHaveLength(3);
+        expect(last.enemy.map((s) => s.alive)).toEqual([true, false, true]);
+        expect(last.enemy.map((s) => s.hpPct)).toEqual([100, 0, 40]);
+    });
+
+    it('a real 3v3 shows all six ships, each matching its round-end snapshot', () => {
+        const fighter = (id: string, attack: number, hp: number): Ship =>
+            ({
+                id,
+                name: id,
+                rarity: 'legendary',
+                faction: 'ATLAS_SYNDICATE',
+                type: 'ATTACKER',
+                baseStats: { hp, attack, defence: 1000, crit: 50, critDamage: 50, speed: 100 },
+                equipment: {},
+                implants: {},
+                refits: [],
+                activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+                activeTarget: 'front',
+                activePattern: 'Pattern-Base',
+            }) as unknown as Ship;
+        const board = (prefix: string, attack: number) => ({
+            T2: { ship: fighter(`${prefix}T`, attack, 15000) },
+            M2: { ship: fighter(`${prefix}M`, attack, 15000) },
+            B2: { ship: fighter(`${prefix}B`, attack, 15000) },
+        });
+        const r = runSeededBattle(
+            {
+                playerTeam: buildTeam(board('p', 4000), deps),
+                enemyTeam: buildTeam(board('e', 3000), deps),
+                rounds: 5,
+            },
+            11
+        );
+        expect(r.roster.filter((x) => x.side === 'player').map((x) => x.position)).toEqual([
+            'T2',
+            'M2',
+            'B2',
+        ]);
+        const beats = buildDuelBeats(r);
+        expect(beats.length).toBeGreaterThan(0);
+        for (const b of beats) {
+            expect(b.player).toHaveLength(3);
+            expect(b.enemy).toHaveLength(3);
+        }
+        expectRoundEndsSnap(r, beats);
+        const struck = new Set(beats.flatMap((b) => b.hits.map((h) => `${h.side}${h.ship}`)));
+        expect(struck.size).toBeGreaterThan(1);
     });
 });
 
@@ -547,12 +674,12 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())('buildDuelBeats (corpus
         expectRoundEndsSnap(r, beats);
         expectTurnStartsMatch(r, beats);
         // FrontLine starts with a shield and regrants it each turn.
-        expect(beats.some((b) => b.player.shieldPct > 0)).toBe(true);
+        expect(beats.some((b) => b.player[0].shieldPct > 0)).toBe(true);
         expect(
             beats.some((b) => b.hits.some((h) => h.side === 'player' && h.kind === 'shield'))
         ).toBe(true);
         // APEX's debuffs show on FrontLine, and its charged skill is flagged on its own turn.
-        expect(beats.some((b) => b.player.debuffs.includes('Speed Down II'))).toBe(true);
+        expect(beats.some((b) => b.player[0].debuffs.includes('Speed Down II'))).toBe(true);
         const charged = beats.filter((b) => b.charged);
         expect(charged.length).toBeGreaterThan(0);
         expect(charged.some((b) => b.actor === 'enemy')).toBe(true);
@@ -564,7 +691,7 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())('buildDuelBeats (corpus
         const beats = buildDuelBeats(r);
         expectRoundEndsSnap(r, beats);
         expectTurnStartsMatch(r, beats);
-        expect(beats.some((b) => b.player.buffs.includes('Hacking Up III'))).toBe(true);
+        expect(beats.some((b) => b.player[0].buffs.includes('Hacking Up III'))).toBe(true);
         expect(beats.some((b) => b.hits.some((h) => h.kind === 'damage' && h.crit))).toBe(true);
     });
 
@@ -576,6 +703,6 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())('buildDuelBeats (corpus
         expect(last.round).toBe(r.outcome.lastRound);
         expect(last.actor).toBe('player');
         expect(last.charged).not.toBeNull();
-        expect(last.enemy).toMatchObject({ hpPct: 0, alive: false, buffs: [], debuffs: [] });
+        expect(last.enemy[0]).toMatchObject({ hpPct: 0, alive: false, buffs: [], debuffs: [] });
     });
 });

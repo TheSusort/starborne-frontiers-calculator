@@ -1,4 +1,4 @@
-import type { DuelEffect, DuelStakes } from '../../../utils/arcade/types';
+import type { ChallengeKind, DuelEffect, DuelStakes } from '../../../utils/arcade/types';
 
 export function stakesBanner(stakes: DuelStakes): string {
     switch (stakes) {
@@ -10,6 +10,26 @@ export function stakesBanner(stakes: DuelStakes): string {
             return 'POWER-UP';
     }
 }
+
+/** A challenge's short name: its format for the fights, its task for the races. */
+export function challengeLabel(challenge: ChallengeKind): string {
+    switch (challenge) {
+        case 'duel':
+            return '1v1';
+        case 'team':
+            return '3v3';
+        case 'dps':
+            return 'DPS';
+        case 'tank':
+            return 'TANK';
+        case 'heal':
+            return 'HEAL';
+    }
+}
+
+/** "TANK · WIN OR DIE": the challenge and what rides on it. */
+export const challengeBanner = (challenge: ChallengeKind, stakes: DuelStakes): string =>
+    `${challengeLabel(challenge)} · ${stakesBanner(stakes)}`;
 
 export function effectText(effect: DuelEffect): string {
     switch (effect.kind) {

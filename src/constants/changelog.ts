@@ -19,6 +19,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: the grid and sun now pulse in time with the music.',
     'Arcade: speed lines stretch and screen edges fringe near top speed.',
     'Arcade: the screen now shakes when your shield breaks.',
+    'Arcade: checkpoints now include DPS, TANK and HEAL races against the gate ship.',
+    'Arcade: new 3v3 checkpoint challenge with two random allies from your fleet.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

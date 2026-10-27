@@ -95,11 +95,11 @@ describe('runDuel', () => {
         const r = runDuel(strong, weak, deps, 123);
         expect(r.outcome).toBe('win');
         expect(r.beats.length).toBeGreaterThan(1);
-        expect(r.beats.at(-1)!.enemy.hpPct).toBe(0);
-        expect(r.beats.at(-1)!.player.hpPct).toBeGreaterThan(0);
+        expect(r.beats.at(-1)!.enemy[0].hpPct).toBe(0);
+        expect(r.beats.at(-1)!.player[0].hpPct).toBeGreaterThan(0);
         const back = runDuel(weak, strong, deps, 123);
         expect(back.outcome).toBe('lose');
-        expect(back.beats.at(-1)!.player.hpPct).toBe(0);
+        expect(back.beats.at(-1)!.player[0].hpPct).toBe(0);
     });
 
     it('a fight nobody can win reaches the cap and the tie goes to the player', () => {

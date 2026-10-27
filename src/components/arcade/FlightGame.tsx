@@ -69,8 +69,7 @@ import { createSpeedLines } from './speedLines';
 import { zoneBanner, zoneIndexAt, zoneOf } from './zones';
 import { createShipTrail } from './shipTrails';
 import { createScrapeFx } from './scrapeFx';
-import type { DuelResult } from './duel/runDuel';
-import { isRace, skippedChallenge, type ChallengeResult } from './duel/challengeResult';
+import { skippedChallenge, type ChallengeResult } from './duel/challengeResult';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
 import { arcadeFleet } from './ships/arcadeFleet';
@@ -174,16 +173,14 @@ interface DuelState {
     /** The row's ships; the opponent is `picks.gates[slot]`. */
     picks: RowPicks;
     slot: 0 | 1;
-    player: DuelSide;
-    opponent: DuelSide;
+    /** The flown ship, then its allies on a `team` row. */
+    players: DuelSide[];
+    /** `picks.gates[slot]`: one ship, or a trio. */
+    opponents: DuelSide[];
     stakes: DuelStakes;
     result: ChallengeResult | null;
     effect: DuelEffect | null;
 }
-
-/** What the duel screen plays back: a fight's turns, or for a race only its outcome. */
-const toDuelResult = (result: ChallengeResult): DuelResult =>
-    isRace(result) ? { outcome: result.outcome, beats: [] } : result;
 
 /** The game options for a run flown with `flownId`: duel rows when the fleet can field two
  *  opponents, and `team` rows when it can field a whole team row. */
@@ -785,33 +782,46 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const id = ++duelSeqRef.current;
         const { challenge, slot } = pending;
         const seed = challengeSeed(game.seed, pending.checkpointId);
-        const player = toSide(flown, 'right');
-        const rival = toSide(gateLeads(picks)[slot], 'left');
+        const players = [flown, ...(picks.kind === 'team' ? picks.allies : [])].map((ship) =>
+            toSide(ship, 'right')
+        );
+        const rivals = (picks.kind === 'team' ? picks.gates[slot] : [picks.gates[slot]]).map(
+            (ship) => toSide(ship, 'left')
+        );
         setDuel({
             id,
             challenge,
             picks,
             slot,
-            player: player.side,
-            opponent: rival.side,
+            players: players.map((p) => p.side),
+            opponents: rivals.map((r) => r.side),
             stakes: pending.stakes,
             result: null,
             effect: null,
         });
         // A side showing the portrait switches to its render if it arrives while this duel is
         // still open; the duel never waits for it.
-        const swapIn = (which: 'player' | 'opponent', render: Promise<string> | null) =>
+        const swapIn = (
+            which: 'players' | 'opponents',
+            at: number,
+            render: Promise<string> | null
+        ) =>
             render
                 ?.then((imageUrl) =>
                     setDuel((d) =>
                         d && d.id === id && current()
-                            ? { ...d, [which]: { ...d[which], imageUrl, facesOpponent: true } }
+                            ? {
+                                  ...d,
+                                  [which]: d[which].map((side, i) =>
+                                      i === at ? { ...side, imageUrl, facesOpponent: true } : side
+                                  ),
+                              }
                             : d
                     )
                 )
                 .catch(() => {});
-        void swapIn('player', player.pending);
-        void swapIn('opponent', rival.pending);
+        players.forEach((p, i) => void swapIn('players', i, p.pending));
+        rivals.forEach((r, i) => void swapIn('opponents', i, r.pending));
         prepareNextOpponents();
         // The animation frame commits the "Simulating…" state; the timeout then runs the
         // synchronous simulation after that frame has been painted.
@@ -1235,11 +1245,13 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             )}
             {phase === 'duel' && duel && (
                 <DuelSummary
-                    player={duel.player}
-                    opponent={duel.opponent}
+                    challenge={duel.challenge}
+                    players={duel.players}
+                    opponents={duel.opponents}
                     stakes={duel.stakes}
-                    result={duel.result && toDuelResult(duel.result)}
+                    result={duel.result}
                     effect={duel.effect}
+                    reducedMotion={reducedMotion}
                     onDone={onDuelDone}
                 />
             )}

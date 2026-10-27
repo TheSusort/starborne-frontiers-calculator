@@ -1,11 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { afterPlayback, DUEL_RESULT_HOLD_MS, effectText, stakesBanner } from '../stakesText';
+import {
+    afterPlayback,
+    challengeBanner,
+    challengeLabel,
+    DUEL_RESULT_HOLD_MS,
+    effectText,
+    stakesBanner,
+} from '../stakesText';
 
 describe('stakesText', () => {
     it('labels every stakes kind', () => {
         expect(stakesBanner('win-or-die')).toBe('WIN OR DIE');
         expect(stakesBanner('bonus-or-penalty')).toBe('CREDITS ON THE LINE');
         expect(stakesBanner('power-up')).toBe('POWER-UP');
+    });
+
+    it('names every challenge and joins it with the stakes', () => {
+        expect(challengeLabel('duel')).toBe('1v1');
+        expect(challengeLabel('team')).toBe('3v3');
+        expect(challengeLabel('dps')).toBe('DPS');
+        expect(challengeLabel('heal')).toBe('HEAL');
+        expect(challengeBanner('tank', 'win-or-die')).toBe('TANK · WIN OR DIE');
+        expect(challengeBanner('team', 'power-up')).toBe('3v3 · POWER-UP');
     });
 
     it('describes every effect', () => {
