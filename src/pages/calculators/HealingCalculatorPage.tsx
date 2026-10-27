@@ -34,11 +34,11 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useEnemyTeamRoster } from '../../hooks/useEnemyTeamRoster';
+import { detectShipCharged, shipFinalStats } from '../../utils/calculators/rosterHelpers';
 import {
-    defaultEnemyStats,
-    detectShipCharged,
-    shipFinalStats,
-} from '../../utils/calculators/rosterHelpers';
+    defaultEnemyAttacker,
+    healerStatsFromShip,
+} from '../../utils/calculators/calculatorShipInputs';
 import { Input } from '../../components/ui/Input';
 import { HealerConfigCard } from '../../components/calculator/HealerConfigCard';
 import { HealTargetPanel, HealTargetState } from '../../components/calculator/HealTargetPanel';
@@ -83,19 +83,6 @@ const HealingCalculatorPage: React.FC = () => {
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const shipInitialized = useRef(false);
-
-    // Shared healer-stat extraction from resolved final stats.
-    const healerStatsFromShip = (final: ReturnType<typeof shipFinalStats>) => ({
-        hp: Math.round(final.hp ?? 0),
-        attack: Math.round(final.attack ?? 0),
-        defence: Math.round(final.defence ?? 0),
-        crit: Math.round(final.crit ?? 0),
-        critDamage: Math.round(final.critDamage ?? 0),
-        healModifier: Math.round(final.healModifier ?? 0),
-        speed: Math.round(final.speed ?? 100),
-        hacking: Math.round(final.hacking ?? 200),
-        security: Math.round(final.security ?? 0),
-    });
 
     const defaultConfig = (id: string, name: string): HealerShipConfig => ({
         id,
@@ -198,7 +185,7 @@ const HealingCalculatorPage: React.FC = () => {
         enemyIdSeed: 2,
         teamIdSeed: 2,
         defaultTeamSlot: defaultHealingTeamSlot,
-        initialEnemies: [{ id: '1', name: 'Enemy 1', ...defaultEnemyStats(0) }],
+        initialEnemies: [defaultEnemyAttacker()],
         // ⚠️ NO `position` HERE, DELIBERATELY. `position` on a team ship means "the user picked this
         // cell": `resolveHealingPlayerPlacement` reads its presence as an EXPLICIT placement and lets
         // it outrank the heal target's coverage-aware default. Seeding the index-derived default made
