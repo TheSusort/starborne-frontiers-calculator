@@ -151,6 +151,9 @@ describe('SimulatorPage small grid', () => {
         expect(screen.getByTestId('cells-player')).toHaveTextContent('12');
         expect(positions('player')).toHaveLength(8);
         expect(screen.getByText(/holds 7 ships per team/)).toBeInTheDocument();
+        // The control still reads Normal.
+        expect(screen.getByText('Normal (12 cells)')).toBeInTheDocument();
+        expect(screen.queryByText('Small grid (7 cells)')).not.toBeInTheDocument();
     });
 
     it('a loaded encounter too big for the small grid keeps seven and says how many were left out', () => {

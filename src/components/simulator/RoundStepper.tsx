@@ -47,8 +47,8 @@ const RoundStepper: React.FC<RoundStepperProps> = ({ round, total, onChange, pla
             onChange(Math.min(total, round + 1));
         }, STEP_INTERVAL_MS);
         return () => clearTimeout(id);
-        // onChange intentionally excluded — parent passes a stable setter; including
-        // it would not change correctness since the timeout reads round/total fresh.
+        // onChange is left out: the timer runs only uncontrolled, and the timeout reads
+        // round/total fresh, so a new onChange identity changes nothing.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ownPlaying, round, total, controlled]);
 
