@@ -5,13 +5,14 @@ import { AnimatedHexBoard, type HexBoardShip } from '../../board/AnimatedHexBoar
 import { FloatingHits } from '../../board/FloatingHits';
 import type { Position } from '../../../types/encounters';
 import type { ChallengeKind, DuelEffect, DuelStakes } from '../../../utils/arcade/types';
+import type { FightBeat, FightHit, FightSide, FightShipState } from '../../board/fightBeats';
 import {
-    beatSeconds,
-    type DuelBeat,
-    type DuelHit,
-    type DuelSideKey,
-    type DuelSideState,
-} from './duelPlayback';
+    beatBoardShip,
+    beatShipProps,
+    chargedText,
+    type BoardShipIdentity,
+} from '../../board/beatBoardShip';
+import { beatSeconds } from './duelPlayback';
 import { isRace, type ChallengeResult, type RaceResult } from './challengeResult';
 import {
     raceBarFill,
@@ -32,12 +33,8 @@ import {
 /** Status chips shown per ship before the rest fold into "+N"; a 3v3 cell shows the count only. */
 const MAX_CHIPS = 2;
 
-export interface DuelSide {
-    name: string;
+export interface DuelSide extends BoardShipIdentity {
     level: number | undefined;
-    imageUrl: string | null;
-    /** The image already shows the ship facing the other side, so it is never mirrored. */
-    facesOpponent?: boolean;
 }
 
 interface DuelSummaryProps {
@@ -72,17 +69,14 @@ const ShipImage: React.FC<{ side: DuelSide; mirrored: boolean }> = ({ side, mirr
 
 interface ShipProps {
     side: DuelSide;
-    state: DuelSideState;
+    state: FightShipState;
     /** The turns whose numbers are still floating over this ship: the current one and the one
      *  before it, so a short turn does not cut a number off mid-rise. */
-    floats: { beat: number; hits: DuelHit[] }[];
+    floats: { beat: number; hits: FightHit[] }[];
     /** Set on the turn this ship fires its charged skill. */
     charged: { beat: number; skillName?: string } | null;
     mirrored: boolean;
 }
-
-const chargedText = (charged: { skillName?: string }) =>
-    charged.skillName ? `CHARGED: ${charged.skillName}` : 'CHARGED SKILL';
 
 /** One ship of a 1v1. Every row is always rendered (an empty one invisible) so the card keeps
  *  its height. */
@@ -102,7 +96,7 @@ const Ship: React.FC<ShipProps> = ({ side, state, floats, charged, mirrored }) =
                     <div
                         key={charged.beat}
                         role="status"
-                        className="arcade-duel-charged absolute inset-x-0 top-0 truncate border border-primary/70 bg-primary/20 px-1 py-0.5 text-xs font-bold tracking-widest text-primary"
+                        className="board-banner absolute inset-x-0 top-0 truncate border border-primary/70 bg-primary/20 px-1 py-0.5 text-xs font-bold tracking-widest text-primary"
                     >
                         {chargedText(charged)}
                     </div>
@@ -154,16 +148,6 @@ const Ship: React.FC<ShipProps> = ({ side, state, floats, charged, mirrored }) =
     );
 };
 
-const IDLE: DuelSideState = {
-    position: 'M2',
-    hpPct: 100,
-    shieldPct: 0,
-    buffs: [],
-    debuffs: [],
-    alive: true,
-    charge: null,
-};
-
 const outcomeTitle = (result: ChallengeResult) => {
     if (result.outcome === 'win') return 'Victory';
     if (result.outcome === 'lose') return 'Defeat';
@@ -171,75 +155,13 @@ const outcomeTitle = (result: ChallengeResult) => {
     return result.kind === 'duel' ? 'Duel skipped' : 'Challenge skipped';
 };
 
-/** The numbers still floating over ship `ship` of `side` while beat `index` plays. */
-const floatsFor = (beats: DuelBeat[], index: number, side: DuelSideKey, ship: number) =>
-    [index - 1, index]
-        .filter((i) => i >= 0)
-        .map((i) => ({
-            beat: i,
-            hits: beats[i].hits.filter((h) => h.side === side && h.ship === ship),
-        }))
-        .filter((f) => f.hits.length > 0);
-
-const shipProps = (
-    beats: DuelBeat[],
-    index: number,
-    playing: boolean,
-    key: DuelSideKey,
-    ship: number
-) => {
-    const beat = index >= 0 ? beats[index] : null;
-    const acting = playing && beat?.actor === key && beat.actorShip === ship;
-    return {
-        state: beat?.[key][ship] ?? IDLE,
-        floats: playing ? floatsFor(beats, index, key, ship) : [],
-        charged:
-            acting && beat?.charged ? { beat: index, skillName: beat.charged.skillName } : null,
-        acting,
-    };
-};
-
-const landsDamage = (hits: readonly DuelHit[]) => hits.some((h) => h.kind === 'damage');
-
-/** What ship `ship` of side `key` shows on its hex while beat `index` plays. */
-const boardShip = (
-    side: DuelSide,
-    beats: DuelBeat[],
-    index: number,
-    playing: boolean,
-    key: DuelSideKey,
-    ship: number
-): HexBoardShip => {
-    const { state, floats, charged, acting } = shipProps(beats, index, playing, key, ship);
-    const struck = floats.find((f) => f.beat === index && landsDamage(f.hits));
-    return {
-        name: side.name,
-        imageUrl: side.imageUrl,
-        facesOpponent: side.facesOpponent,
-        hpPct: state.hpPct,
-        shieldPct: state.shieldPct,
-        chargePct: state.charge ? (100 * state.charge.value) / state.charge.max : null,
-        buffs: state.buffs,
-        debuffs: state.debuffs,
-        alive: state.alive,
-        acting,
-        floats: floats.map((f) => ({ turn: f.beat, hits: f.hits })),
-        flash: struck ? index : null,
-        banner: charged && {
-            key: charged.beat,
-            text: chargedText(charged),
-            short: 'CHARGED',
-        },
-    };
-};
-
 /** One side of a 3v3 on the small grid, each ship on the cell its beat state names. The
  *  player's board (left) has its front on the right and the enemy's (right) is mirrored, so both
  *  fronts face the middle. Before the first beat the board is empty. */
 const TeamBoard: React.FC<{
     sides: DuelSide[];
-    sideKey: DuelSideKey;
-    beats: DuelBeat[];
+    sideKey: FightSide;
+    beats: FightBeat[];
     index: number;
     playing: boolean;
 }> = ({ sides, sideKey, beats, index, playing }) => {
@@ -247,7 +169,7 @@ const TeamBoard: React.FC<{
     const ships: Partial<Record<Position, HexBoardShip>> = {};
     states.forEach((s, i) => {
         const side = sides[i];
-        if (side) ships[s.position] = boardShip(side, beats, index, playing, sideKey, i);
+        if (side) ships[s.position] = beatBoardShip(side, beats, index, playing, sideKey, i);
     });
     return (
         <AnimatedHexBoard
@@ -266,12 +188,12 @@ const TeamBoard: React.FC<{
 const FightBody: React.FC<{
     players: DuelSide[];
     opponents: DuelSide[];
-    beats: DuelBeat[];
+    beats: FightBeat[];
     index: number;
     playing: boolean;
 }> = ({ players, opponents, beats, index, playing }) => {
     if (players.length > 1 || opponents.length > 1) {
-        const board = (sides: DuelSide[], key: DuelSideKey) => (
+        const board = (sides: DuelSide[], key: FightSide) => (
             <TeamBoard sides={sides} sideKey={key} beats={beats} index={index} playing={playing} />
         );
         return (
@@ -282,10 +204,10 @@ const FightBody: React.FC<{
             </div>
         );
     }
-    const column = (sides: DuelSide[], key: DuelSideKey) => (
+    const column = (sides: DuelSide[], key: FightSide) => (
         <div className="flex-1 min-w-0">
             {sides.map((side, ship) => {
-                const { state, floats, charged } = shipProps(beats, index, playing, key, ship);
+                const { state, floats, charged } = beatShipProps(beats, index, playing, key, ship);
                 return (
                     <Ship
                         key={ship}

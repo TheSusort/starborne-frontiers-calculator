@@ -2,7 +2,8 @@ import { act, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuelSummary } from '../DuelSummary';
 import { DUEL_RESULT_HOLD_MS } from '../stakesText';
-import { MAX_PLAYBACK_SECONDS, type DuelBeat, type DuelSideState } from '../duelPlayback';
+import { MAX_PLAYBACK_SECONDS } from '../duelPlayback';
+import type { FightBeat, FightShipState } from '../../../board/fightBeats';
 import type { DuelResult } from '../runDuel';
 import type { RaceResult } from '../challengeResult';
 import { RACE_ROUND_SECONDS } from '../racePlayback';
@@ -11,7 +12,7 @@ import type { DuelEffect } from '../../../../utils/arcade/types';
 const player = { name: 'Nova', level: 60, imageUrl: null };
 const opponent = { name: 'Rook', level: 60, imageUrl: null };
 
-const sideState = (s: Partial<DuelSideState> = {}): DuelSideState => ({
+const sideState = (s: Partial<FightShipState> = {}): FightShipState => ({
     position: 'M2',
     hpPct: 100,
     shieldPct: 0,
@@ -21,7 +22,7 @@ const sideState = (s: Partial<DuelSideState> = {}): DuelSideState => ({
     charge: null,
     ...s,
 });
-const beat = (b: Partial<DuelBeat> = {}): DuelBeat => ({
+const beat = (b: Partial<FightBeat> = {}): FightBeat => ({
     round: 1,
     actor: 'player',
     actorShip: 0,
@@ -236,7 +237,7 @@ describe('DuelSummary playback', () => {
         };
         const { getByText, queryAllByTestId } = show({ kind: 'shield' }, vi.fn(), r);
         act(() => void vi.advanceTimersByTime(100));
-        expect(getByText('1,234!')).toHaveClass('arcade-duel-float', 'text-2xl');
+        expect(getByText('1,234!')).toHaveClass('board-float', 'text-2xl');
         expect(getByText('98,765')).not.toHaveClass('text-2xl');
         expect(getByText('+500')).toHaveClass('text-sky-300');
         expect(getByText('1,234!').closest('.relative')).toHaveTextContent('Rook');

@@ -4,7 +4,7 @@ import type { BattlePlacement, BattleResult } from '../../../utils/calculators/b
 import type { CombatStatsDeps } from '../../../utils/ship/combatStats';
 import { buildTeam } from '../../../utils/simulator/buildTeam';
 import { runSeededBattle } from '../../../utils/simulator/seededRuns';
-import { buildDuelBeats, type DuelBeat } from './duelPlayback';
+import { buildFightBeats, type FightBeat } from '../../board/fightBeats';
 import { teamCells, type TeamTrio } from './teamCells';
 
 /** Every arcade challenge, fight or race, lasts at most this many rounds. */
@@ -12,8 +12,8 @@ export const CHALLENGE_ROUNDS = 5;
 
 export interface DuelResult {
     outcome: DuelOutcome;
-    /** Empty for a skipped duel. See `buildDuelBeats`. */
-    beats: DuelBeat[];
+    /** Empty for a skipped duel. See `buildFightBeats`. */
+    beats: FightBeat[];
 }
 
 /**
@@ -24,7 +24,7 @@ export interface DuelResult {
  *   with the higher summed final HP% wins; equal HP% is a draw.
  */
 export function duelOutcome(result: BattleResult): DuelResult {
-    const beats = buildDuelBeats(result);
+    const beats = buildFightBeats(result);
     const last = result.rounds.at(-1);
     if (!last) return { outcome: result.outcome.winner === 'player' ? 'win' : 'lose', beats };
     const hpOf = (side: 'player' | 'enemy') =>

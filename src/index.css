@@ -366,14 +366,14 @@
         }
     }
 
-    /* Arcade duel: a number that rises off the struck ship and fades, and the charged-skill
-       banner's flash. Reduced motion keeps the fade and drops the movement. */
-    .arcade-duel-float {
-        animation: arcade-duel-float 1s ease-out both;
+    /* Fight playback boards: a number that rises off the struck ship and fades, and the
+       charged-skill banner's flash. Reduced motion keeps the fade and drops the movement. */
+    .board-float {
+        animation: board-float 1s ease-out both;
     }
 
-    .arcade-duel-charged {
-        animation: arcade-duel-charged 0.9s ease-out both;
+    .board-banner {
+        animation: board-banner 0.9s ease-out both;
     }
 
     /* A hex board cell's flash when its ship is struck; opacity only, so reduced motion keeps it. */
@@ -438,7 +438,7 @@
     }
 
     .arcade-near-miss-lost {
-        animation: arcade-duel-fade-out 0.6s ease-out both;
+        animation: board-fade-out 0.6s ease-out both;
     }
 
     /* Fades in and out once; opacity only, so reduced motion keeps it. */
@@ -482,11 +482,11 @@
         }
 
         .arcade-streak-lost {
-            animation: arcade-duel-fade-out 0.9s ease-out both;
+            animation: board-fade-out 0.9s ease-out both;
         }
     }
 
-    @keyframes arcade-duel-float {
+    @keyframes board-float {
         0% {
             opacity: 0;
             transform: translate(-50%, 0.25rem);
@@ -503,7 +503,7 @@
         }
     }
 
-    @keyframes arcade-duel-fade-out {
+    @keyframes board-fade-out {
         0%,
         70% {
             opacity: 1;
@@ -513,7 +513,7 @@
         }
     }
 
-    @keyframes arcade-duel-charged {
+    @keyframes board-banner {
         0% {
             opacity: 0;
             transform: scale(1.15);
@@ -529,12 +529,12 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .arcade-duel-float {
-            animation: arcade-duel-fade-out 1s ease-out both;
+        .board-float {
+            animation: board-fade-out 1s ease-out both;
             transform: translateX(-50%);
         }
 
-        .arcade-duel-charged {
+        .board-banner {
             animation: none;
         }
     }

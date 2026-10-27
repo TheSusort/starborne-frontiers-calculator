@@ -116,7 +116,7 @@ const ShipCell: React.FC<{
                     key={ship.banner.key}
                     role="status"
                     aria-label={`${ship.name} ${ship.banner.text}`}
-                    className="arcade-duel-charged absolute inset-x-[-10%] top-[40%] truncate border border-primary/70 bg-primary/30 px-0.5 text-center text-[9px] font-bold tracking-wider text-primary sm:text-[10px]"
+                    className="board-banner absolute inset-x-[-10%] top-[40%] truncate border border-primary/70 bg-primary/30 px-0.5 text-center text-[9px] font-bold tracking-wider text-primary sm:text-[10px]"
                 >
                     <span className="sm:hidden">{ship.banner.short}</span>
                     <span className="hidden sm:inline">{ship.banner.text}</span>
