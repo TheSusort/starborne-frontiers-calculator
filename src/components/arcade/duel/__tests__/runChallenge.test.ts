@@ -184,6 +184,11 @@ describe('race figures', () => {
         expect(side).toEqual({ byRound: [60, 20, 0, 0, 0], total: 0, endRound: 3 });
     });
 
+    it('a run that stopped early with the ship alive holds its last reading', () => {
+        const side = hpLeftSide(survivability([100, 95, 90, 88]), 5);
+        expect(side).toEqual({ byRound: [95, 90, 88, 88, 88], total: 88 });
+    });
+
     it('a ship destroyed only in the extra round survived the race', () => {
         const side = hpLeftSide(survivability([100, 80, 60, 40, 20, 5], 6), 5);
         expect(side).toEqual({ byRound: [80, 60, 40, 20, 5], total: 5 });

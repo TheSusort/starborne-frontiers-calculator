@@ -47,7 +47,8 @@ export function cumulativeSide(perRound: readonly number[], total: number): Race
 /** A tank race side over `rounds` rounds, read from a survivability run of `rounds + 1` rounds.
  *  A round's `hpPct` is read at the top of that round, so the HP left after round `r` is the
  *  reading entering round `r + 1`; nothing in the extra round reaches the readings before it.
- *  From the round the ship is destroyed in, its HP left is 0. */
+ *  From the round the ship is destroyed in, its HP left is 0; a run that stopped early with the
+ *  ship alive (its attackers fell) holds its last reading. */
 export function hpLeftSide(
     run: Pick<DefenseSurvivabilityResult, 'rounds' | 'destroyedRound'>,
     rounds: number
@@ -55,7 +56,7 @@ export function hpLeftSide(
     const byRound = Array.from({ length: rounds }, (_, i) => {
         const round = i + 1;
         if (run.destroyedRound !== undefined && run.destroyedRound <= round) return 0;
-        return run.rounds[round]?.hpPct ?? 0;
+        return run.rounds[Math.min(round, run.rounds.length - 1)]?.hpPct ?? 0;
     });
     const destroyed = run.destroyedRound !== undefined && run.destroyedRound <= rounds;
     return {
