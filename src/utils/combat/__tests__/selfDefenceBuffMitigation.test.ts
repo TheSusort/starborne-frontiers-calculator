@@ -30,11 +30,10 @@
  *  2. THE OVERSHOOT GUARD. `Overload` is a self-buff at '-10% Defense' stacking to 10, so a real
  *     ship reaches exactly -100%: effective defence 0. At EXACTLY -100% `victimDefenceMitigation`'s
  *     `effectiveDefense > 0 ? ... : 0` guard is a NO-OP — `calculateDamageReduction(0)` is already
- *     0, since the curve is bounded in [0, 88.3505] and can never go negative, so a damage "bonus"
- *     was never reachable in the first place. What the guard actually prevents is NaN: overshoot
- *     BELOW -100% (this channel stacked with enemy Defense Shred) makes the effective defence
- *     negative, and `log10` of a non-positive number is `-Infinity`/`NaN`. Only an OVER-shot
- *     (-150%) arm exercises the guard at all — a -100% arm alone pins nothing about it.
+ *     0, and the curve returns 0 for any non-positive defence, so a damage "bonus" is never
+ *     reachable. Overshoot BELOW -100% (this channel stacked with enemy Defense Shred) makes the
+ *     effective defence negative; only an OVER-shot (-150%) arm proves that still reads as zero
+ *     mitigation — a -100% arm alone pins nothing about it.
  *  3. TEAM SYMMETRY. Engine changes in this project must be team-symmetric. Every arm runs TWICE
  *     from one builder, once per side.
  *  4. THE STACK MULTIPLIER, END TO END. `toSelfDefenseModifier` reads
@@ -337,16 +336,11 @@ describe('A5 — a self-inflicted defence COST applies too, and floors at zero m
 
             // THE GUARD, exercised only by an OVERSHOOT below -100% (this channel stacked with
             // enemy Defense Shred, or a synthetic extreme like this fixture's -150%).
-            // `effectiveDefense` goes NEGATIVE there, and `calculateDamageReduction` computes
-            // `log10` of it — a non-positive input, giving `-Infinity`/NaN, NOT a negative
-            // reduction (the curve is bounded in [0, 88.3505] and can never go below 0, so a
-            // damage "bonus" was never reachable regardless of this guard). Without the
-            // `effectiveDefense > 0` guard, `overshot` comes out NaN, not merely "greater than
-            // capped" — an `expect(x).not.toBeGreaterThan(capped)` assertion would be NaN-BLIND
-            // (`NaN > capped` is `false`, so it would pass on the very failure it is meant to
-            // catch). `toBeCloseTo` below already fails correctly on NaN; `not.toBeNaN()` states
-            // the real failure mode positively rather than relying on that as an implicit side
-            // effect.
+            // `effectiveDefense` goes NEGATIVE there. A curve that mishandled a non-positive input
+            // would return NaN or a negative reduction (a damage bonus), and an
+            // `expect(x).not.toBeGreaterThan(capped)` assertion would be NaN-BLIND (`NaN > capped`
+            // is `false`). `toBeCloseTo` below fails on both; `not.toBeNaN()` states the NaN
+            // failure mode positively.
             const overshot = intake({ defenderSide, buffPct: -150 });
             expect(overshot).not.toBeNaN();
             expect(overshot).toBeCloseTo(capped, 4);

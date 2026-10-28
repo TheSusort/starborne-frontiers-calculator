@@ -589,10 +589,10 @@ const DefenseCalculatorPage: React.FC = () => {
                     <div className="card">
                         <h2 className="text-xl font-bold mb-4">Damage Reduction Curve</h2>
                         <p className="mb-4">
-                            Damage reduction follows a curve where higher defense values have
-                            diminishing returns. The interactive chart below shows how damage
-                            reduction increases with defense values from 0 to 26,000, and marks the
-                            position of your ship configurations.
+                            Damage reduction is defense ÷ (defense + 3,500): 3,500 defense halves a
+                            hit, and each further point is worth a little less. The interactive
+                            chart below shows how damage reduction increases with defense values
+                            from 0 to 26,000, and marks the position of your ship configurations.
                         </p>
 
                         <DamageReductionChart

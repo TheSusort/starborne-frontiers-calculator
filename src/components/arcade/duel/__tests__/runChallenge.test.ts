@@ -433,7 +433,9 @@ describe('races on real template ships', () => {
                 expect(s.byRound).toHaveLength(length);
                 expect(s.byRound.every(Number.isFinite)).toBe(true);
                 expect(Number.isFinite(s.total)).toBe(true);
-                expect(s.byRound.at(-1)).toBeCloseTo(s.total, 0);
+                // Each round figure is rounded on its own, so their sum drifts from the rounded
+                // total by up to half a point per round.
+                expect(Math.abs(s.byRound.at(-1)! - s.total)).toBeLessThanOrEqual(length / 2);
             }
             // Same inputs and seed → the same result.
             expect(runRace(kind, a, b, deps, challengeSeed(1234, 5))).toEqual(r);

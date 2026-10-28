@@ -175,7 +175,7 @@ const fight = (placement: Placement, reflector: BoardUnit, hitter: BoardUnit): F
 };
 
 /** 16% of Belladonna's 140% hit as thrown, through her own defence. In game Nosorog reflected
- *  504; the model sits ~1% above (every measured fight reads model × 0.9895, #678). */
+ *  504; the model gives 504.4 (#678). */
 const MEASURED_REFLECT = 0.16 * 1.4 * 4_598 * (1 - calculateDamageReduction(3_647) / 100);
 
 describe('the Nosorog kit under test', () => {
