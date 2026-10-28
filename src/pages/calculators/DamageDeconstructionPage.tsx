@@ -103,6 +103,7 @@ const DamageDeconstructionPage: React.FC = () => {
         enemyDefense: number;
         hasModifiers: boolean;
     } | null>(null);
+    const [resultError, setResultError] = useState<string | null>(null);
 
     const addBuffDebuff = (
         type: keyof DamageDeconstructionForm,
@@ -152,6 +153,17 @@ const DamageDeconstructionPage: React.FC = () => {
 
         // Calculate the damage reduction that would result in the actual damage
         const damageReduction = (1 - form.actualDamage / effectiveDamage) * 100;
+
+        // Defence can only remove part of a hit: a reading at or above the undefended damage, or
+        // a zero reading, has no defence that explains it.
+        if (!Number.isFinite(damageReduction) || damageReduction <= 0 || damageReduction >= 100) {
+            setResults(null);
+            setResultError(
+                'Actual damage must be above 0 and below the damage the hit would deal with no defense. Check the attack, skill and buff inputs.'
+            );
+            return;
+        }
+        setResultError(null);
 
         const effectiveDefense = defenseForDamageReduction(damageReduction);
 
@@ -345,6 +357,7 @@ const DamageDeconstructionPage: React.FC = () => {
                     </div>
                 </div>
 
+                {resultError && <p className="text-red-400">{resultError}</p>}
                 {results && (
                     <div className="space-y-4">
                         <h2 className="text-xl font-bold">Results</h2>
