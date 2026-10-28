@@ -666,38 +666,41 @@ export const AutogearPage: React.FC = () => {
             );
 
             performanceTracker.startTimer('FindOptimalGear');
-            const { result: strategyResult, getGearForShip }: ShipOptimizerRun =
-                await findOptimalGearForShip(
-                    ship,
-                    {
-                        shipRole: shipConfig.shipRole,
-                        statPriorities: shipConfig.statPriorities,
-                        setPriorities: shipConfig.setPriorities,
-                        statBonuses: shipConfig.statBonuses,
-                        ignoreEquipped: shipConfig.ignoreEquipped,
-                        ignoreUnleveled: shipConfig.ignoreUnleveled,
-                        useUpgradedStats: shipConfig.useUpgradedStats,
-                        tryToCompleteSets: shipConfig.tryToCompleteSets,
-                        optimizeImplants: shipConfig.optimizeImplants,
-                        includeCalibratedGear: shipConfig.includeCalibratedGear,
-                        assumeCalibrated: shipConfig.assumeCalibrated,
-                        excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
-                        fleetBuffs: shipConfig.fleetBuffs,
-                        customFormula: shipConfig.customFormula,
-                        arenaModifiers,
-                        roleBasis: shipConfig.roleBasis,
-                    },
-                    {
-                        inventory,
-                        usedGearIds,
-                        getGearPiece,
-                        upgradedGearGetter,
-                        getEngineeringStatsForShipType,
-                        gearToShipMap,
-                        getShipById,
-                        onProgress: (progress) => teamProgressCallback(progress, ship.name, i),
-                    }
-                );
+            const {
+                result: strategyResult,
+                getGearForShip,
+                getCurrentGear,
+            }: ShipOptimizerRun = await findOptimalGearForShip(
+                ship,
+                {
+                    shipRole: shipConfig.shipRole,
+                    statPriorities: shipConfig.statPriorities,
+                    setPriorities: shipConfig.setPriorities,
+                    statBonuses: shipConfig.statBonuses,
+                    ignoreEquipped: shipConfig.ignoreEquipped,
+                    ignoreUnleveled: shipConfig.ignoreUnleveled,
+                    useUpgradedStats: shipConfig.useUpgradedStats,
+                    tryToCompleteSets: shipConfig.tryToCompleteSets,
+                    optimizeImplants: shipConfig.optimizeImplants,
+                    includeCalibratedGear: shipConfig.includeCalibratedGear,
+                    assumeCalibrated: shipConfig.assumeCalibrated,
+                    excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
+                    fleetBuffs: shipConfig.fleetBuffs,
+                    customFormula: shipConfig.customFormula,
+                    arenaModifiers,
+                    roleBasis: shipConfig.roleBasis,
+                },
+                {
+                    inventory,
+                    usedGearIds,
+                    getGearPiece,
+                    upgradedGearGetter,
+                    getEngineeringStatsForShipType,
+                    gearToShipMap,
+                    getShipById,
+                    onProgress: (progress) => teamProgressCallback(progress, ship.name, i),
+                }
+            );
             const newSuggestions = strategyResult.suggestions;
             performanceTracker.endTimer('FindOptimalGear');
 
@@ -739,7 +742,7 @@ export const AutogearPage: React.FC = () => {
             const currentStats = calculateTotalStats(
                 ship.baseStats,
                 ship.equipment,
-                getGearForShip,
+                getCurrentGear,
                 ship.refits,
                 ship.implants,
                 getEngineeringStatsForShipType(ship.type),
