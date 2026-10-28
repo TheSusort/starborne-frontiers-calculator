@@ -1700,12 +1700,14 @@ const DocumentationPage: React.FC = () => {
                                             calibrated elsewhere is included and gets the bonus too.
                                             With &quot;Use upgraded stats&quot; on, gear below level
                                             16 is included as well, since it would be eligible once
-                                            upgraded. Your ship&apos;s current gear is scored the
-                                            same way, so the before/after difference is the gain
-                                            from swapping gear rather than from calibrating what you
-                                            already wear. Suggested pieces needing calibration are
-                                            marked; calibration is a limited resource, so check that
-                                            the result is one you can actually afford.
+                                            upgraded. The current configuration is not affected: it
+                                            uses only the calibration your gear actually has
+                                            (upgraded stats still apply when that option is on), so
+                                            the before/after difference includes the gain from
+                                            calibrating the suggestion. Suggested pieces needing
+                                            calibration are marked; calibration is a limited
+                                            resource, so check that the result is one you can
+                                            actually afford.
                                         </li>
                                         <li>
                                             <strong>Optimize implants:</strong> When enabled, the

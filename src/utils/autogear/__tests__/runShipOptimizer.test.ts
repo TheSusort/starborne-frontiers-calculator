@@ -268,6 +268,23 @@ describe('findOptimalGearForShip', () => {
         expect(getGearForShip('a')?.id).toBe('a');
     });
 
+    it('scores with assumed calibration but leaves the current-build getter uncalibrated', async () => {
+        const inventory = [
+            gear({ id: 'a', mainStat: { name: 'attack', value: 1000, type: 'flat' } }),
+        ];
+        const { getGearForShip, getCurrentGear } = await findOptimalGearForShip(
+            ship,
+            { ...baseConfig, assumeCalibrated: true },
+            {
+                ...baseDeps,
+                inventory,
+                getGearPiece: (id: string) => inventory.find((g) => g.id === id),
+            }
+        );
+        expect(getGearForShip('a')?.mainStat?.value).toBeGreaterThan(1000);
+        expect(getCurrentGear('a')).toBe(inventory[0]);
+    });
+
     it('excludes gear calibrated for another ship unless includeCalibratedGear is set', async () => {
         const inventory = [
             gear({ id: 'a', calibration: { shipId: 'someone-else' } }),

@@ -69,6 +69,10 @@ export interface ShipOptimizerRun {
      *  or a post-run simulation for the SAME ship must read gear through this, not the raw
      *  `getGearPiece`, or it shows numbers the optimizer never actually scored. */
     getGearForShip: (id: string) => GearPiece | undefined;
+    /** The getter for the ship's CURRENT build: `config.useUpgradedStats` applies, but
+     *  `config.assumeCalibrated` does not — the current build shows the calibration the gear
+     *  actually has, so the comparison against the suggestion is not inflated on both sides. */
+    getCurrentGear: (id: string) => GearPiece | undefined;
 }
 
 /** Every per-ship control the manual autogear UI tracks — role, priorities, and every toggle
@@ -362,5 +366,7 @@ export async function findOptimalGearForShip(
         )
     );
 
-    return { result, getGearForShip };
+    const getCurrentGear = config.useUpgradedStats ? upgradedGearGetter : getGearPiece;
+
+    return { result, getGearForShip, getCurrentGear };
 }
