@@ -27,8 +27,7 @@ describe('reflectedDamageForHit', () => {
     });
 
     // #678 measurement: Belladonna (attack 4598, defence 3647) hits Nosorog (16%) with her 140% active.
-    // In game Nosorog reflected 504; the model gives ~509.3. Every measured fight sits at model x 0.9895,
-    // a constant the model does not carry.
+    // In game Nosorog reflected 504; the model gives 504.4.
     it('reflects 16% of the 140% hit Belladonna threw, through her own defence', () => {
         const base = 1.4 * 4598;
         const { damage } = reflectedDamageParts({
@@ -39,8 +38,7 @@ describe('reflectedDamageForHit', () => {
             reflectVictimReduction: NO_INCOMING_REDUCTION,
         });
         expect(damage).toBeCloseTo(0.16 * base * (1 - calculateDamageReduction(3647) / 100), 6);
-        expect(damage).toBeGreaterThan(504 * 1.005);
-        expect(damage).toBeLessThan(504 * 1.015);
+        expect(Math.abs(damage - 504)).toBeLessThan(1);
     });
 
     it("scales with the reflector's Out. Damage Up (Nosorog with Out. Damage Up III: x1.45)", () => {

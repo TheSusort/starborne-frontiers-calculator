@@ -289,26 +289,26 @@ describe('simulateDefenseSurvivability', () => {
             }),
         ]);
 
-        // 20k attack vs defence 5000 → 8331/round; three rounds → 24993.
-        expect(plain.breakdown.gross).toBe(24_993);
-        // −30% incoming → 5832/round → 17496. The ability model DOES carry a defensive buff into
+        // 20k attack vs defence 5000 → 8235/round; three rounds → 24705.
+        expect(plain.breakdown.gross).toBe(24_705);
+        // −30% incoming → 5765/round → 17295. The ability model DOES carry a defensive buff into
         // the measured number.
-        expect(warded.breakdown.gross).toBe(17_496);
+        expect(warded.breakdown.gross).toBe(17_295);
         expect(warded.breakdown.gross).toBeLessThan(plain.breakdown.gross);
         // FINDING B: the 'incomingDamage' MODIFIER channel has no defensive bucket at all.
         expect(modifierAura.breakdown.gross).toBe(plain.breakdown.gross);
         // FINDING A, FIXED (addendum A2): a defender's own '+30% Defense' now folds into the same
         // per-victim `defenceModifierPct` channel an enemy's Defense Shred rides, so the applied
-        // read mitigates on 5000 x 1.30 = 6500. 7064/round instead of 8331 -> 21192 over three
+        // read mitigates on 5000 x 1.30 = 6500. 7000/round instead of 8235 -> 21000 over three
         // rounds. That is precisely the number the pre-fix probe predicted for "a defender with
         // base defence 6500" while the applied damage was still stuck at the base-5000 value.
         //
         // DIRECTION, not just magnitude. `defenceModifierPct` is a SIGNED channel and the consumer
         // is `v.defence * (1 + pct/100)`; a term folded in with the wrong sign would turn Defense Up
         // into a debuff and STILL move this number off `plain`. The exact figure above pins WHICH
-        // WAY only because 21192 happens to be the reduced value — so assert the direction outright
+        // WAY only because 21000 happens to be the reduced value — so assert the direction outright
         // rather than leaving it implied by a constant a future re-measure might re-bless.
-        expect(defenceUp.breakdown.gross).toBe(21_192);
+        expect(defenceUp.breakdown.gross).toBe(21_000);
         expect(defenceUp.breakdown.gross).toBeLessThan(plain.breakdown.gross);
     });
 
@@ -327,7 +327,7 @@ describe('simulateDefenseSurvivability', () => {
     // deliberately, so a hand-picked/always-active Shield Converter cannot become a permanent
     // nullifier that `removeSelfBuffByName` can never spend. A `duration: 'recurring'` grant is an
     // AURA, so it is invisible to that read: measured, it produced convertedToShield 0 in all 3
-    // rounds while `duration: 99` produced 8331 in all 3. The integration test uses 99 for exactly
+    // rounds while `duration: 99` produced 8235 in all 3. The integration test uses 99 for exactly
     // this reason.
     it('Shield Converter damage lands in toConversion, not toShield or toHp', () => {
         idCounter = 0;
@@ -365,7 +365,7 @@ describe('simulateDefenseSurvivability', () => {
     //
     // FIXTURE HISTORY (Task 2 -> addendum A2): the brief gated a 'Defense Up II'
     // (`parsedEffects.defense`) buff, but at the time that buff moved NOTHING on either run (both
-    // 24993 — the pre-fix finding A), so the comparison was zero-vs-zero and could never have
+    // 24705 — the pre-fix finding A), so the comparison was zero-vs-zero and could never have
     // proven anything either way. It was swapped to 'Inc. Damage Down II' as a workaround. The A2
     // fix made the defence channel live, so this is now REVERTED to its intended and strictly
     // stronger form: it proves a gated *defence* buff is suppressed, not merely that some channel
@@ -376,7 +376,7 @@ describe('simulateDefenseSurvivability', () => {
         // channel: a `defense` buff is a MULTIPLIER on the defence stat, so at defence 0 the gated
         // and ungated runs would be identical no matter whether the gate worked. Keeps this
         // fixture's arithmetic identical to the channel test above, so the two are directly
-        // comparable (ungated 21192 / gated 24993 = plain).
+        // comparable (ungated 21000 / gated 24705 = plain).
         const armoured = { ...DEFENDER, defence: 5_000 };
         const defenseUp = {
             type: 'buff' as const,
@@ -423,13 +423,13 @@ describe('simulateDefenseSurvivability', () => {
             })
         );
 
-        // The ungated run is genuinely mitigating, or the comparison proves nothing: 7064/round
-        // (defence 5000 x 1.30 = 6500) instead of the unmitigated 8331 — not merely non-zero, the
+        // The ungated run is genuinely mitigating, or the comparison proves nothing: 7000/round
+        // (defence 5000 x 1.30 = 6500) instead of the unmitigated 8235 — not merely non-zero, the
         // mitigated value exactly.
-        expect(ungated.breakdown.gross).toBe(21_192);
+        expect(ungated.breakdown.gross).toBe(21_000);
         // Gate unmet → the buff never applies → each hit lands at full strength → strictly more
         // damage taken, and exactly the no-buff figure.
-        expect(gated.breakdown.gross).toBe(24_993);
+        expect(gated.breakdown.gross).toBe(24_705);
         expect(gated.breakdown.gross).toBeGreaterThan(ungated.breakdown.gross);
     });
 
@@ -448,7 +448,7 @@ describe('simulateDefenseSurvivability', () => {
     // WHY 'above 30' IS MET FOR THE WHOLE WINDOW, not just at cast time. The gate is re-evaluated
     // every round against live HP, so a gate that lapsed mid-run would land this arm somewhere
     // between the two reference figures and the exact equality below would be the wrong assertion.
-    // It cannot lapse here: 100,000 HP against a mitigated 21,192 over the whole window leaves the
+    // It cannot lapse here: 100,000 HP against a mitigated 21,000 over the whole window leaves the
     // defender at ~79% — never within 49 points of the threshold. The exact-equality assertion is
     // what pins that; a `toBeLessThan` would have passed on a gate that flickered.
     it('a conditionally-gated defensive buff DOES apply while its condition is met', () => {
@@ -492,10 +492,10 @@ describe('simulateDefenseSurvivability', () => {
         // Gate met → the buff applies → the run is indistinguishable from the UNGATED one, and
         // strictly better than the gate-unmet one. Both figures are the literals asserted in the
         // arm above, restated here rather than recomputed so the two arms are read as one pair:
-        //   21,192 = ungated / gate MET      (defence 5000 x 1.30)
-        //   24,993 = no buff / gate UNMET    (defence 5000)
-        expect(gateMet.breakdown.gross).toBe(21_192);
-        expect(gateMet.breakdown.gross).toBeLessThan(24_993);
+        //   21,000 = ungated / gate MET      (defence 5000 x 1.30)
+        //   24,705 = no buff / gate UNMET    (defence 5000)
+        expect(gateMet.breakdown.gross).toBe(21_000);
+        expect(gateMet.breakdown.gross).toBeLessThan(24_705);
     });
 });
 
@@ -574,8 +574,8 @@ describe('damageAbsorbed is RAW damage withstood (#358 addendum 2)', () => {
         // is pinned at roughly the ship's HP no matter how tanky it is, so it carried almost no
         // information about defence at all. Kept as an explicit demonstration rather than prose.
         expect(d0.breakdown.gross).toBe(120_000);
-        expect(d5k.breakdown.gross).toBe(124_970);
-        expect(d20k.breakdown.gross).toBe(106_716);
+        expect(d5k.breakdown.gross).toBe(123_530);
+        expect(d20k.breakdown.gross).toBe(107_232);
     });
 
     // ── THE SURVIVOR PLATEAU ──────────────────────────────────────────────────────────────────
@@ -993,7 +993,7 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
     //
     // Was mis-filed "corpus-inert". It is reachable from the live page, and it was the single
     // largest distortion of the metric: MEASURED, a Voron defender at 5,000 defence reported
-    // 24,993 where a plain defender reported 100,000 — a purely DEFENSIVE ability quartering its
+    // 24,705 where a plain defender reported 100,000 — a purely DEFENSIVE ability quartering its
     // owner's headline. See `convertHitToSelfDot` for the two wrong fixes and why the raw axis is
     // now booked at THROW time.
     //
@@ -1015,9 +1015,9 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
             ]),
         });
         // LIVENESS: the transform fired — it deferred damage past the end of the window, so far
-        // less ARRIVED (24,993 against the plain run's 41,655).
-        expect(plain.breakdown.gross).toBe(41_655);
-        expect(voron.breakdown.gross).toBe(24_993);
+        // less ARRIVED (24,705 against the plain run's 41,175).
+        expect(plain.breakdown.gross).toBe(41_175);
+        expect(voron.breakdown.gross).toBe(24_705);
         // DIRECTION: 5 rounds × 20,000 were thrown at both ships, and both report it.
         expect(voron.damageAbsorbed).toBe(plain.damageAbsorbed);
         expect(voron.damageAbsorbed).toBe(100_000);
@@ -1402,13 +1402,13 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
     it('PRESENCE: reflected thorns land on the thrown axis PRE-defence', () => {
         const r = reflectRun();
         // 50% of the 100,000 the defender throws (200% × 50,000 attack) = 50,000 reflected per
-        // round × 4 rounds, thrown; 20,828/round after the defender's own 5,000 defence mitigated
+        // round × 4 rounds, thrown; 20,588/round after the defender's own 5,000 defence mitigated
         // it. The two axes being DIFFERENT is the point — reflect is one
         // of the channels that DOES fold the recipient's defence, so booking it post-mitigation
         // would have been invisible on a defence-0 fixture.
         expect(r.damageAbsorbed).toBe(200_000);
         expect(r.breakdown.gross).toBeLessThan(r.damageAbsorbed);
-        expect(r.breakdown.gross).toBe(83_312);
+        expect(r.breakdown.gross).toBe(82_352);
     });
 
     // ── CHANNEL 8: the RECIPIENT's incoming-reduction on the REFLECT channel ───────────────────
@@ -1430,9 +1430,9 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
         // LIVENESS: the passive really is eating the bounce-back — monotonically less ARRIVES.
         expect(warded.breakdown.gross).toBeLessThan(plain.breakdown.gross);
         expect(bunker.breakdown.gross).toBeLessThan(warded.breakdown.gross);
-        expect(plain.breakdown.gross).toBe(83_312);
-        expect(warded.breakdown.gross).toBe(58_320);
-        expect(bunker.breakdown.gross).toBe(33_324);
+        expect(plain.breakdown.gross).toBe(82_352);
+        expect(warded.breakdown.gross).toBe(57_648);
+        expect(bunker.breakdown.gross).toBe(32_940);
 
         // The window is identical in all three runs, so the thrown total must be too: nothing
         // about the defender's own protection changes what the enemy bounced back.

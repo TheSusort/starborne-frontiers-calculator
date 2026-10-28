@@ -3,13 +3,25 @@ import type { BasisTerm } from '../../types/autogear';
 import { expectedIncomingFactor } from '../damageComposition';
 import { ENEMY_CRIT_RATE } from '../../constants/simulation';
 
-// Defense reduction curve approximation based on the graph
-export function calculateDamageReduction(defense: number): number {
-    const a = 88.3505;
-    const b = 4.5552;
-    const c = 1.3292;
+/**
+ * The defence curve constant: defence equal to this halves a hit.
+ *
+ * `def / (def + 3500)` reproduces owner-measured in-game hits from 281 to 22,210 defence to
+ * within one damage point; `__tests__/defenseCurve.test.ts` pins them.
+ */
+export const DEFENSE_CURVE_CONSTANT = 3500;
 
-    return a * Math.exp(-Math.pow((b - Math.log10(defense)) / c, 2));
+/** Percent of a hit the defender's defence removes, in [0, 100). */
+export function calculateDamageReduction(defense: number): number {
+    if (!(defense > 0)) return 0;
+    return (100 * defense) / (defense + DEFENSE_CURVE_CONSTANT);
+}
+
+/** The defence that yields `damageReduction` percent: the inverse of `calculateDamageReduction`. */
+export function defenseForDamageReduction(damageReduction: number): number {
+    if (!(damageReduction > 0)) return 0;
+    if (damageReduction >= 100) return Infinity;
+    return (DEFENSE_CURVE_CONSTANT * damageReduction) / (100 - damageReduction);
 }
 
 export function calculateEffectiveHP(
@@ -71,18 +83,6 @@ export function resolveLimitStatValue(stats: BaseStats, stat: LimitableStat): nu
     return stats[stat] || 0;
 }
 
-// Defense penetration lookup table with known values at 15k defense
-const DEFENSE_PENETRATION_LOOKUP: Record<number, number> = {
-    0: 81.45,
-    7: 80.31,
-    14: 79,
-    20: 77.72,
-    21: 77.49,
-    27: 76,
-    34: 74,
-    41: 71.66,
-};
-
 // Default defense value for calculations
 const DEFAULT_DEFENSE = 15000;
 
@@ -95,15 +95,9 @@ export function calculateDPS(
     const critMultiplier = calculateCritMultiplier(stats);
     const defensePenetration = stats.defensePenetration || 0;
 
-    // Get damage reduction from lookup table or calculate it
-    let damageReduction: number;
-    if (DEFENSE_PENETRATION_LOOKUP[defensePenetration] !== undefined) {
-        damageReduction = DEFENSE_PENETRATION_LOOKUP[defensePenetration];
-    } else {
-        // Fallback to full calculation for unknown values
-        const effectiveDefense = DEFAULT_DEFENSE * (1 - defensePenetration / 100);
-        damageReduction = calculateDamageReduction(effectiveDefense);
-    }
+    const damageReduction = calculateDamageReduction(
+        DEFAULT_DEFENSE * (1 - defensePenetration / 100)
+    );
 
     // Calculate base DPS with damage reduction
     const baseDPS = attack * critMultiplier * (1 - damageReduction / 100);

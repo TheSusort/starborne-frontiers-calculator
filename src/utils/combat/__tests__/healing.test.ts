@@ -1281,8 +1281,8 @@ describe('healing mode — enemy attackers and target intake', () => {
         const dNo = noDef.healing!.rounds[0].incomingDamage;
         expect(dNo).toBeCloseTo(5000, 6);
         expect(dWith).toBeLessThan(dNo);
-        // Hand-checked: 5000 × (1 − dr(2000)/100).
-        expect(dWith).toBeCloseTo(3186.4464026358046, 6);
+        // Hand-checked: 5000 × (1 − dr(2000)/100) = 5000 × 3500 / 5500.
+        expect(dWith).toBeCloseTo(3181.818181818182, 6);
     });
 
     // ── Test 8: DPS-mode inertness re-check ───────────────────────────────────

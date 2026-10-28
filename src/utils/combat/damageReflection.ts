@@ -18,9 +18,8 @@ import { composeIncomingFactor, type IncomingReductionParts } from './victimDama
  *
  * What the reflector took, its own shield and its own mitigation do not enter: the hit is
  * reflected whole. Measured (#678): Belladonna (attack 4598, defence 3647) hitting a 16%
- * Nosorog with a 140% active reflected 504 in game against ~509.3 from this model; every
- * measured fight sits at model × 0.9895, a constant the model does not carry. The affinity
- * term is kept but has not been measured.
+ * Nosorog with a 140% active reflected 504 in game against 504.4 from this model. The
+ * affinity term is kept but has not been measured.
  *
  * The last factor is the same capped composition a direct hit takes. Both bounces — a ship's
  * reflect and the Reflect gear set's — read the attacker's whole incoming-damage status channel

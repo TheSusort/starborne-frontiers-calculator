@@ -7,6 +7,7 @@ import { CloseIcon, PageLayout, StatCard } from '../../components/ui';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { calculateDamageReduction } from '../../utils/autogear/scoring';
+import { defenseForDamageReduction } from '../../utils/autogear/statResolution';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -102,6 +103,7 @@ const DamageDeconstructionPage: React.FC = () => {
         enemyDefense: number;
         hasModifiers: boolean;
     } | null>(null);
+    const [resultError, setResultError] = useState<string | null>(null);
 
     const addBuffDebuff = (
         type: keyof DamageDeconstructionForm,
@@ -152,20 +154,18 @@ const DamageDeconstructionPage: React.FC = () => {
         // Calculate the damage reduction that would result in the actual damage
         const damageReduction = (1 - form.actualDamage / effectiveDamage) * 100;
 
-        // Calculate the effective defense that would result in this damage reduction
-        // Using the formula from scoring.ts: damageReduction = 88.3505 * exp(-((4.5552 - log10(defense)) / 1.3292)^2)
-        // Solving for defense:
-        // damageReduction/88.3505 = exp(-((4.5552 - log10(defense)) / 1.3292)^2)
-        // ln(damageReduction/88.3505) = -((4.5552 - log10(defense)) / 1.3292)^2
-        // -ln(damageReduction/88.3505) = ((4.5552 - log10(defense)) / 1.3292)^2
-        // sqrt(-ln(damageReduction/88.3505)) = (4.5552 - log10(defense)) / 1.3292
-        // 1.3292 * sqrt(-ln(damageReduction/88.3505)) = 4.5552 - log10(defense)
-        // log10(defense) = 4.5552 - 1.3292 * sqrt(-ln(damageReduction/88.3505))
-        // defense = 10^(4.5552 - 1.3292 * sqrt(-ln(damageReduction/88.3505)))
-        const lnPart = -Math.log(damageReduction / 88.3505);
-        const sqrtPart = Math.sqrt(lnPart);
-        const log10Defense = 4.5552 - 1.3292 * sqrtPart;
-        const effectiveDefense = Math.pow(10, log10Defense);
+        // Defence can only remove part of a hit: a reading at or above the undefended damage, or
+        // a zero reading, has no defence that explains it.
+        if (!Number.isFinite(damageReduction) || damageReduction <= 0 || damageReduction >= 100) {
+            setResults(null);
+            setResultError(
+                'Actual damage must be above 0 and below the damage the hit would deal with no defense. Check the attack, skill and buff inputs.'
+            );
+            return;
+        }
+        setResultError(null);
+
+        const effectiveDefense = defenseForDamageReduction(damageReduction);
 
         // Now we need to work backwards to find the base defense
         // If we have defense debuffs and penetration, we need to find the base defense that would result in this effective defense
@@ -357,6 +357,7 @@ const DamageDeconstructionPage: React.FC = () => {
                     </div>
                 </div>
 
+                {resultError && <p className="text-red-400">{resultError}</p>}
                 {results && (
                     <div className="space-y-4">
                         <h2 className="text-xl font-bold">Results</h2>

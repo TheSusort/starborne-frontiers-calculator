@@ -727,7 +727,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
         // Old runEnemyAttackerTurn manual path: 5000 × (1 − dr(2000)/100).
         const expected = 5000 * (1 - calculateDamageReduction(2000) / 100);
         expect(incoming(result, 1)).toBeCloseTo(expected, 4);
-        expect(incoming(result, 1)).toBeCloseTo(3186.4464026358046, 4);
+        expect(incoming(result, 1)).toBeCloseTo(3181.818181818182, 4);
     });
 
     it('manual enemy: zero target defence → no reduction', () => {

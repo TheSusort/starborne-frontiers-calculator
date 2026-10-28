@@ -332,7 +332,7 @@ describe('scorePieceForRole', () => {
                 { name: 'hp', value: 600, type: 'flat' },
             ],
         });
-        expect(scorePieceForRole(critHeavyPiece, 'DEFENDER')).toBe(18.004636621561758);
+        expect(scorePieceForRole(critHeavyPiece, 'DEFENDER')).toBe(18.214285714285552);
         expect(scorePieceForRole(critHeavyPiece, 'DEBUFFER_BOMBER')).toBe(200000);
     });
 });

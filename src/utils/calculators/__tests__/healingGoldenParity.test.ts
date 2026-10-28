@@ -453,8 +453,8 @@ describe('healingGoldenParity', () => {
     // consequences, all measured:
     //
     // Damage constants (effectiveAttack 5000, practice-target defence 5000 → postDefenseFactor
-    // 1 − dr(5000)/100 = 0.4165593651036698; was 0.2579415898443159 at the sink's defence 10000):
-    //   cast direct        = 5000 × 100% × 0.4165593651036698 = 2082.796825518349
+    // 1 − dr(5000)/100 = 3500/8500 = 0.4117647058823529; 0.25925925925925924 at the sink's defence 10000):
+    //   cast direct        = 5000 × 100% × 0.4117647058823529 = 2058.823529411765
     //   Inferno tick       = 1 stack × (100/100) × 5000 × dotFactor 1 = 5000
     //     — UNCHANGED by the rebase: inferno scales off the APPLIER's effective attack
     //       (engine.ts:1066, `ctx.effectiveAttack` in the inferno `tickByTier`), not the victim's
@@ -464,13 +464,12 @@ describe('healingGoldenParity', () => {
     //       1,000,000; that branch is the one this fixture's `perTargetDealt` assertion proves runs.
     //
     // Per-round timeline (rounds 1-6; Inferno re-applied every round at duration 1):
-    //   • Focus turn (speed 100, acts first): the cast deals direct 2082.797 to the practice target
-    //     → creditDamage('attacker','direct',2082.797) procs the leech at CREDIT time:
-    //       cast leech raw = 2082.796825518349 × 20% = 416.5593651036698 (→ 417).
+    //   • Focus turn (speed 100, acts first): the cast deals direct 2058.824 to the practice target
+    //     → creditDamage('attacker','direct',2058.824) procs the leech at CREDIT time:
+    //       cast leech raw = 2058.823529411765 × 20% = 411.7647058823529 (→ 412).
     //     Then the Inferno (duration 1) is applied to the practice target's container.
     //   • Practice-target turn (speed 50, acts last): ticks the Inferno for 5000 — it DOES land, and
-    //     `perTargetDealt` proves it (R1 = 6289.708 = cast 1289.708 + inferno 5000 at the old basis;
-    //     7082.797 = 2082.797 + 5000 now).
+    //     `perTargetDealt` proves it (R1 = 7058.824 = cast 2058.824 + inferno 5000).
     //     ✅ AND THE LEECH PAYS OUT ON IT: inferno-tick leech = 5000 × 20% = 1000.
     //     This term briefly read 0 when Task 2 first rebased the fixture, which exposed a
     //     PRE-EXISTING engine defect (not the rebase): a `leechScope:'all'` standing leech paid ZERO
@@ -481,17 +480,17 @@ describe('healingGoldenParity', () => {
     //     on BOTH sides). The term is back at exactly its pre-SP-4b-2b value of 1000, because
     //     inferno scales off the APPLIER's effective attack (5000), not the victim — measured at
     //     39d463f1: directHeal 1258/round = cast 258 + inferno 1000.
-    //   ⇒ directHeal = 416.5594 + 1000 = 1416.5594 (→ 1417) per round. Full HP → effectiveHealing 0,
-    //     overheal 1416.5594 (→ 1417). hotHeal 0, shield 0, incomingDamage 0 (attack 0).
+    //   ⇒ directHeal = 411.7647 + 1000 = 1411.7647 (→ 1412) per round. Full HP → effectiveHealing 0,
+    //     overheal 1411.7647 (→ 1412). hotHeal 0, shield 0, incomingDamage 0 (attack 0).
     //   • Rounds 7-10 are ZERO: the practice target is KILLABLE and dies in round 6 —
-    //     2082.797 + 5000 = 7082.797/round vs hp 40,000 (6 × 7082.797 = 42,496.8 > 40,000). Round 6
+    //     2058.824 + 5000 = 7058.824/round vs hp 40,000 (6 × 7058.824 = 42,352.9 > 40,000). Round 6
     //     still heals, because the cast lands before the death.
     //   ⚠️ INERT TAIL: 4 of this golden's 10 snapshotted rounds (7-10) observe a dead opponent and
     //     read all-zero for that reason alone, not because anything broke. The six LIVE rounds
     //     (1-6) are what stays pinned above; the zero rows exist only so the snapshot proves the
     //     run doesn't error out or resurrect the target after death.
-    //   cumulativeHealing (raws summed UNROUNDED, rounded last): 1417, 2833, 4250, 5666, 7083, 8499,
-    //     then flat. totalDirectHeal = 6 × 1416.5594 = 8499.36 → 8499 (12579 pre-SP-4b-2b, where the
+    //   cumulativeHealing (raws summed UNROUNDED, rounded last): 1412, 2824, 4235, 5647, 7059, 8471,
+    //     then flat. totalDirectHeal = 6 × 1411.7647 = 8470.59 → 8471 (12579 pre-SP-4b-2b, where the
     //     dummy never died so all 10 rounds paid at the sink's defence-10000 cast basis).
     const scenario9Input = () =>
         BASE({
@@ -545,21 +544,21 @@ describe('healingGoldenParity', () => {
 
     // Supplementary in-code assertion for scenario 9: round-1 directHeal is BOTH leech terms.
     // Hand-derived, not read off the snapshot:
-    //   cast leech    = 0.2 × 2082.796825518349 = 416.5593651036698
+    //   cast leech    = 0.2 × 2058.823529411765 = 411.7647058823529
     //   inferno leech = 0.2 × 5000              = 1000            (SP-4b-2b Task 2b)
-    //   → 1416.5594 → 1417.
+    //   → 1411.7647 → 1412.
     // It was `1258` (cast 258 + inferno 1000) while `enemies: []` fell through to the dummy: the cast
-    // term was REBASED by the practice target's defence 5,000 (258 → 417), while the inferno term
+    // term was REBASED by the practice target's defence 5,000 (258 → 412), while the inferno term
     // round-trips at exactly 1000 — it briefly read 0 between Task 2 and Task 2b, which is how the
     // pre-existing positional leech gap was found. See the ⚠️ block on `scenario9Input` above.
-    it('scenario 9: round-1 directHeal is exactly 1417 (cast leech 417 + inferno-tick leech 1000)', () => {
+    it('scenario 9: round-1 directHeal is exactly 1412 (cast leech 412 + inferno-tick leech 1000)', () => {
         idCounter = 0;
         const result = simulateHealing(scenario9Input());
-        expect(result.rounds[0].directHeal).toBe(1417);
+        expect(result.rounds[0].directHeal).toBe(1412);
         // ANTI-VACUITY: the inferno DOES tick on the practice target for 5,000 — so the 1000 term
         // inside the figure above is the leech reading a REAL tick, not a coincidence of rounding.
         const dealt = result.rounds[0].perTargetDealt?.attacker?.['practice-target'];
-        expect(dealt).toBeCloseTo(2082.796825518349 + 5000, 6);
+        expect(dealt).toBeCloseTo(2058.823529411765 + 5000, 6);
     });
 
     // ── Scenario 10: Tithonus/Pallas shape (all-allies noCrit cast rider) ─────
@@ -576,10 +575,10 @@ describe('healingGoldenParity', () => {
     // back → everyone stays full → all overheal.
     //
     // REBASED IN SP-4b-2b, and this scenario is the CLEAN isolation of that rebase: the 7% rider is
-    // the only moving part, so `directHeal` per round went 181 → 292 purely because the practice
-    // target's defence 5,000 lifts the cast from 1289.708 to 2082.797 (0.07 × 1289.708 = 90 → 0.07 ×
-    // 2082.797 = 146, ×2 recipients). No killable component: with no DoT the target takes 2082.797 a
-    // round against 40,000 HP, i.e. 19.2 rounds, so it survives the whole 10-round window.
+    // the only moving part, so `directHeal` per round is 2 × 0.07 × 2058.824 = 288 because the practice
+    // target's defence 5,000 sets the cast at 2058.824 (0.07 × 2058.824 = 144, ×2 recipients). No
+    // killable component: with no DoT the target takes 2058.824 a round against 40,000 HP, i.e. 19.4
+    // rounds, so it survives the whole 10-round window.
     // Spot-checked for plausibility (routed-cast heal-conservation; no NaN; cumulative monotonic).
     snap('Tithonus/Pallas shape (all-allies noCrit cast rider, routed to a team target)', () => {
         const team: TeamActorInput = {
@@ -643,17 +642,17 @@ describe('healingGoldenParity', () => {
     //
     // --- round-4 arithmetic ---
     // The round-4 active cast deals attack 5000 vs the practice target's defence 5000 →
-    // 2082.796825518349 direct (same figure as every cast here, since they are identical damage
+    // 2058.823529411765 direct (same figure as every cast here, since they are identical damage
     // abilities). The accumulate-detonate gathers 100% of the direct damage its holder takes —
-    // exactly that one cast's damage — and bursts for 2082.796825518349 more on the practice
+    // exactly that one cast's damage — and bursts for 2058.823529411765 more on the practice
     // target's own turn (round 4's `perTargetDealt` of 4165.593651036698 is the cast plus the
     // burst, confirming the burst really landed).
     // Two detonation-scoped 5% standing leeches (one `target:'ally'` routed to the heal target, one
     // `target:'self'` routed to the caster — both resolve to the same actor here) each pay
-    // 2082.796825518349 × 0.05 = 104.13984127591745; summed, 208.2796825518349, which
-    // `healingEngineAdapter`'s `Math.round` display rounding turns into round 4's `directHeal: 208`.
+    // 2058.823529411765 × 0.05 = 102.94117647058823; summed, 205.88235294117646, which
+    // `healingEngineAdapter`'s `Math.round` display rounding turns into round 4's `directHeal: 206`.
     // Rounds 1–3 have no burst and the leeches are detonation-scoped, so the direct channel is
-    // skipped by the scope guard → 0 on those rounds, matching `[0, 0, 0, 208]`.
+    // skipped by the scope guard → 0 on those rounds, matching `[0, 0, 0, 206]`.
     // Healer is focus + heal target, full HP → all overheal.
     // Spot-checked for plausibility.
     const scenario11Input = (): HealingSimulationInput =>
@@ -730,21 +729,21 @@ describe('healingGoldenParity', () => {
     // BOTH halves separately — the burst really fired, AND the two detonation-scoped leeches paid
     // out from it — so the pair can only stay green for the reason documented above, not because
     // the burst silently never happened.
-    it('scenario 11: round-4 directHeal is exactly 208 (two 5% detonation-scope leeches off a 2082.796825518349 burst)', () => {
+    it('scenario 11: round-4 directHeal is exactly 206 (two 5% detonation-scope leeches off a 2058.823529411765 burst)', () => {
         idCounter = 0;
         const result = simulateHealing(scenario11Input());
         // Only the burst round (index 3) pays; the detonation-scoped leeches' scope guard skips
         // every round's direct-channel damage.
-        expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 208]);
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 206]);
         // ANTI-VACUITY: round 4 (index 3) is the burst round and delivers exactly double a
-        // burst-free round's damage — the active cast (2082.796825518349) PLUS the burst (100% of
+        // burst-free round's damage — the active cast (2058.823529411765) PLUS the burst (100% of
         // that same figure, gathered by the accumulate-detonate) — so there really was a
         // detonation amount for the leeches to read 5% of twice. Round 3's charged cast, which
         // applied the accumulator, is not gathered: its round deals one cast's damage only.
         const dealt = (i: number) => result.rounds[i].perTargetDealt?.attacker?.['practice-target'];
-        expect(dealt(0)).toBeCloseTo(2082.796825518349, 6);
-        expect(dealt(2)).toBeCloseTo(2082.796825518349, 6);
-        expect(dealt(3)).toBeCloseTo(2 * 2082.796825518349, 6);
+        expect(dealt(0)).toBeCloseTo(2058.823529411765, 6);
+        expect(dealt(2)).toBeCloseTo(2058.823529411765, 6);
+        expect(dealt(3)).toBeCloseTo(2 * 2058.823529411765, 6);
     });
 
     // ── Scenario 12: Quixilver as heal target (rider shield + taken shield) ───
@@ -760,27 +759,27 @@ describe('healingGoldenParity', () => {
     //   • One enemy attacker (attack 4000, crit 0, speed 50) → acts AFTER the healer (speed 100).
     //
     // Damage constants (effectiveAttack 5000, defence 10000 → postDefenseFactor
-    // 0.2579415898443159; enemy reduction 0 at defence 0). That 10000 is the adapter's LEGACY-SINK
+    // 0.25925925925925924; enemy reduction 0 at defence 0). That 10000 is the adapter's LEGACY-SINK
     // DEFAULT, not the dummy: this scenario supplies a real enemy card that leaves `defence`
     // unspecified, so it inherits `LEGACY_SINK_DEFENCE`. Unaffected by SP-4b-2b, which only changes
     // what an EMPTY roster fights:
-    //   cast direct  = 5000 × 100% × 0.2579415898443159 = 1289.7079492215796
-    //   shield rider = 1289.7079492215796 × 20% = 257.94158984431596
+    //   cast direct  = 5000 × 100% × 0.25925925925925924 = 1296.2962962962963
+    //   shield rider = 1296.2962962962963 × 20% = 259.25925925925924
     //   enemy hit    = 4000 (defence 0 → no reduction)
     //   taken shield = 4000 × 25% = 1000
     //
     // R1 (enter HP 100%, shield 0):
-    //   • focus turn: rider grants 257.9416 → shieldPool 257.9416; shield bucket 257.9416.
-    //   • enemy hit 4000: shieldBefore 257.9416 → absorbed 257.9416, hpDamage 3742.0584 →
-    //     HP 6257.9416. Gate (shieldBefore>0 AND hpDamage>0) PASSES → taken proc 1000 →
-    //     shieldPool 0 + 1000 = 1000; shield bucket 257.9416 + 1000 = 1257.9416 (→ 1258).
-    //   ⇒ shield 1258, shieldAbsorbed 257.9416 (→ 258), incomingDamage 4000.
-    // R2 (enter HP 6257.9416/10000 = 62.579% → 63, shield 1000):
-    //   • focus turn: rider grants 257.9416 → shieldPool 1257.9416; shield bucket 257.9416.
-    //   • enemy hit 4000: shieldBefore 1257.9416 → absorbed 1257.9416, hpDamage 2742.0584 →
-    //     HP 3515.8832. Gate PASSES → taken proc 1000 → shieldPool 1000; shield bucket
-    //     1257.9416 (→ 1258).
-    //   ⇒ shield 1258, shieldAbsorbed 1257.9416 (→ 1258), incomingDamage 4000.
+    //   • focus turn: rider grants 259.2593 → shieldPool 259.2593; shield bucket 259.2593.
+    //   • enemy hit 4000: shieldBefore 259.2593 → absorbed 259.2593, hpDamage 3740.7407 →
+    //     HP 6259.2593. Gate (shieldBefore>0 AND hpDamage>0) PASSES → taken proc 1000 →
+    //     shieldPool 0 + 1000 = 1000; shield bucket 259.2593 + 1000 = 1259.2593 (→ 1259).
+    //   ⇒ shield 1259, shieldAbsorbed 259.2593 (→ 259), incomingDamage 4000.
+    // R2 (enter HP 6259.2593/10000 = 62.593% → 63, shield 1000):
+    //   • focus turn: rider grants 259.2593 → shieldPool 1259.2593; shield bucket 259.2593.
+    //   • enemy hit 4000: shieldBefore 1259.2593 → absorbed 1259.2593, hpDamage 2740.7407 →
+    //     HP 3518.5185. Gate PASSES → taken proc 1000 → shieldPool 1000; shield bucket
+    //     1259.2593 (→ 1259).
+    //   ⇒ shield 1259, shieldAbsorbed 1259.2593 (→ 1259), incomingDamage 4000.
     // (No heals at all → directHeal/hotHeal/effectiveHealing/overheal 0 every round.)
     // DESTROYED round 4: the cumulative net damage (4000 − shield absorption each round)
     // exceeds the 10000 HP pool by round 4. R5-R10 flatline with incomingDamage 0.
@@ -837,13 +836,13 @@ describe('healingGoldenParity', () => {
 
     snap('Quixilver as heal target (shield rider + punch-through taken shield)', scenario12Input);
 
-    // Supplementary in-code assertion for scenario 12: round-1 shield is the rider (258) +
-    // the punch-through taken shield (1000) → 1258, and round-1 absorbed is just the rider pool.
-    it('scenario 12: round-1 shield is 1258 (rider 258 + taken 1000), absorbed 258', () => {
+    // Supplementary in-code assertion for scenario 12: round-1 shield is the rider (259) +
+    // the punch-through taken shield (1000) → 1259, and round-1 absorbed is just the rider pool.
+    it('scenario 12: round-1 shield is 1259 (rider 259 + taken 1000), absorbed 259', () => {
         idCounter = 0;
         const result = simulateHealing(scenario12Input());
-        expect(result.rounds[0].shield).toBe(1258);
-        expect(result.rounds[0].shieldAbsorbed).toBe(258);
+        expect(result.rounds[0].shield).toBe(1259);
+        expect(result.rounds[0].shieldAbsorbed).toBe(259);
     });
 
     // Supplementary in-code assertion for scenario 12: target is DESTROYED on round 4.

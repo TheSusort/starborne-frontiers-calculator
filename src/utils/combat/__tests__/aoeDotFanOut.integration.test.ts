@@ -642,4 +642,4 @@ describe('the single-ship DPS calculator is unchanged by the DoT fan-out', () =>
 });
 
 /** `simulateDPS` totals measured on the pre-fan-out engine (same input, same seed). */
-const DPS_TOTALS = { ravager: 430_341, valerian: 429_535 };
+const DPS_TOTALS = { ravager: 428_215, valerian: 429_060 };
