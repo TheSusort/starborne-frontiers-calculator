@@ -6,6 +6,7 @@ import { ChangelogEntry } from '../types/changelog';
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: current configuration now ignores "Assume all gear is calibrated".',
+    'App updates: a banner now lets you choose when to refresh.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

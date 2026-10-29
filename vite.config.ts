@@ -23,11 +23,14 @@ export default defineConfig({
         react(),
         svgr(),
         VitePWA({
-            registerType: 'autoUpdate',
+            // The new service worker waits until the player clicks Refresh in `UpdatePrompt`,
+            // so an update never reloads the page mid-task (e.g. during an Autogear run).
+            registerType: 'prompt',
             // Don't generate a manifest — use the existing public/manifest.json
             manifest: false,
             workbox: {
-                skipWaiting: true,
+                // Claim on activation so workbox-window's `controlling` event fires and reloads
+                // the page after the player clicks Refresh.
                 clientsClaim: true,
                 // Inject redirect logic before workbox's own handlers
                 importScripts: ['sw-redirect.js'],
