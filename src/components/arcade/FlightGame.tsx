@@ -3,6 +3,7 @@ import { Volume2, VolumeX, SkipForward } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Chip } from '../ui/Chip';
 import FallbackErrorBoundary from '../error/FallbackErrorBoundary';
+import { holdChunkReload } from '../error/staleChunkRecovery';
 import { useBodyScrollLock } from '../ui/layout/useBodyScrollLock';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { createGame, step } from '../../utils/arcade/engine';
@@ -484,6 +485,13 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
             endArcadeSession();
         };
     }, []);
+
+    // A reload for a stale model chunk (see `reportChunkLoadError`) waits while a run, its result
+    // screen or its leaderboard submit is up: it goes ahead on the select screen or on closing.
+    useEffect(() => {
+        holdChunkReload(phase !== 'select');
+    }, [phase]);
+    useEffect(() => () => holdChunkReload(false), []);
 
     const sessionSignal = () => sessionRef.current?.signal ?? ABORTED_SIGNAL;
 

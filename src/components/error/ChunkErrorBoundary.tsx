@@ -1,31 +1,9 @@
 import React, { Component, ReactNode } from 'react';
 import { Loader } from '../ui/Loader';
 import { Button } from '../ui/Button';
+import { isChunkLoadError, markReload, reloadedRecently } from './chunkLoadError';
 
-/** sessionStorage key holding the time of the last automatic reload. */
-export const CHUNK_RELOAD_KEY = 'chunkErrorReloadAt';
-/** A chunk that still fails within this long of an automatic reload is not fixed by reloading,
- *  so the boundary stops and offers a manual reload instead of looping. */
-export const CHUNK_RELOAD_WINDOW_MS = 60_000;
-
-/** Reads the last automatic reload time; storage that throws counts as "just reloaded", so a
- *  browser that blocks storage never loops. */
-function reloadedRecently(): boolean {
-    try {
-        const at = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY));
-        return at > 0 && Date.now() - at < CHUNK_RELOAD_WINDOW_MS;
-    } catch {
-        return true;
-    }
-}
-
-function markReload(): void {
-    try {
-        sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
-    } catch {
-        // Storage that throws here also threw in reloadedRecently(), which blocks the reload.
-    }
-}
+export { CHUNK_RELOAD_KEY, CHUNK_RELOAD_WINDOW_MS } from './chunkLoadError';
 
 interface Props {
     children: ReactNode;
@@ -59,21 +37,7 @@ class ChunkErrorBoundary extends Component<Props, State> {
     }
 
     static isChunkLoadError(error: Error): boolean {
-        // Vite/Webpack chunk load errors typically contain these patterns
-        const chunkErrorPatterns = [
-            'Loading chunk',
-            'ChunkLoadError',
-            'Loading CSS chunk',
-            'Failed to fetch dynamically imported module',
-            'Importing a module script failed',
-        ];
-
-        const errorMessage = error.message || '';
-        const errorName = error.name || '';
-
-        return chunkErrorPatterns.some(
-            (pattern) => errorMessage.includes(pattern) || errorName.includes(pattern)
-        );
+        return isChunkLoadError(error);
     }
 
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
