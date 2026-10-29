@@ -10,8 +10,8 @@ implements it and emits `AutogearProgress` — extend `BaseStrategy` rather than
 callback by hand.
 
 Autogear is CPU-intensive and runs on the main thread. No Web Worker runs any part of it — the
-only worker in the project is the workbox service worker registered in `src/index.tsx`, which
-handles PWA auto-update and nothing else.
+only worker in the project is the workbox service worker (`src/utils/serviceWorkerUpdate.ts`), which
+handles PWA updates and nothing else.
 
 **`runShipOptimizer.ts`:** `findOptimalGearForShip` is the single entry point that runs one ship
 through the strategy — the batch Autogear run calls it, never a strategy directly.

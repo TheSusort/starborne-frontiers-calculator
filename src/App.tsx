@@ -4,6 +4,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import { Sidebar } from './components/ui';
 import { NotificationProvider } from './contexts/NotificationProvider';
 import { NotificationContainer } from './components/notification/NotificationContainer';
+import { UpdatePrompt } from './components/notification/UpdatePrompt';
 import { AuthProvider } from './contexts/AuthProvider';
 import { InventoryProvider } from './contexts/InventoryProvider';
 import { ShipsProvider } from './contexts/ShipsContext';
@@ -425,6 +426,7 @@ const App: React.FC = () => {
                                                                 />
                                                             )}
                                                             <NotificationContainer />
+                                                            <UpdatePrompt />
                                                             <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
                                                                 <JokeCorner />
                                                                 <StarredShipAlerts />
