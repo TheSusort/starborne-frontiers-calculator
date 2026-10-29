@@ -72,6 +72,9 @@ export const ShipIndexPage: React.FC = () => {
     const [passive2Hover, setPassive2Hover] = useState('');
     const [passive3Hover, setPassive3Hover] = useState('');
     const tooltipRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    // A clicked skill button pins its tooltip (keyed like `tooltipRefs`) until a mousedown lands
+    // outside both the button and the tooltip, so its text can be selected and copied.
+    const [pinnedSkill, setPinnedSkill] = useState('');
     const { startGroup, hasCompletedGroup } = useTutorial();
     const [copiedSkill, setCopiedSkill] = useState('');
     const [bioShipName, setBioShipName] = useState<string | null>(null);
@@ -94,6 +97,18 @@ export const ShipIndexPage: React.FC = () => {
         },
         [addNotification]
     );
+
+    useEffect(() => {
+        if (!pinnedSkill) return;
+        const handleMouseDown = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (tooltipRefs.current[pinnedSkill]?.contains(target)) return;
+            if (target instanceof Element && target.closest('#tooltip-root')) return;
+            setPinnedSkill('');
+        };
+        document.addEventListener('mousedown', handleMouseDown);
+        return () => document.removeEventListener('mousedown', handleMouseDown);
+    }, [pinnedSkill]);
 
     // Auto-start tutorial on first visit
     useEffect(() => {
@@ -483,13 +498,16 @@ export const ShipIndexPage: React.FC = () => {
                                                                 <Button
                                                                     variant="secondary"
                                                                     size="xs"
-                                                                    onClick={() =>
+                                                                    onClick={() => {
+                                                                        setPinnedSkill(
+                                                                            `${ship.name}_active`
+                                                                        );
                                                                         void copySkillText(
                                                                             ship.name,
                                                                             'Active',
                                                                             ship.activeSkillText!
-                                                                        )
-                                                                    }
+                                                                        );
+                                                                    }}
                                                                 >
                                                                     {copiedSkill ===
                                                                     `${ship.name}_Active`
@@ -499,7 +517,9 @@ export const ShipIndexPage: React.FC = () => {
                                                             </div>
                                                             <Tooltip
                                                                 isVisible={
-                                                                    activeHover === ship.name
+                                                                    activeHover === ship.name ||
+                                                                    pinnedSkill ===
+                                                                        `${ship.name}_active`
                                                                 }
                                                                 targetElement={
                                                                     tooltipRefs.current[
@@ -533,13 +553,16 @@ export const ShipIndexPage: React.FC = () => {
                                                                 <Button
                                                                     variant="secondary"
                                                                     size="xs"
-                                                                    onClick={() =>
+                                                                    onClick={() => {
+                                                                        setPinnedSkill(
+                                                                            `${ship.name}_charge`
+                                                                        );
                                                                         void copySkillText(
                                                                             ship.name,
                                                                             'Charge',
                                                                             ship.chargeSkillText!
-                                                                        )
-                                                                    }
+                                                                        );
+                                                                    }}
                                                                 >
                                                                     {copiedSkill ===
                                                                     `${ship.name}_Charge`
@@ -549,7 +572,9 @@ export const ShipIndexPage: React.FC = () => {
                                                             </div>
                                                             <Tooltip
                                                                 isVisible={
-                                                                    chargeHover === ship.name
+                                                                    chargeHover === ship.name ||
+                                                                    pinnedSkill ===
+                                                                        `${ship.name}_charge`
                                                                 }
                                                                 targetElement={
                                                                     tooltipRefs.current[
@@ -586,13 +611,16 @@ export const ShipIndexPage: React.FC = () => {
                                                                 <Button
                                                                     variant="secondary"
                                                                     size="xs"
-                                                                    onClick={() =>
+                                                                    onClick={() => {
+                                                                        setPinnedSkill(
+                                                                            `${ship.name}_passive1`
+                                                                        );
                                                                         void copySkillText(
                                                                             ship.name,
                                                                             'Passive',
                                                                             ship.firstPassiveSkillText!
-                                                                        )
-                                                                    }
+                                                                        );
+                                                                    }}
                                                                 >
                                                                     {copiedSkill ===
                                                                     `${ship.name}_Passive`
@@ -602,7 +630,9 @@ export const ShipIndexPage: React.FC = () => {
                                                             </div>
                                                             <Tooltip
                                                                 isVisible={
-                                                                    passive1Hover === ship.name
+                                                                    passive1Hover === ship.name ||
+                                                                    pinnedSkill ===
+                                                                        `${ship.name}_passive1`
                                                                 }
                                                                 targetElement={
                                                                     tooltipRefs.current[
@@ -637,13 +667,16 @@ export const ShipIndexPage: React.FC = () => {
                                                                 <Button
                                                                     variant="secondary"
                                                                     size="xs"
-                                                                    onClick={() =>
+                                                                    onClick={() => {
+                                                                        setPinnedSkill(
+                                                                            `${ship.name}_passive2`
+                                                                        );
                                                                         void copySkillText(
                                                                             ship.name,
                                                                             'Passive R2',
                                                                             ship.secondPassiveSkillText!
-                                                                        )
-                                                                    }
+                                                                        );
+                                                                    }}
                                                                 >
                                                                     {copiedSkill ===
                                                                     `${ship.name}_Passive R2`
@@ -653,7 +686,9 @@ export const ShipIndexPage: React.FC = () => {
                                                             </div>
                                                             <Tooltip
                                                                 isVisible={
-                                                                    passive2Hover === ship.name
+                                                                    passive2Hover === ship.name ||
+                                                                    pinnedSkill ===
+                                                                        `${ship.name}_passive2`
                                                                 }
                                                                 targetElement={
                                                                     tooltipRefs.current[
@@ -688,13 +723,16 @@ export const ShipIndexPage: React.FC = () => {
                                                                 <Button
                                                                     variant="secondary"
                                                                     size="xs"
-                                                                    onClick={() =>
+                                                                    onClick={() => {
+                                                                        setPinnedSkill(
+                                                                            `${ship.name}_passive3`
+                                                                        );
                                                                         void copySkillText(
                                                                             ship.name,
                                                                             'Passive R4',
                                                                             ship.thirdPassiveSkillText!
-                                                                        )
-                                                                    }
+                                                                        );
+                                                                    }}
                                                                 >
                                                                     {copiedSkill ===
                                                                     `${ship.name}_Passive R4`
@@ -704,7 +742,9 @@ export const ShipIndexPage: React.FC = () => {
                                                             </div>
                                                             <Tooltip
                                                                 isVisible={
-                                                                    passive3Hover === ship.name
+                                                                    passive3Hover === ship.name ||
+                                                                    pinnedSkill ===
+                                                                        `${ship.name}_passive3`
                                                                 }
                                                                 targetElement={
                                                                     tooltipRefs.current[
