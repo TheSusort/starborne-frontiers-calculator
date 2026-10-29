@@ -7,6 +7,7 @@ import { ChangelogEntry } from '../types/changelog';
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: current configuration now ignores "Assume all gear is calibrated".',
     'Simulator and calculators: defense now reduces damage by the exact in-game formula.',
+    "Combat simulator: Lionheart's Defense Up II now goes to himself only.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
