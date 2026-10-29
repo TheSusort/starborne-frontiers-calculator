@@ -129,14 +129,14 @@ describe('ArcadeLeaderboard distance and credits', () => {
         expect(within(podiumOf('Ace')).getByText('11,200 m \u00b7 604 credits')).toBeTruthy();
         const cells = Array.from(rowOf('Dee').querySelectorAll('td')).map((c) => c.textContent);
         expect(cells).toContain('6,420 m');
-        expect(cells).toContain('312 credits');
+        expect(cells).toContain('312');
     });
     it('renders a missing value as a dash', async () => {
         render(board(withRun));
         await screen.findByText('Eve');
         const cells = Array.from(rowOf('Eve').querySelectorAll('td')).map((c) => c.textContent);
         expect(cells).toContain('\u2013');
-        expect(cells).toContain('5 credits');
+        expect(cells).toContain('5');
     });
     it('hides the separate columns below sm and repeats the run under the score', async () => {
         render(board(withRun));

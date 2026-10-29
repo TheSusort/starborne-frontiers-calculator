@@ -61,7 +61,7 @@ export const PodiumCard: React.FC<PodiumCardProps> = ({
         )}
         <span className="text-sm tabular-nums text-theme-text-secondary">{value}</span>
         {detail && (
-            <span className="max-w-full truncate text-xs tabular-nums text-theme-text-secondary">
+            <span className="max-w-full break-words text-xs tabular-nums text-theme-text-secondary">
                 {detail}
             </span>
         )}

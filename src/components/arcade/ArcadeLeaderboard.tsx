@@ -6,7 +6,7 @@ import { PodiumCard } from '../ui/PodiumCard';
 import { Image } from '../ui/Image';
 import type { ArcadeLeaderboardEntry } from '../../utils/arcade/leaderboardRows';
 import { useShipPortraits } from './ships/useShipPortraits';
-import { formatCredits, formatDistance, formatRunStats } from './bestRunSource';
+import { formatDistance, formatRunStats, NO_VALUE } from './bestRunSource';
 import { isGapRow, splitPodium, withGapRows, type LeaderboardViewRow } from './leaderboardRowsView';
 
 const MEDAL_COLORS: Record<number, string> = {
@@ -161,7 +161,11 @@ const columnsFor = (portraitFor: PortraitFor): Column<LeaderboardViewRow>[] => [
         align: 'right',
         className: 'hidden sm:table-cell',
         render: (r) =>
-            isGapRow(r) ? '' : <span className="tabular-nums">{formatCredits(r.credits)}</span>,
+            isGapRow(r) ? (
+                ''
+            ) : (
+                <span className="tabular-nums">{r.credits?.toLocaleString() ?? NO_VALUE}</span>
+            ),
     },
 ];
 
