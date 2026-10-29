@@ -6451,6 +6451,7 @@ function findNthOccurrencePos(text: string, name: string, occurrenceIndex: numbe
  *      · single-ally receiver ("grants the/an/that ally X", "grants them X") → 'ally'
  *      · NO explicit receiver, self-only status ("This Unit grants Taunt")   → 'self'
  *      · NO explicit receiver ("This Unit grants X")                         → 'all-allies'
+ *      · NO explicit receiver in a clause that deals damage (Lionheart)        → 'self'
  *
  * Returns a LIST because of that one combined receiver: the caster and its board neighbours are
  * disjoint recipient sets (`adjacentAllyIds` excludes the owner) and no single scope spans them.
@@ -6523,11 +6524,11 @@ function detectGrantScopes(
         // Taunt draws enemy fire to the ship carrying it, so a receiver-less "grants Taunt" is the
         // caster taking it, exactly like "gains Taunt".
         if (SELF_ONLY_GRANT_NAMES.has(buffName.toLowerCase())) return ['self'];
-        // A receiver-less grant in a clause that also deals damage goes to the caster and its
-        // adjacent allies: Lionheart's "deals 170% damage and grants Defense Up II" (owner rulings
-        // R60/R62). Such a skill's targeting pattern is its OFFENSIVE one, so there is no support
-        // pattern in the data for the engine to narrow an all-allies grant with.
-        if (DEALS_DAMAGE_RE.test(clause)) return SELF_AND_ADJACENT;
+        // A receiver-less grant in a clause that also deals damage goes to the caster alone:
+        // Lionheart's "deals 170% damage and grants Defense Up II" (measured in game: an adjacent
+        // ally's hits taken stay unbuffed). Such a skill's targeting pattern is its OFFENSIVE one,
+        // so there is no support pattern for the engine to narrow an all-allies grant with.
+        if (DEALS_DAMAGE_RE.test(clause)) return ['self'];
         // Receiver-less grant → all players (the locked routing rule; the engine narrows it to
         // the skill's support pattern).
         return ['all-allies'];

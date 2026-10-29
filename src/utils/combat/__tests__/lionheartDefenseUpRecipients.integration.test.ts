@@ -1,13 +1,11 @@
 /**
  * Lionheart's active "deals 170% damage and grants Defense Up II for 2 turns" names no
- * recipient. Owner rulings R60/R62 (2026-10-05, Q4): the grant goes to Lionheart HIMSELF and his
- * ADJACENT allies — the game gives his active a support pattern of its own beside the offensive
- * Line-from-centre one, which `docs/ship-targeting.csv` does not carry.
+ * recipient. Measured in game, the grant lands on Lionheart alone:
+ * an ally beside him takes unbuffed hits.
  *
  * Board: Lionheart at M3 casts his active once. M3's neighbours are M2, M4, T2, T3, B2, B3
  * (targeting/board.ts), so the ally at M4 is adjacent and the ally at M1 is two hexes away. The
- * reverse board swaps the two allies' cells. Both allies are full roster members on Lionheart's
- * side that differ only by position, so "the far ally got nothing" measures adjacency.
+ * reverse board swaps the two allies' cells, so neither position receives it.
  *
  * Run with Lionheart on the player side and on the enemy side.
  */
@@ -101,17 +99,15 @@ const allAlliesControl = (): ShipSkills => ({
 });
 
 describe.each<Placement>(['player', 'enemy'])('Lionheart on the %s side', (placement) => {
-    it('Defense Up II lands on Lionheart and the adjacent ally, not the far one', () => {
+    it('Defense Up II lands on Lionheart only, not the adjacent ally', () => {
         expect(recipients(placement, realKit('Lionheart'), 'M4', 'M1', 'Defense Up II')).toEqual([
             'lionheart',
-            'near',
         ]);
     });
 
-    it('reverse board: the ally cells swapped, the grant follows adjacency', () => {
+    it('reverse board: the ally cells swapped, still Lionheart only', () => {
         // `near` now stands two hexes away at M1 and `far` beside him at T3.
         expect(recipients(placement, realKit('Lionheart'), 'M1', 'T3', 'Defense Up II')).toEqual([
-            'far',
             'lionheart',
         ]);
     });
