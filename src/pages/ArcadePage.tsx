@@ -65,13 +65,10 @@ const ArcadePage: React.FC = () => {
     return (
         <>
             <Seo {...SEO_CONFIG.arcade} />
-            <PageLayout
-                title="Arcade"
-                description="Take the controls of the synthwave fighter and see how far you can fly."
-            >
+            <PageLayout title="Arcade" hideHeader>
                 <div className="mx-auto w-full max-w-3xl space-y-6">
                     <div className="card flex flex-col items-center gap-4 py-8 text-center">
-                        <h2 className="arcade-title">Starborne Arcade</h2>
+                        <h1 className="arcade-title">Starborne Arcade</h1>
                         <p className="max-w-md text-theme-text">
                             Dodge walls, jump lasers, duck blocks, grab credits. The speed keeps
                             rising.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickBestRun } from '../bestRunSource';
+import { formatRunStats, pickBestRun } from '../bestRunSource';
 import type { ArcadeLeaderboardEntry } from '../../../utils/arcade/leaderboardRows';
 
 const entry = (over: Partial<ArcadeLeaderboardEntry>): ArcadeLeaderboardEntry => ({
@@ -42,5 +42,15 @@ describe('pickBestRun', () => {
     it('is null when there is no run at all', () => {
         expect(pickBestRun([], null)).toBeNull();
         expect(pickBestRun([], { score: 0, distance: null, credits: null })).toBeNull();
+    });
+});
+
+describe('formatRunStats', () => {
+    it('joins distance and credits, dashing a missing half', () => {
+        expect(formatRunStats(6420, 312)).toBe('6,420 m \u00b7 312 credits');
+        expect(formatRunStats(null, 312)).toBe('\u2013 \u00b7 312 credits');
+    });
+    it('is empty when both are missing, so no run line renders', () => {
+        expect(formatRunStats(null, null)).toBe('');
     });
 });

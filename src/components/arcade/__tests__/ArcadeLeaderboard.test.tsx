@@ -65,7 +65,7 @@ describe('ArcadeLeaderboard ship', () => {
         await screen.findByText('Eve');
         const row = rowOf('Eve');
         expect(row.querySelector('img')).toBeNull();
-        expect(row.textContent).toBe('#5Eve500\u2013 \u00b7 \u2013\u2013\u2013');
+        expect(row.textContent).toBe('#5Eve500\u2013\u2013');
     });
 
     it('shows the ship on the podium', async () => {
