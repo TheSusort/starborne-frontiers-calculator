@@ -72,8 +72,8 @@ const lodolitePassive = (): ShipSkills => ({
 const rikraActive = (): ShipSkills => ({
     slots: [{ slot: 'active', abilities: realSlot('Rikra', 'active') }],
 });
-/** No corpus ship carries a control-effect damage gate, so this active is parsed from that wording
- *  inline. */
+/** Sokol's active as the official catalogue words it (game 3.24), parsed inline so the suite does
+ *  not depend on which text docs/ship-skills.csv holds. */
 const CONTROL_GATED_ACTIVE =
     'This Unit deals <unit-damage>80% damage</unit-damage> and, if the target is affected by a <unit-skill>control</unit-skill> effect, deals an additional <unit-damage>130% damage</unit-damage>.';
 const controlGatedActive = (): ShipSkills => {
@@ -358,5 +358,60 @@ describe('"if the target is affected by a control effect" reads the struck enemy
         expect(plain).toEqual(['attacker:800']);
         expect(hitsBy(enemyBoard(NONE, selfGrant('Taunt')), 'e-gated')).toEqual(plain);
         expect(hitsBy(enemyBoard(selfGrant('Taunt')), 'e-gated')).toEqual(['attacker:2100']);
+    });
+
+    // The control DEBUFFS (Stasis, Disable, Provoke) arrive from the hitter's faster ally, which
+    // inflicts them on the hitter's target before the hitter acts. Hacking 1000 vs security 0
+    // lands every roll. A Stasis'd target still counts at the hit that breaks the Stasis: the gate
+    // is read before impact.
+    const inflictOnFront = (status: string): ShipSkills => {
+        const ship = {
+            refits: [],
+            activeSkillText: `This Unit inflicts <unit-skill>${status}</unit-skill> for 2 turns.`,
+        } as unknown as Ship;
+        const found = buildShipAbilities(ship).slots.find((s) => s.slot === 'active');
+        if (!found?.abilities.some((a) => a.type === 'debuff' || a.type === 'control')) {
+            throw new Error(`${status} infliction did not parse`);
+        }
+        return { slots: [found] };
+    };
+
+    describe.each(['Stasis', 'Disable', 'Provoke'])('%s on the target', (status) => {
+        it('player: an ally inflicts it on A first → 80% + 130% on A', () => {
+            const ally = playerShip('p-controller', 'M3', inflictOnFront(status), 300);
+            ally.walk!.stats.hacking = 1000;
+            const withAlly = base({
+                shipSkills: controlGatedActive(),
+                ignoresForcedTargeting: true,
+                teamActors: [ally],
+                enemyAttackers: [enemyAt('e-a', 'M4')],
+            });
+            expect(hitsBy(withAlly, 'attacker')).toEqual(['e-a:2100']);
+            // Control: the same ally with no infliction → base 80% only.
+            const idle = base({
+                shipSkills: controlGatedActive(),
+                ignoresForcedTargeting: true,
+                teamActors: [playerShip('p-controller', 'M3', NONE, 300)],
+                enemyAttackers: [enemyAt('e-a', 'M4')],
+            });
+            expect(hitsBy(idle, 'attacker')).toEqual(['e-a:800']);
+        });
+
+        it('enemy: an enemy ally inflicts it on the player focus first → 80% + 130%', () => {
+            const board = (controllerSkills: ShipSkills): CombatEngineInput => {
+                const hitterShip = enemyAt('e-gated', 'M4', controlGatedActive(), {
+                    attack: 1000,
+                    speed: 100,
+                });
+                hitterShip.ignoresForcedTargeting = true;
+                const controller = enemyAt('e-controller', 'M3', controllerSkills, {
+                    speed: 300,
+                });
+                controller.stats.hacking = 1000;
+                return base({ attack: 0, speed: 1, enemyAttackers: [hitterShip, controller] });
+            };
+            expect(hitsBy(board(inflictOnFront(status)), 'e-gated')).toEqual(['attacker:2100']);
+            expect(hitsBy(board(NONE), 'e-gated')).toEqual(['attacker:800']);
+        });
     });
 });

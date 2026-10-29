@@ -6,6 +6,7 @@ import { ChangelogEntry } from '../types/changelog';
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'App updates: a banner now lets you choose when to refresh.',
+    'Ship data: LUXX, Ripper and Sokol updated to the latest game patch.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

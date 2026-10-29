@@ -27,19 +27,6 @@ export const TEXT_PINS: readonly TextPin[] = [
         reason: "User ruling 2026-10-01 (R2): Tormenter's active grants Out. Damage Up I to itself and adjacent allies; catalogue text omits itself",
         ruledAgainst: 'This Unit deals <unit-damage>160% damage</unit-damage> and grants all adjacent allies <unit-skill>Out. Damage Up I</unit-skill> for 1 turn.',
     },
-    {
-        definitionId: 'XAOC_Defender_Epic_1',
-        column: 'first_passive_skill_text',
-        reason: "User ruling 2026-10-17: Nosorog reflects 16% of the damage (#678); the catalogue's 40% of the damage taken is an old localization",
-        ruledAgainst: 'This Unit <unit-skill>reflects</unit-skill> 40% of the damage taken back to the enemy when directly damaged as a primary target.',
-    },
-    {
-        definitionId: 'XAOC_Defender_Epic_1',
-        column: 'second_passive_skill_text',
-        reason: "User ruling 2026-10-17: Nosorog reflects 16% of the damage (#678); the catalogue's 40% of the damage taken is an old localization",
-        ruledAgainst:
-            'This Unit <unit-skill>reflects</unit-skill> 40% of the damage taken back to the enemy when directly damaged as a primary target.<br /><br />Additionally, when this Unit removes a <unit-aid>debuff</unit-aid>, it gains <unit-skill>Defense Up II</unit-skill> for 1 turn.',
-    },
 ];
 
 export const pinsFor = (definitionId: string, pins: readonly TextPin[]): TextPin[] =>
