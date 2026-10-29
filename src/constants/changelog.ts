@@ -4,11 +4,14 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Shared encounters: authors now appear under their profile username.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.85.0',
+        date: '2026-10-29',
+        changes: ['Shared encounters: authors now appear under their profile username.'],
+    },
     {
         version: '1.84.0',
         date: '2026-10-29',
