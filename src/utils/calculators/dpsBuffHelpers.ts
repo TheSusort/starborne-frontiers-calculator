@@ -127,12 +127,9 @@ export function toSelfIncomingDamageModifier(selected: SelectedGameBuff[]): numb
  *  here — a clamp here would also silently swallow an over-shred.
  *
  *  CORRECTION (addendum A5.1): that downstream guard does NOT prevent a "damage bonus" —
- *  `calculateDamageReduction` is bounded in [0, 88.3505] and can never return a negative, so a
- *  bonus is impossible by construction regardless of the guard. What the guard actually prevents
- *  is NaN propagation: `log10` of a non-positive effective defence is `-Infinity`/`NaN`, which an
- *  overshoot past -100% produces. At exactly -100% the guard is a no-op (effective defence is
- *  already exactly 0, and `calculateDamageReduction(0)` is already 0) — only an overshoot below
- *  -100% exercises it at all. */
+ *  `calculateDamageReduction` returns 0 for any non-positive defence and stays in [0, 100), so a
+ *  bonus is impossible by construction regardless of the guard, and an overshoot past -100%
+ *  reads as zero reduction exactly like -100% does. */
 export function toSelfDefenseModifier(selected: SelectedGameBuff[]): number {
     return selected.reduce(
         (sum, s) => sum + (holderDefencePct(s.parsedEffects) ?? 0) * s.stacks,

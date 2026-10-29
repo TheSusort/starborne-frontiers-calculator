@@ -18,6 +18,8 @@ interface PageLayoutProps {
     actionNode?: React.ReactNode;
     helpLink?: string;
     tutorialGroupId?: string | string[];
+    /** Omits the header block (title, description, actions); the page then renders its own h1. */
+    hideHeader?: boolean;
 }
 
 export const PageLayout: React.FC<PageLayoutProps> = ({
@@ -28,6 +30,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
     actionNode,
     helpLink,
     tutorialGroupId,
+    hideHeader = false,
 }) => {
     const [pathname, hash] = helpLink?.split('#') || [''];
     const [isTooltipVisible, setIsTooltipVisible] = useState(false);
@@ -35,76 +38,78 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
 
     return (
         <div className="space-y-8">
-            <div>
-                <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold ">{title}</h1>
-                    <div className="flex items-center gap-2">
-                        {actionNode}
-                        {action && (
-                            <Button
-                                aria-label={action.label}
-                                variant={action.variant || 'primary'}
-                                onClick={action.onClick}
-                                data-tutorial={action.dataTutorial}
-                            >
-                                {action.label}
-                            </Button>
-                        )}
-                    </div>
-                </div>
-                {description && (
-                    <p className="text-sm text-theme-text-secondary order-2 w-full">
-                        {description}
-                    </p>
-                )}
-                {(helpLink || tutorialGroupId) && (
-                    <div className="flex gap-2 mt-2">
-                        {helpLink && (
-                            <div
-                                ref={tooltipRef}
-                                onMouseEnter={() => setIsTooltipVisible(true)}
-                                onMouseLeave={() => setIsTooltipVisible(false)}
-                                className="relative w-fit"
-                            >
-                                <Button variant="secondary" size="sm">
-                                    <Link
-                                        to={{
-                                            pathname,
-                                            hash,
-                                        }}
-                                        className="flex items-center gap-2"
-                                    >
-                                        <InfoIcon /> Docs
-                                    </Link>
+            {!hideHeader && (
+                <div>
+                    <div className="flex justify-between items-center">
+                        <h1 className="text-2xl font-bold ">{title}</h1>
+                        <div className="flex items-center gap-2">
+                            {actionNode}
+                            {action && (
+                                <Button
+                                    aria-label={action.label}
+                                    variant={action.variant || 'primary'}
+                                    onClick={action.onClick}
+                                    data-tutorial={action.dataTutorial}
+                                >
+                                    {action.label}
                                 </Button>
-                                <Tooltip
-                                    isVisible={isTooltipVisible}
-                                    className="bg-dark border border-dark-lighter p-2 w-48"
-                                    targetElement={tooltipRef.current}
-                                >
-                                    <p className="text-sm text-theme-text">
-                                        Click to view the relevant help section
-                                    </p>
-                                </Tooltip>
-                            </div>
-                        )}
-                        {tutorialGroupId && (
-                            <>
-                                <TutorialReplayButton groupId={tutorialGroupId} />
-                                <Tooltip
-                                    isVisible={isTooltipVisible}
-                                    className="bg-dark border border-dark-lighter p-2 w-48"
-                                    targetElement={tooltipRef.current}
-                                >
-                                    <p className="text-sm text-theme-text">
-                                        Click to replay the tutorial for this page
-                                    </p>
-                                </Tooltip>
-                            </>
-                        )}
+                            )}
+                        </div>
                     </div>
-                )}
-            </div>
+                    {description && (
+                        <p className="text-sm text-theme-text-secondary order-2 w-full">
+                            {description}
+                        </p>
+                    )}
+                    {(helpLink || tutorialGroupId) && (
+                        <div className="flex gap-2 mt-2">
+                            {helpLink && (
+                                <div
+                                    ref={tooltipRef}
+                                    onMouseEnter={() => setIsTooltipVisible(true)}
+                                    onMouseLeave={() => setIsTooltipVisible(false)}
+                                    className="relative w-fit"
+                                >
+                                    <Button variant="secondary" size="sm">
+                                        <Link
+                                            to={{
+                                                pathname,
+                                                hash,
+                                            }}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <InfoIcon /> Docs
+                                        </Link>
+                                    </Button>
+                                    <Tooltip
+                                        isVisible={isTooltipVisible}
+                                        className="bg-dark border border-dark-lighter p-2 w-48"
+                                        targetElement={tooltipRef.current}
+                                    >
+                                        <p className="text-sm text-theme-text">
+                                            Click to view the relevant help section
+                                        </p>
+                                    </Tooltip>
+                                </div>
+                            )}
+                            {tutorialGroupId && (
+                                <>
+                                    <TutorialReplayButton groupId={tutorialGroupId} />
+                                    <Tooltip
+                                        isVisible={isTooltipVisible}
+                                        className="bg-dark border border-dark-lighter p-2 w-48"
+                                        targetElement={tooltipRef.current}
+                                    >
+                                        <p className="text-sm text-theme-text">
+                                            Click to replay the tutorial for this page
+                                        </p>
+                                    </Tooltip>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
             {children}
         </div>
     );

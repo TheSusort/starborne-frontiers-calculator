@@ -9,8 +9,26 @@ describe('parseLeaderboardRows', () => {
                 { player_rank: 7, username: 'Me', best_score: 100, is_me: true },
             ])
         ).toEqual([
-            { rank: 1, username: 'Ace', bestScore: 900, isMe: false, ship: null, isGuest: false },
-            { rank: 7, username: 'Me', bestScore: 100, isMe: true, ship: null, isGuest: false },
+            {
+                rank: 1,
+                username: 'Ace',
+                bestScore: 900,
+                isMe: false,
+                ship: null,
+                isGuest: false,
+                distance: null,
+                credits: null,
+            },
+            {
+                rank: 7,
+                username: 'Me',
+                bestScore: 100,
+                isMe: true,
+                ship: null,
+                isGuest: false,
+                distance: null,
+                credits: null,
+            },
         ]);
     });
     it('drops malformed rows and tolerates non-arrays', () => {
@@ -54,6 +72,8 @@ describe('parseLeaderboardRows ship', () => {
                 isMe: false,
                 ship: null,
                 isGuest: false,
+                distance: null,
+                credits: null,
             });
         }
     });
@@ -72,6 +92,35 @@ describe('parseLeaderboardRows is_guest', () => {
         expect(parseLeaderboardRows([row])[0].isGuest).toBe(false);
         expect(parseLeaderboardRows([{ ...row, is_guest: 'yes' }])[0].isGuest).toBe(false);
     });
+});
+
+describe('parseLeaderboardRows distance and credits', () => {
+    const row = (extra: Record<string, unknown>) =>
+        parseLeaderboardRows([{ player_rank: 1, username: 'Ace', best_score: 9, ...extra }])[0];
+
+    it('reads distance and credits of the best run', () => {
+        expect(row({ best_distance: 6420, best_credits: 312 })).toMatchObject({
+            distance: 6420,
+            credits: 312,
+        });
+        expect(row({ best_distance: 0, best_credits: 0 })).toMatchObject({
+            distance: 0,
+            credits: 0,
+        });
+    });
+    it('is null when the database does not return them', () => {
+        expect(row({})).toMatchObject({ distance: null, credits: null });
+    });
+    it.each([-1, 1.5, '6420', NaN, null])(
+        'nulls invalid value %s without dropping the row',
+        (v) => {
+            expect(row({ best_distance: v, best_credits: v })).toMatchObject({
+                username: 'Ace',
+                distance: null,
+                credits: null,
+            });
+        }
+    );
 });
 
 describe('isValidGuestName', () => {

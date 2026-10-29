@@ -567,4 +567,4 @@ describe('the single-ship DPS calculator keeps one target', () => {
 
 /** Arum's single-target `simulateDPS` total for DPS_INPUT under the suite seed: one enemy, so
  *  a footprint fan-out has nobody else to reach and must not move it. */
-const DPS_ARUM_TOTAL = 165_994;
+const DPS_ARUM_TOTAL = 164_860;

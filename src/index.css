@@ -337,6 +337,22 @@
         animation: arcade-you-died-text 3.4s cubic-bezier(0.25, 0.6, 0.3, 1) 0.15s both;
     }
 
+    /* The arcade start screen's title: the same Orbitron purple-to-orange gradient as the
+       "YOU DIED" words, at heading size and without the entrance animation. */
+    .arcade-title {
+        font-family: 'Orbitron', sans-serif;
+        font-weight: 700;
+        font-size: clamp(1.75rem, 7vw, 3rem);
+        line-height: 1.15;
+        letter-spacing: 0.2em;
+        padding-left: 0.2em;
+        background-image: linear-gradient(to bottom, #b06cff 8%, #ff4fd8 52%, #ffa45c 92%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        filter: drop-shadow(0 0 14px rgba(255, 79, 216, 0.45));
+    }
+
     @keyframes arcade-you-died-fade {
         from {
             opacity: 0;

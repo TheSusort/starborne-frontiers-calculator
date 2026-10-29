@@ -1,13 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { DataTable, Column } from '../ui/tables/DataTable';
 import { Button } from '../ui/Button';
 import { Chip } from '../ui/Chip';
 import { PodiumCard } from '../ui/PodiumCard';
 import { Image } from '../ui/Image';
-import { useAuth } from '../../contexts/AuthProvider';
-import { getArcadeLeaderboard } from '../../services/arcadeService';
 import type { ArcadeLeaderboardEntry } from '../../utils/arcade/leaderboardRows';
 import { useShipPortraits } from './ships/useShipPortraits';
+import { formatDistance, formatRunStats, NO_VALUE } from './bestRunSource';
 import { isGapRow, splitPodium, withGapRows, type LeaderboardViewRow } from './leaderboardRowsView';
 
 const MEDAL_COLORS: Record<number, string> = {
@@ -78,6 +77,7 @@ const Podium: React.FC<{ entries: ArcadeLeaderboardEntry[]; portraitFor: Portrai
                         rank={entry.rank}
                         title={entry.username}
                         value={entry.bestScore.toLocaleString()}
+                        detail={formatRunStats(entry.distance, entry.credits)}
                         accentColor={MEDAL_COLORS[entry.rank] ?? MEDAL_COLORS[index + 1]}
                         raised={index === 0}
                         badge={
@@ -136,7 +136,36 @@ const columnsFor = (portraitFor: PortraitFor): Column<LeaderboardViewRow>[] => [
         label: 'Score',
         align: 'right',
         render: (r) =>
-            isGapRow(r) ? '' : <span className="tabular-nums">{r.bestScore.toLocaleString()}</span>,
+            isGapRow(r) ? (
+                ''
+            ) : (
+                <span className="flex flex-col items-end">
+                    <span className="tabular-nums">{r.bestScore.toLocaleString()}</span>
+                    <span className="text-xs tabular-nums text-theme-text-secondary sm:hidden">
+                        {formatRunStats(r.distance, r.credits)}
+                    </span>
+                </span>
+            ),
+    },
+    {
+        key: 'distance',
+        label: 'Distance',
+        align: 'right',
+        className: 'hidden sm:table-cell',
+        render: (r) =>
+            isGapRow(r) ? '' : <span className="tabular-nums">{formatDistance(r.distance)}</span>,
+    },
+    {
+        key: 'credits',
+        label: 'Credits',
+        align: 'right',
+        className: 'hidden sm:table-cell',
+        render: (r) =>
+            isGapRow(r) ? (
+                ''
+            ) : (
+                <span className="tabular-nums">{r.credits?.toLocaleString() ?? NO_VALUE}</span>
+            ),
     },
 ];
 
@@ -149,39 +178,15 @@ const rowClassName = (r: LeaderboardViewRow): string => {
 };
 
 interface Props {
-    limit?: number;
-    refreshKey?: number;
+    rows: ArcadeLeaderboardEntry[];
+    loading: boolean;
+    failed: boolean;
+    onRetry: () => void;
 }
 
-export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 }) => {
-    const { user, guestUserId } = useAuth();
-    const viewerId = user?.id ?? guestUserId;
+export const ArcadeLeaderboard: React.FC<Props> = ({ rows, loading, failed, onRetry }) => {
     const portraitFor = useShipPortraits();
     const columns = useMemo(() => columnsFor(portraitFor), [portraitFor]);
-    const [rows, setRows] = useState<ArcadeLeaderboardEntry[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [failed, setFailed] = useState(false);
-    const [attempt, setAttempt] = useState(0);
-
-    useEffect(() => {
-        let cancelled = false;
-        setLoading(true);
-        setFailed(false);
-        getArcadeLeaderboard(limit)
-            .then((data) => {
-                if (!cancelled) setRows(data);
-            })
-            .catch((error) => {
-                console.error('Error loading arcade leaderboard:', error);
-                if (!cancelled) setFailed(true);
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [limit, refreshKey, viewerId, attempt]);
 
     const { podium, tableRows } = useMemo(() => {
         const split = splitPodium(rows);
@@ -195,7 +200,7 @@ export const ArcadeLeaderboard: React.FC<Props> = ({ limit = 20, refreshKey = 0 
         return (
             <div className="space-y-2">
                 <p className="text-sm text-red-400">Could not load the leaderboard.</p>
-                <Button variant="secondary" size="sm" onClick={() => setAttempt((a) => a + 1)}>
+                <Button variant="secondary" size="sm" onClick={onRetry}>
                     Retry
                 </Button>
             </div>

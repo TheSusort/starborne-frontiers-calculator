@@ -8786,11 +8786,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // No name-special-casing, no positive-only filter. At -100% the effective defence
             // reaches exactly 0 and victimDefenceMitigation's `effectiveDefense > 0` guard is a
             // NO-OP there (`calculateDamageReduction(0)` is already 0). CORRECTION (addendum
-            // A5.1): the guard does not prevent a "damage bonus" — `calculateDamageReduction` is
-            // bounded in [0, 88.3505] and can never return a negative, so a bonus is impossible by
-            // construction. What the guard prevents is NaN propagation from `log10` of a
-            // non-positive effective defence, which only an OVERSHOOT below -100% (this channel
-            // stacked with enemy Defense Shred) can produce.
+            // A5.1): the guard does not prevent a "damage bonus" — `calculateDamageReduction`
+            // returns 0 for any non-positive defence and stays in [0, 100), so a bonus is
+            // impossible by construction. An OVERSHOOT below -100% (this channel stacked with
+            // enemy Defense Shred) therefore reads as zero reduction, exactly like -100%.
             //
             // NO DOUBLE COUNT: `enemy.enemyDefenseModifier` reads the victim's ENEMY-debuff store
             // only; `defence` above is the RAW base stat; and pre-fight (squad-leader) defence is a

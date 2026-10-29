@@ -1938,12 +1938,12 @@ describe('Phase 3 reactive triggers', () => {
         //   crit term     = 1 + critDamage 150/100 = 2.5   (crit 100 → this hit always crits)
         //   effectiveDef  = enemy defence 8 000 × (1 − defensePenetration 10/100) = 7 200
         //   mitigation    = 1 − calculateDamageReduction(7200)/100, and
-        //                   calculateDamageReduction(d) = 88.3505 · exp(−((4.5552 − log10 d)/1.3292)²)
-        //                                              = 67.06466018307192 % at d = 7 200
-        //   damage        = 22 500 × 2.5 × (1 − 0.6706466018307192) = 18 526.128647022044
+        //                   calculateDamageReduction(d) = 100 · d / (d + 3 500)
+        //                                              = 67.28971962616822 % at d = 7 200
+        //   damage        = 22 500 × 2.5 × 3 500 / 10 700 = 18 399.532710280375
         // No rounding anywhere on this path (`victimHitDamage` returns a float and the per-victim
         // credit stores it as-is), hence the exact fractional pin.
-        const BASE_HIT = 18_526.128647022044;
+        const BASE_HIT = 18_399.532710280375;
         const tanky = round1(run(10_000_000));
         expect(tanky).toBeCloseTo(BASE_HIT, 6);
 

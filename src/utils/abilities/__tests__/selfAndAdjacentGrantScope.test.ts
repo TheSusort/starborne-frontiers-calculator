@@ -78,19 +78,17 @@ describe('"itself and all adjacent allies" receiver — Tormenter', () => {
     });
 });
 
-// Owner rulings R60/R62 (2026-10-05): Lionheart's active "deals 170% damage and grants Defense Up
-// II for 2 turns" names no recipient, and the game sends it to Lionheart and his adjacent allies.
-// A receiver-less grant in a clause that deals damage resolves to the same self + adjacent pair as
-// Tormenter's explicit receiver.
+// Lionheart's active "deals 170% damage and grants Defense Up II for 2 turns" names no recipient.
+// Measured in game, it lands on Lionheart alone: an adjacent ally's hits taken stay unbuffed.
 describe('receiver-less grant in a damage clause — Lionheart', () => {
     beforeAll(requireReferenceData);
 
-    it('Defense Up II goes to self and adjacent-allies, never all-allies', () => {
+    it('Defense Up II goes to self only', () => {
         const abilities = buildShipAbilities(shipFromCsv('Lionheart'));
         const grants = abilities.slots
             .flatMap((s) => s.abilities)
             .filter((a) => a.config.type === 'buff' && a.config.buffName === 'Defense Up II');
-        expect(grants.map((a) => a.target).sort()).toEqual(['adjacent-allies', 'self']);
+        expect(grants.map((a) => a.target)).toEqual(['self']);
     });
 
     it('negative: a receiver-less grant on a pure-support cast stays all-allies (Cultivator)', () => {
@@ -121,7 +119,6 @@ describe('receiver-less grant in a damage clause — Lionheart', () => {
         }
         expect(pairs.sort()).toEqual([
             'Centurion:charged:Core Charge I',
-            'Lionheart:active:Defense Up II',
             'Tormenter:active:Out. Damage Up I',
         ]);
     });
