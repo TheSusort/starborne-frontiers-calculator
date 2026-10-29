@@ -5,6 +5,7 @@ import { ChangelogEntry } from '../types/changelog';
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Account: logging out now signs out only this browser, not every device.',
     'Autogear: current configuration now ignores "Assume all gear is calibrated".',
     'Simulator and calculators: defense now reduces damage by the exact in-game formula.',
 ];
