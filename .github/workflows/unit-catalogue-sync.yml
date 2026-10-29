@@ -28,9 +28,11 @@ jobs:
             VITE_SUPABASE_URL: ${{ secrets.CATALOGUE_SYNC_SUPABASE_URL }}
             SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         steps:
-            - uses: actions/checkout@v7
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  persist-credentials: false
 
-            - uses: actions/setup-node@v7
+            - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version-file: .nvmrc
                   cache: npm
@@ -44,7 +46,7 @@ jobs:
             - name: Skip if this catalogue state was already synced
               id: seen
               if: github.event_name == 'schedule'
-              uses: actions/cache/restore@v6
+              uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
               with:
                   path: .catalogue-sync-outcome.json
                   key: ${{ steps.manifest.outputs.key }}
@@ -77,7 +79,7 @@ jobs:
 
             - name: Keep snapshot and report
               if: steps.seen.outputs.cache-hit != 'true'
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: catalogue-sync-${{ github.run_id }}
                   path: |
@@ -122,7 +124,7 @@ jobs:
                   !(github.event_name == 'workflow_dispatch' && inputs.dry_run) &&
                   (steps.outcome.outputs.status == 'clean' || steps.outcome.outputs.status == 'attention') &&
                   steps.issue.outcome != 'failure'
-              uses: actions/cache/save@v6
+              uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
               with:
                   path: .catalogue-sync-outcome.json
                   key: ${{ steps.manifest.outputs.key }}
