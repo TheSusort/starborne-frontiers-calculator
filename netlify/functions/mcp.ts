@@ -31,8 +31,9 @@ export default async (request: Request): Promise<Response> => {
 // Netlify reads this statically, so the paths are literals; `src/mcp/__tests__/http.test.ts`
 // pins them to `MCP_PATH` and `PROTECTED_RESOURCE_PATHS`.
 //
-// The rate limit is per client IP and answers 429 before the function runs, so an unauthenticated
-// loop cannot spend the account's monthly invocation quota (reaching it pauses every site).
+// The rate limit is per client IP and answers 429 before the function runs, so a sustained
+// unauthenticated loop cannot drain the account's monthly invocation quota (reaching it pauses
+// every site). Blocking can take up to 10 seconds to start, so some over-limit requests still run.
 // Netlify validates the rule after deploy without failing the build: check the deploy log.
 export const config = {
     path: [

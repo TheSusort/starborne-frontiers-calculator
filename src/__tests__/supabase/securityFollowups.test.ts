@@ -46,9 +46,11 @@ describe('default privileges', () => {
         );
     });
 
-    it('new functions are not executable by PUBLIC', () => {
+    // PUBLIC's EXECUTE default is global, and an IN SCHEMA default privilege can only add grants,
+    // so only a revoke WITHOUT a schema removes it.
+    it('new functions are not executable by PUBLIC (global revoke)', () => {
         expect(allSql).toMatch(
-            /alter\s+default\s+privileges\s+for\s+role\s+postgres\s+in\s+schema\s+public\s+revoke\s+execute\s+on\s+functions\s+from\s+public/i
+            /alter\s+default\s+privileges\s+for\s+role\s+postgres\s+revoke\s+execute\s+on\s+functions\s+from\s+public/i
         );
     });
 

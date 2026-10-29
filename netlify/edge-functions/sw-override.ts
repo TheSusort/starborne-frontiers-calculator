@@ -19,7 +19,11 @@ self.skipWaiting();
 
 self.addEventListener('activate', function (event) {
   event.waitUntil(
-    self.clients.claim().then(function () {
+    // Old builds cached signed-in Supabase responses here; the app's own purge never runs on this
+    // origin. A failed delete must not stop the takeover.
+    caches.delete('supabase-api').catch(function () {}).then(function () {
+      return self.clients.claim();
+    }).then(function () {
       return self.clients.matchAll({ type: 'window' });
     }).then(function (clients) {
       return Promise.all(
