@@ -28,7 +28,9 @@ const CREATES_GUARD_TRIGGER = /create\s+trigger\s+prevent_is_admin_escalation_tr
 const guardBody = () => {
     const sql = code(latest(DEFINES_GUARD)!.sql);
     const start = sql.search(DEFINES_GUARD);
-    return sql.slice(start, sql.indexOf('$$;', start));
+    const rest = sql.slice(start);
+    const open = /\bAS\s+(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)/i.exec(rest)!;
+    return rest.slice(0, rest.indexOf(open[1], open.index + open[0].length));
 };
 
 describe('public.users write lockdown', () => {

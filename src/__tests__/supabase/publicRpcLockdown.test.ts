@@ -23,10 +23,19 @@ const latestBody = (name: string): string | undefined => {
     for (const m of [...migrations].reverse()) {
         const sql = code(m.sql);
         const start = sql.search(re);
-        if (start >= 0) return sql.slice(start, sql.indexOf('$function$;', start));
+        if (start >= 0) return dollarQuotedBody(sql.slice(start), name, m.file);
     }
     return undefined;
 };
+
+/** From a CREATE FUNCTION statement to the closing tag matching its own opening delimiter. */
+function dollarQuotedBody(rest: string, name: string, file: string): string {
+    const open = /\bAS\s+(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)/i.exec(rest);
+    if (!open) throw new Error(`No dollar-quoted body for ${name} in ${file}`);
+    const end = rest.indexOf(open[1], open.index + open[0].length);
+    if (end === -1) throw new Error(`Unterminated body for ${name} in ${file}`);
+    return rest.slice(0, end);
+}
 
 const allSql = () => migrations.map((m) => code(m.sql)).join('\n');
 
@@ -98,9 +107,15 @@ describe('public RPC lockdown', () => {
         }
     });
 
-    it('the owner UPDATE policy on ship_template_proposals is dropped', () => {
+    it('a proposer can only bump proposal_count on their own proposal', () => {
+        const body = latestBody('restrict_proposal_owner_update')!;
+        expect(body).toMatch(/security\s+invoker/i);
+        expect(body).toMatch(/current_user\s+not\s+in\s*\(\s*'anon'\s*,\s*'authenticated'\s*\)/i);
+        expect(body).toMatch(
+            /\(\s*to_jsonb\(NEW\)\s*-\s*'proposal_count'\s*-\s*'updated_at'\s*\)\s*IS\s+DISTINCT\s+FROM\s*\(\s*to_jsonb\(OLD\)\s*-\s*'proposal_count'\s*-\s*'updated_at'\s*\)/i
+        );
         expect(allSql()).toMatch(
-            /drop\s+policy\s+if\s+exists\s+"Users can update own proposals"\s+on\s+public\.ship_template_proposals/i
+            /create\s+trigger\s+restrict_proposal_owner_update_trigger\s+before\s+update\s+on\s+public\.ship_template_proposals\s+for\s+each\s+row\s+execute\s+function\s+public\.restrict_proposal_owner_update\s*\(\s*\)/i
         );
     });
 });
