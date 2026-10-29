@@ -30,10 +30,19 @@ export default async (request: Request): Promise<Response> => {
 
 // Netlify reads this statically, so the paths are literals; `src/mcp/__tests__/http.test.ts`
 // pins them to `MCP_PATH` and `PROTECTED_RESOURCE_PATHS`.
+//
+// The rate limit is per client IP and answers 429 before the function runs, so an unauthenticated
+// loop cannot spend the account's monthly invocation quota (reaching it pauses every site).
+// Netlify validates the rule after deploy without failing the build: check the deploy log.
 export const config = {
     path: [
         '/mcp',
         '/.well-known/oauth-protected-resource',
         '/.well-known/oauth-protected-resource/mcp',
     ],
+    rateLimit: {
+        windowLimit: 60,
+        windowSize: 60,
+        aggregateBy: ['ip', 'domain'],
+    },
 };

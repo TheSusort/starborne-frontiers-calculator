@@ -126,16 +126,18 @@ export const useSharedEncounters = () => {
                 };
             });
 
-            // Update the existing encounter to be public
-            const { error: noteError } = await supabase
+            // Update the existing encounter to be public. The database sets user_name from the
+            // author profile's username.
+            const { data: sharedNote, error: noteError } = await supabase
                 .from('encounter_notes')
                 .update({
                     is_public: true,
                     votes: 0,
-                    user_name: user.displayName || 'Anonymous',
                 })
                 .eq('id', encounter.id)
-                .eq('user_id', activeProfileId);
+                .eq('user_id', activeProfileId)
+                .select('user_name')
+                .single();
 
             if (noteError) throw noteError;
 
@@ -157,7 +159,7 @@ export const useSharedEncounters = () => {
                 isPublic: true,
                 formation: sharedFormation,
                 userId: activeProfileId,
-                userName: user.displayName || 'Anonymous',
+                userName: (sharedNote?.user_name as string | null) || 'Anonymous',
                 createdAt: encounter.createdAt,
                 votes: 0,
                 userVotes: {},
