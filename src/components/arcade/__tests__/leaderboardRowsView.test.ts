@@ -9,6 +9,8 @@ const row = (rank: number, isMe = false): ArcadeLeaderboardEntry => ({
     isMe,
     ship: null,
     isGuest: false,
+    distance: null,
+    credits: null,
 });
 
 describe('withGapRows', () => {

@@ -10,6 +10,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Simulator and calculators: defense now reduces damage by the exact in-game formula.',
     "Combat simulator: Lionheart's Defense Up II now goes to himself only.",
     'Ship database: clicking a skill button keeps its tooltip open until you click elsewhere.',
+    'Arcade: refreshed start screen with your best run up front.',
+    "Arcade: leaderboard now shows each pilot's distance and credits.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

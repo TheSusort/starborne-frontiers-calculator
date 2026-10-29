@@ -17,10 +17,8 @@ import type {
     InputAction,
 } from '../../utils/arcade/types';
 import { useAuth } from '../../contexts/AuthProvider';
-import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
-import { useShipsData } from '../../hooks/useShipsData';
 import type { Ship } from '../../types/ship';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { getSynthwaveMusic, type MusicClock } from '../../utils/music/synthwaveMusic';
@@ -51,7 +49,7 @@ import { slowMotion } from './explosion';
 import { useArcadeSubmission, SubmissionStatus, type FinishedRun } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { GuestNameModal } from './GuestNameModal';
-import { ArcadeLeaderboard } from './ArcadeLeaderboard';
+import { GameOverLeaderboard } from './GameOverLeaderboard';
 import type { FlightOrigin } from './flightEvents';
 import {
     anyCandidate,
@@ -75,7 +73,7 @@ import { createScrapeFx } from './scrapeFx';
 import { skippedChallenge, type ChallengeResult } from './duel/challengeResult';
 import { DuelSummary, type DuelSide } from './duel/DuelSummary';
 import { factionAccent } from './ships/factionTint';
-import { arcadeFleet } from './ships/arcadeFleet';
+import { useArcadeFleet } from './ships/useArcadeFleet';
 import { loadPortrait } from './ships/portraitSprite';
 import { useShipVisuals } from './ships/useShipVisuals';
 import { readLastShipId, writeLastShipId } from './ships/fleetOrder';
@@ -309,19 +307,6 @@ const SubmissionLine: React.FC<{
 interface FlightGameProps {
     origin?: FlightOrigin;
     onClose: () => void;
-}
-
-/** The fleet the arcade flies, and whether it is still being resolved. */
-function useArcadeFleet() {
-    const { loading: authLoading } = useAuth();
-    const { ships: ownedShips, fleetLoaded } = useShips();
-    const { ships: templateShips, loading: templatesLoading } = useShipsData();
-    // `fleetLoaded` reads a session still resolving as signed out, so auth must settle too.
-    const ownedLoading = authLoading || !fleetLoaded;
-    return useMemo(
-        () => arcadeFleet(ownedShips, ownedLoading, templateShips, templatesLoading),
-        [ownedShips, ownedLoading, templateShips, templatesLoading]
-    );
 }
 
 /** Holds the arcade closed until its fleet is resolved: the opening phase is chosen once, from
@@ -744,7 +729,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const r = runResult(gameRef.current);
         setFinished({ result: r, shipName: flownRef.current?.name ?? null });
         setPreviousBest(readLocalBest());
-        setLocalBest(writeLocalBest(r.score));
+        setLocalBest(writeLocalBest(r));
         explodeShip(viewRef.current, reducedMotionRef.current);
         youDiedRef.current = false;
         setYouDied(false);
@@ -1301,7 +1286,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                         onJoinGuest={submission.joinAsGuest}
                     />
                     <div className="max-h-64 overflow-y-auto text-left">
-                        <ArcadeLeaderboard refreshKey={submission.leaderboardVersion} />
+                        <GameOverLeaderboard refreshKey={submission.leaderboardVersion} />
                     </div>
                 </GameOverPanel>
             )}
