@@ -9,6 +9,18 @@ export interface BestRun {
     rank: number | null;
 }
 
+export const NO_VALUE = '–';
+
+export const formatDistance = (metres: number | null): string =>
+    metres === null ? NO_VALUE : `${metres.toLocaleString()} m`;
+
+export const formatCredits = (credits: number | null): string =>
+    credits === null ? NO_VALUE : `${credits.toLocaleString()} credits`;
+
+/** "6,420 m · 312 credits"; a missing half shows as a dash. */
+export const formatRunStats = (distance: number | null, credits: number | null): string =>
+    `${formatDistance(distance)} · ${formatCredits(credits)}`;
+
 /** The viewer's best run: their leaderboard row when present, else this browser's best, else none. */
 export function pickBestRun(
     rows: readonly ArcadeLeaderboardEntry[],

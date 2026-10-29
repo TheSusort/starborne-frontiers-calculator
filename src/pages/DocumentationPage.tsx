@@ -2551,6 +2551,18 @@ const DocumentationPage: React.FC = () => {
                                 take control of it from any page.
                             </p>
                             <div className="card">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Start screen and leaderboard
+                                </h4>
+                                <p className="text-theme-text">
+                                    The start screen shows your best run (score, distance, credits
+                                    and rank) above the high scores. The leaderboard is ranked by
+                                    score and shows the distance and credits of each pilot&apos;s
+                                    best-score run. The ship you flew last is shown under the Start
+                                    button.
+                                </p>
+                            </div>
+                            <div className="card">
                                 <h4 className="font-semibold text-primary mb-2">Choosing a ship</h4>
                                 <p className="text-theme-text">
                                     If you have ships in your fleet, a run starts on a ship select

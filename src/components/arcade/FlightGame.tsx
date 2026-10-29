@@ -51,7 +51,7 @@ import { slowMotion } from './explosion';
 import { useArcadeSubmission, SubmissionStatus, type FinishedRun } from './useArcadeSubmission';
 import { ArcadeUsernameModal } from './ArcadeUsernameModal';
 import { GuestNameModal } from './GuestNameModal';
-import { ArcadeLeaderboard } from './ArcadeLeaderboard';
+import { GameOverLeaderboard } from './GameOverLeaderboard';
 import type { FlightOrigin } from './flightEvents';
 import {
     anyCandidate,
@@ -1301,7 +1301,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
                         onJoinGuest={submission.joinAsGuest}
                     />
                     <div className="max-h-64 overflow-y-auto text-left">
-                        <ArcadeLeaderboard refreshKey={submission.leaderboardVersion} />
+                        <GameOverLeaderboard refreshKey={submission.leaderboardVersion} />
                     </div>
                 </GameOverPanel>
             )}
