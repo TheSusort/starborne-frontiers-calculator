@@ -4,17 +4,22 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Account: logging out now signs out only this browser, not every device.',
-    'Autogear: current configuration now ignores "Assume all gear is calibrated".',
-    'Simulator and calculators: defense now reduces damage by the exact in-game formula.',
-    "Combat simulator: Lionheart's Defense Up II now goes to himself only.",
-    'Ship database: clicking a skill button keeps its tooltip open until you click elsewhere.',
-    'Arcade: refreshed start screen with your best run up front.',
-    "Arcade: leaderboard now shows each pilot's distance and credits.",
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.84.0',
+        date: '2026-10-29',
+        changes: [
+            'Account: logging out now signs out only this browser, not every device.',
+            'Autogear: current configuration now ignores "Assume all gear is calibrated".',
+            'Simulator and calculators: defense now reduces damage by the exact in-game formula.',
+            "Combat simulator: Lionheart's Defense Up II now goes to himself only.",
+            'Ship database: clicking a skill button keeps its tooltip open until you click elsewhere.',
+            'Arcade: refreshed start screen with your best run up front.',
+            "Arcade: leaderboard now shows each pilot's distance and credits.",
+        ],
+    },
     {
         version: '1.83.0',
         date: '2026-10-27',
