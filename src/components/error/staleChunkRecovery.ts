@@ -5,13 +5,10 @@ import {
 } from '../../utils/serviceWorkerUpdate';
 import { isChunkLoadError, markReload, reloadedRecently } from './chunkLoadError';
 
-/** How long the reload waits for the new service worker to finish installing before reloading
- *  without it. */
-export const SW_UPDATE_WAIT_MS = 10_000;
-
 let held = false;
 let pending = false;
 let started = false;
+let unsubscribe: (() => void) | null = null;
 
 /**
  * Recovers a page whose lazy chunk failed to load because a deploy removed it: reloads once onto
@@ -20,9 +17,9 @@ let started = false;
  * `holdChunkReload(true)` is in effect the reload waits for the release.
  *
  * A plain reload is not enough under a service worker: the old worker would serve the old shell,
- * which asks for the same missing chunk. So the reload activates the new worker once it is
- * waiting (see `applyServiceWorkerUpdate`), and falls back to a plain reload after
- * `SW_UPDATE_WAIT_MS` or when no worker controls the page.
+ * which asks for the same missing chunk. So under a worker the reload waits, however long it
+ * takes, until the new one is waiting and then activates it (see `applyServiceWorkerUpdate`); a
+ * page no worker controls reloads plainly. If no new worker ever arrives, nothing reloads.
  */
 export function reportChunkLoadError(error: unknown): void {
     if (started || pending || !isChunkLoadError(error) || reloadedRecently()) return;
@@ -46,26 +43,16 @@ export function holdChunkReload(hold: boolean): void {
 
 function flush(): void {
     if (!pending || held || started) return;
+    const underWorker = !!navigator.serviceWorker?.controller;
+    if (underWorker && !getNeedRefresh()) {
+        unsubscribe ??= subscribeNeedRefresh(flush);
+        return;
+    }
+    unsubscribe?.();
+    unsubscribe = null;
     pending = false;
     started = true;
     markReload();
-    if (getNeedRefresh()) {
-        applyServiceWorkerUpdate();
-        return;
-    }
-    if (!navigator.serviceWorker?.controller) {
-        window.location.reload();
-        return;
-    }
-    let settled = false;
-    const go = (activate: boolean) => {
-        if (settled) return;
-        settled = true;
-        unsubscribe();
-        window.clearTimeout(timer);
-        if (activate) applyServiceWorkerUpdate();
-        else window.location.reload();
-    };
-    const unsubscribe = subscribeNeedRefresh(() => go(true));
-    const timer = window.setTimeout(() => go(false), SW_UPDATE_WAIT_MS);
+    if (underWorker) applyServiceWorkerUpdate();
+    else window.location.reload();
 }

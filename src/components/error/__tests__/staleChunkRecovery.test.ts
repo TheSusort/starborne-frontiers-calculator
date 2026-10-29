@@ -129,14 +129,26 @@ describe('reportChunkLoadError', () => {
         expect(reload).not.toHaveBeenCalled();
     });
 
-    it('under a service worker, reloads plainly if no new one arrives in time', async () => {
+    it('under a service worker, never reloads under the old one while no new one arrives', async () => {
         setController(true);
-        const { reportChunkLoadError, SW_UPDATE_WAIT_MS } = await load();
+        const { reportChunkLoadError } = await load();
         reportChunkLoadError(chunkError());
-        vi.advanceTimersByTime(SW_UPDATE_WAIT_MS - 1);
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
         expect(reload).not.toHaveBeenCalled();
-        vi.advanceTimersByTime(1);
-        expect(reload).toHaveBeenCalledTimes(1);
         expect(sw.apply).not.toHaveBeenCalled();
+        expect(sessionStorage.getItem(CHUNK_RELOAD_KEY)).toBeNull();
+    });
+
+    it('under a service worker, a new one arriving while held waits for the release', async () => {
+        setController(true);
+        const { holdChunkReload, reportChunkLoadError } = await load();
+        reportChunkLoadError(chunkError());
+        holdChunkReload(true);
+        sw.needRefresh = true;
+        sw.listeners.forEach((listener) => listener());
+        expect(sw.apply).not.toHaveBeenCalled();
+        holdChunkReload(false);
+        expect(sw.apply).toHaveBeenCalledTimes(1);
+        expect(reload).not.toHaveBeenCalled();
     });
 });
