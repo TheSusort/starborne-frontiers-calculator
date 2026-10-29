@@ -103,19 +103,17 @@ export async function checkUsernameAvailability(username: string): Promise<boole
         return false;
     }
 
-    const { data, error } = await supabase
-        .from('users')
-        .select('id')
-        .eq('username', username)
-        .maybeSingle();
+    // An RPC because RLS hides every users row but the caller's own profiles.
+    const { data, error } = await supabase.rpc('is_username_available', {
+        p_username: username,
+    });
 
     if (error) {
         console.error('Error checking username availability:', error);
         throw error;
     }
 
-    // Username is available if no user found
-    return !data;
+    return data === true;
 }
 
 /**
