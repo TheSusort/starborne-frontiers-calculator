@@ -63,7 +63,9 @@ describe('public.users write lockdown', () => {
                 new RegExp(`NEW\\.${column}\\s+IS\\s+DISTINCT\\s+FROM\\s+OLD\\.${column}`, 'i')
             );
         }
-        expect(body).toMatch(/auth\.jwt\(\)\s*->>\s*'email'/i);
+        expect(body).toMatch(
+            /NEW\.email\s+IS\s+DISTINCT\s+FROM\s+\(\s*auth\.jwt\(\)\s*->>\s*'email'\s*\)/i
+        );
     });
 
     it('the latest users INSERT policies all pin is_admin = false', () => {
