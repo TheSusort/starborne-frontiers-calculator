@@ -62,8 +62,10 @@ export class SupabaseAuthService implements AuthService {
         }
     }
 
+    /** Ends only this browser's session. The default `global` scope would also revoke the
+     *  player's other devices and every OAuth session, signing the MCP client out too. */
     async signOut(): Promise<void> {
-        const { error } = await supabase.auth.signOut();
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
         if (error) throw error;
     }
 
