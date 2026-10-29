@@ -193,4 +193,10 @@ describe('the Netlify adapter', () => {
     it('routes exactly the paths the handler serves', () => {
         expect(config.path).toEqual([MCP_PATH, ...PROTECTED_RESOURCE_PATHS]);
     });
+
+    it('is rate limited to 60 requests a minute per client IP', () => {
+        expect([...config.rateLimit.aggregateBy].sort()).toEqual(['domain', 'ip']);
+        expect(config.rateLimit.windowLimit).toBe(60);
+        expect(config.rateLimit.windowSize).toBe(60);
+    });
 });

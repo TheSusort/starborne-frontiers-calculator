@@ -82,19 +82,8 @@ export default defineConfig({
                             },
                         },
                     },
-                    {
-                        // Network-first for Supabase API calls
-                        urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-                        handler: 'NetworkFirst',
-                        options: {
-                            cacheName: 'supabase-api',
-                            expiration: {
-                                maxEntries: 50,
-                                maxAgeSeconds: 24 * 60 * 60, // 1 day
-                            },
-                            networkTimeoutSeconds: 10,
-                        },
-                    },
+                    // Supabase responses are never cached: they carry the signed-in player's own
+                    // data. `purgeLegacySupabaseCache` removes the cache older builds created.
                     {
                         // Network-first for Cloudinary images (ship/gear icons)
                         urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,

@@ -8,6 +8,7 @@ import { migratePlayerData, syncMigratedDataToSupabase } from '../utils/migrateP
 import { updateHeartbeatUser } from '../services/heartbeatService';
 import { StorageKey } from '../constants/storage';
 import { removeFromIndexedDB } from '../hooks/useStorage';
+import { purgeLegacySupabaseCache } from '../utils/purgeLegacySupabaseCache';
 
 interface AuthContextType {
     user: AuthUser | null;
@@ -34,6 +35,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
     const { addNotification } = useNotification();
+
+    useEffect(() => {
+        purgeLegacySupabaseCache();
+    }, []);
 
     useEffect(() => {
         const migrateDataForNewUser = async () => {
@@ -177,6 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const signOut = async () => {
         try {
             await authService.signOut();
+            purgeLegacySupabaseCache();
             // Dispatch a custom event that other providers can listen to
             window.dispatchEvent(new CustomEvent('app:signout'));
             addNotification('success', 'Logged out successfully');
