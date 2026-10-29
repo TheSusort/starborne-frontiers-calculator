@@ -744,7 +744,7 @@ const FlightGameRun: React.FC<FlightGameProps> = ({ origin, onClose }) => {
         const r = runResult(gameRef.current);
         setFinished({ result: r, shipName: flownRef.current?.name ?? null });
         setPreviousBest(readLocalBest());
-        setLocalBest(writeLocalBest(r.score));
+        setLocalBest(writeLocalBest(r));
         explodeShip(viewRef.current, reducedMotionRef.current);
         youDiedRef.current = false;
         setYouDied(false);

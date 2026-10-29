@@ -7,6 +7,10 @@ export interface ArcadeLeaderboardEntry {
     ship: string | null;
     /** A guest (anonymous) player; shown with a GUEST tag. */
     isGuest: boolean;
+    /** Metres flown on the best-score run; null when the database did not return a valid value. */
+    distance: number | null;
+    /** Credits collected on the best-score run; null when the database did not return a valid value. */
+    credits: number | null;
 }
 
 export interface ArcadeSubmitResult {
@@ -15,6 +19,7 @@ export interface ArcadeSubmitResult {
 }
 
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
+const nonNegativeIntOrNull = (v: unknown): number | null => (isInt(v) && v >= 0 ? v : null);
 /** The `arcade_scores.best_ship` bound; lengths count code points, as `char_length` does. */
 export const SHIP_NAME_MAX = 64;
 
@@ -29,13 +34,22 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 
 /**
  * Validates `get_arcade_leaderboard` rows; a malformed row is dropped, never rendered. A
- * malformed ship only nulls the ship, so the row still shows.
+ * malformed ship, distance or credits only nulls that field, so the row still shows.
  */
 export function parseLeaderboardRows(data: unknown): ArcadeLeaderboardEntry[] {
     if (!Array.isArray(data)) return [];
     return data.flatMap((row) => {
         if (!isRecord(row)) return [];
-        const { player_rank, username, best_score, is_me, best_ship, is_guest } = row;
+        const {
+            player_rank,
+            username,
+            best_score,
+            is_me,
+            best_ship,
+            is_guest,
+            best_distance,
+            best_credits,
+        } = row;
         if (!isInt(player_rank) || typeof username !== 'string' || !isInt(best_score)) return [];
         return [
             {
@@ -45,6 +59,8 @@ export function parseLeaderboardRows(data: unknown): ArcadeLeaderboardEntry[] {
                 isMe: is_me === true,
                 ship: isValidShipName(best_ship) ? best_ship : null,
                 isGuest: is_guest === true,
+                distance: nonNegativeIntOrNull(best_distance),
+                credits: nonNegativeIntOrNull(best_credits),
             },
         ];
     });
