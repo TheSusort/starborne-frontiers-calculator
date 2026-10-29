@@ -7,13 +7,13 @@ import { CollapsibleAccordion } from '../components/ui/CollapsibleAccordion';
 import { ChevronDownIcon } from '../components/ui/icons';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
-import { useShips } from '../contexts/ShipsContext';
 import { FLIGHT_END_EVENT, requestFlight } from '../components/arcade/flightEvents';
 import { ArcadeLeaderboard } from '../components/arcade/ArcadeLeaderboard';
 import { useArcadeLeaderboard } from '../components/arcade/useArcadeLeaderboard';
 import { readLocalBestRun } from '../components/arcade/localBest';
 import { formatDistance, NO_VALUE, pickBestRun } from '../components/arcade/bestRunSource';
 import { readLastShipId } from '../components/arcade/ships/fleetOrder';
+import { useArcadeFleet } from '../components/arcade/ships/useArcadeFleet';
 
 /** A score submit can still be in flight when the flight-end event fires; a second refetch picks it up. */
 const LEADERBOARD_RECHECK_MS = 1500;
@@ -22,7 +22,7 @@ const LEADERBOARD_LIMIT = 20;
 
 const ArcadePage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
-    const { ships } = useShips();
+    const { fleet: ships } = useArcadeFleet();
     const [localRun, setLocalRun] = useState(readLocalBestRun);
     const [lastShipId, setLastShipId] = useState(readLastShipId);
     const [boardVersion, setBoardVersion] = useState(0);
