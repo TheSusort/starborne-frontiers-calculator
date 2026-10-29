@@ -129,6 +129,8 @@ const ACTION_PHRASE_EFFECTS: ReadonlyArray<readonly [RegExp, string]> = [
     [/\bbuffs\b.*\bextended\b|\bextends?\b.*\bbuffs\b/i, 'Buff Duration Extension'],
     [/\bextend(?:s|ed)?\b/i, 'Debuff Duration Extension'],
     [/\breduces the duration\b/i, 'Debuff Duration Expiration'],
+    // "affected by a <control> effect": the tag names the category (CONTROL_EFFECT_STATUSES).
+    [/^control$/i, 'Control Effect'],
 ];
 
 /**

@@ -26,6 +26,7 @@ describe('resolveTaggedEffect', () => {
         ['debuffs extended by 1 turn', 'Debuff Duration Extension'],
         ['extends the duration the newly inflicted', 'Debuff Duration Extension'],
         ['reduces the duration of all active', 'Debuff Duration Expiration'],
+        ['control', 'Control Effect'],
     ])('"%s" -> %s', (phrase, effect) => {
         expect(resolveTaggedEffect(phrase)?.title).toBe(effect);
     });

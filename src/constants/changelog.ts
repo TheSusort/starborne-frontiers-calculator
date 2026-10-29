@@ -7,6 +7,7 @@ import { ChangelogEntry } from '../types/changelog';
 export const UNRELEASED_CHANGES: string[] = [
     'App updates: a banner now lets you choose when to refresh.',
     'Ship data: LUXX, Ripper and Sokol updated to the latest game patch.',
+    'Ship database: the "control" skill keyword now lists which effects count.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
