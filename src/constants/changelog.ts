@@ -7,6 +7,9 @@ import { ChangelogEntry } from '../types/changelog';
 export const UNRELEASED_CHANGES: string[] = [
     'App updates: a banner now lets you choose when to refresh.',
     'Arcade: ship models now recover automatically after a site update.',
+    'Combat simulator: the log now shows cleanses and purges that removed nothing.',
+    'Combat simulator: the log now shows status duration extensions and bomb countdown cuts.',
+    'Combat simulator: the log now shows debuffs skipped because a stronger one is active.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

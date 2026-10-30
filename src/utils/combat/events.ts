@@ -586,18 +586,82 @@ export type CombatEvent =
           waveTotal?: number;
           waveLead?: boolean;
       } & ReactiveStamp)
-    /** LOG-ONLY: a reactive purge (`triggers.ts`'s purge executor) was aimed at an enemy holding
-     *  at least one removable buff and removed nothing, because the purger is at an affinity
-     *  disadvantage against it (a purge lands like an 'apply' debuff). `reason` names why. NO
-     *  combat listener subscribes to it, so a purge that did not happen wakes nothing; it opens a
-     *  `purge` row of 0 so the attempt is visible. Suppressed under the same depth-1 chain guard
-     *  as `purge-performed`. */
+    /** LOG-ONLY: a purge clause resolved and removed nothing. Emitted by the cast path
+     *  (`playerTurn.ts` `purgeStruck`) and the reactive purge executor (`triggers.ts`) under the
+     *  same rules, after every gate the clause has passed:
+     *  - `reason: 'affinity'` — one per recipient that held at least one removable buff and was
+     *    spared by the purger's affinity disadvantage (a purge lands like an 'apply' debuff);
+     *    `targetIds` holds that one recipient.
+     *  - `reason: 'nothing-to-remove'` — one per wave that removed nothing and logged no affinity
+     *    row; `targetIds` = every recipient the clause reached. A purge that resolved no
+     *    recipient at all logs nothing.
+     *  NO combat listener subscribes to it, so a purge that removed nothing wakes nothing; it opens
+     *  a `purge` row of 0 marked `attemptOnly`. Suppressed under the same depth-1 chain guard as
+     *  `purge-performed`. */
     | ({
-          type: 'purge-blocked-log';
+          type: 'purge-attempt-log';
           casterId: string;
+          targetIds: string[];
+          round: number;
+          reason: 'affinity' | 'nothing-to-remove';
+      } & ReactiveStamp)
+    /** LOG-ONLY twin of `cleanse-performed` / `reactive-cleanse-performed`: a cleanse clause
+     *  resolved to at least one recipient and removed (or, with `mode: 'reduce-duration'`,
+     *  shrank) nothing. `targetIds` = the clause's recipients. NO combat listener subscribes to it
+     *  and it books no `cleanseCount`; it opens a `cleanse` row marked `attemptOnly`. */
+    | ({
+          type: 'cleanse-attempt-log';
+          casterId: string;
+          targetIds: string[];
+          round: number;
+          mode?: 'reduce-duration';
+          durationTurns?: number;
+      } & ReactiveStamp)
+    /** LOG-ONLY: a duration-extension clause resolved ("extends all debuffs by 1 turn",
+     *  "all allies' active buffs are extended by 1 turn", "damage over time debuffs are
+     *  extended"). One per clause per resolution: `count` = the statuses whose duration actually
+     *  moved, `targetIds` = the holders whose statuses moved, or every recipient when `count` is 0.
+     *  `scope` names what the clause reaches: timed `buffs`, `debuffs` (timed debuffs plus, for an
+     *  every-debuff extension, DoTs, Bombs and Echoing Bursts — owner ruling R109), or `dots`.
+     *  NO combat listener subscribes to it; it opens a `duration-changed` row, `attemptOnly` when
+     *  `count` is 0. */
+    | ({
+          type: 'status-duration-changed-log';
+          casterId: string;
+          targetIds: string[];
+          round: number;
+          turns: number;
+          count: number;
+          scope: 'buffs' | 'debuffs' | 'dots';
+      } & ReactiveStamp)
+    /** LOG-ONLY: a countdown cut clause resolved on the enemies whose landing roll it passed
+     *  (Lingshe's `bomb-countdown-reduce`). `count` = the Bombs it reached, `targetIds` = the
+     *  holders of those Bombs, or every landed recipient when `count` is 0. Emitted before the cut
+     *  runs, so the row precedes any detonation the cut forces. NO combat listener subscribes;
+     *  it opens a `duration-changed` row, `attemptOnly` when `count` is 0. */
+    | ({
+          type: 'countdown-changed-log';
+          casterId: string;
+          targetIds: string[];
+          round: number;
+          turns: number;
+          count: number;
+          target: 'bomb';
+      } & ReactiveStamp)
+    /** LOG-ONLY: a debuff application was skipped because its target already holds the same
+     *  family at a STRICTLY higher tier (#590 R1, `isOutclassedByExistingFamily`) — no landing
+     *  roll, no landing, no resist. `effect` is the skipped status, `heldEffect` the one that
+     *  outclassed it. Not emitted for the equal-tier shorter-duration skip, nor for a scheduled
+     *  re-application. NO combat listener subscribes; it opens an `attemptOnly` row of kind
+     *  `side`. */
+    | ({
+          type: 'status-outclassed-log';
+          sourceId: string;
           targetId: string;
           round: number;
-          reason: 'affinity';
+          effect: string;
+          heldEffect: string;
+          side: 'debuff';
       } & ReactiveStamp)
     /** A buff STEAL moved something. Sibling of `purge-performed`, and like it, SUPPRESSED when
      *  nothing actually moved (an empty return from `statusEngine.steal` / `stealStacks` opens no

@@ -60,6 +60,7 @@ const ENTRY_DISPLAY_RANK: Record<CombatLogEntryKind, number> = {
     steal: 0,
     bomb: 0,
     'shield-stripped': 0,
+    'duration-changed': 0,
     // 1 — charge bookkeeping for the turn.
     'charge-changed': 1,
     // 2 — consequences: what the skill (or the round) caused.
@@ -1103,15 +1104,76 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
-    // A reactive purge an affinity disadvantage stopped: the attempt, as a purge of 0.
-    'purge-blocked-log': (e, ctx) => {
+    // A purge or cleanse clause that removed nothing: the attempt, as a row of 0. A cast-path row
+    // reads the pending skill tag WITHOUT consuming it, as every LOG-ONLY row below does: the row
+    // the tag would otherwise reach (the cast's attack) keeps it. A reactive row nests under its
+    // trigger.
+    'purge-attempt-log': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         ctx.attachEntry({
             kind: 'purge',
             actorId: e.casterId,
+            targets: e.targetIds.map((targetId) => ({ targetId })),
+            reactions: [],
+            note: e.reason === 'affinity' ? 'purged 0 (affinity)' : 'purged 0 (nothing to remove)',
+            attemptOnly: true,
+            ...(e.reactive ? {} : (ctx.pendingSkill ?? {})),
+        });
+    },
+
+    'cleanse-attempt-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        ctx.attachEntry({
+            kind: 'cleanse',
+            actorId: e.casterId,
+            targets: e.targetIds.map((targetId) => ({ targetId })),
+            reactions: [],
+            note:
+                e.mode === 'reduce-duration'
+                    ? `-${e.durationTurns ?? 1} turn on 0 debuffs`
+                    : 'cleansed 0 (nothing to remove)',
+            attemptOnly: true,
+            ...(e.reactive ? {} : (ctx.pendingSkill ?? {})),
+        });
+    },
+
+    'status-duration-changed-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const noun = { buffs: 'buff', debuffs: 'debuff', dots: 'DoT' }[e.scope];
+        ctx.attachEntry({
+            kind: 'duration-changed',
+            actorId: e.casterId,
+            targets: e.targetIds.map((targetId) => ({ targetId })),
+            reactions: [],
+            note: `+${e.turns} turn${e.turns === 1 ? '' : 's'} on ${e.count} ${noun}${e.count === 1 ? '' : 's'}`,
+            ...(e.count === 0 ? { attemptOnly: true as const } : {}),
+            ...(e.reactive ? {} : (ctx.pendingSkill ?? {})),
+        });
+    },
+
+    'countdown-changed-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        ctx.attachEntry({
+            kind: 'duration-changed',
+            actorId: e.casterId,
+            targets: e.targetIds.map((targetId) => ({ targetId })),
+            reactions: [],
+            note: `bomb countdown -${e.turns} on ${e.count} bomb${e.count === 1 ? '' : 's'}`,
+            ...(e.count === 0 ? { attemptOnly: true as const } : {}),
+            ...(e.reactive ? {} : (ctx.pendingSkill ?? {})),
+        });
+    },
+
+    'status-outclassed-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        ctx.attachEntry({
+            kind: e.side,
+            actorId: e.sourceId,
             targets: [{ targetId: e.targetId }],
             reactions: [],
-            note: `purged 0 (${e.reason})`,
+            note: `${e.effect} (outclassed by ${e.heldEffect})`,
+            attemptOnly: true,
+            ...(e.reactive ? {} : (ctx.pendingSkill ?? {})),
         });
     },
 
