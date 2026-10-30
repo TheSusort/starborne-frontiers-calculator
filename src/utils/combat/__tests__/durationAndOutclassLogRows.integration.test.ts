@@ -123,6 +123,37 @@ describe.each(PLACEMENTS)('debuff duration extensions, extender on the %s side',
     });
 });
 
+describe.each(PLACEMENTS)(
+    'inflicted-scope extension of a debuff written after the damage, on the %s side',
+    (placement) => {
+        // Asphyxiator's passive; the debuff lands after the hit, so its extension runs when it
+        // lands rather than in the cast's sweep.
+        const ASPHYXIATOR_PASSIVE =
+            'After this Unit inflicts a <unit-aid>debuff</unit-aid> with a critical hit, the newly inflicted <unit-aid>debuff</unit-aid> is <unit-skill>extended by 1 turn</unit-skill>.';
+        it('logs the extension it made, and no attempt row of 0', () => {
+            const e = unit(
+                'extender',
+                {
+                    slots: [
+                        ...active(
+                            'A',
+                            'This Unit deals <unit-damage>100% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> for 2 turns.'
+                        ).slots,
+                        ...textKit('AP', { passives: [ASPHYXIATOR_PASSIVE] }, 4).slots,
+                    ],
+                },
+                1,
+                { crit: 100 }
+            );
+            const t = unit('target', NO_KIT, 2);
+            const s = run(placement, e, [], [t]);
+            expect(s.byCarrier('status-duration-changed-log')).toEqual([
+                expect.objectContaining({ scope: 'debuffs', count: 1, targetIds: [s.id(t)] }),
+            ]);
+        });
+    }
+);
+
 describe.each(PLACEMENTS)('DoT duration extensions, extender on the %s side', (placement) => {
     const extender = () => unit('extender', active('E', DOT_EXTEND), 1);
 

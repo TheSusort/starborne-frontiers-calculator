@@ -6780,14 +6780,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }
                 movedOn.set(vid, moved);
             }
-            // The deferred inflicted-scope writes wrapped below extend after this row is logged
-            // and are not counted in it.
-            emitDurationChanged(movedOn, turns, 'debuffs');
             // A clause that follows this cast's damage lands LATER — the engine flushes
             // `deferredEnemyApplications` once the damage has resolved, which is after this
             // block runs (Asphyxiator's charged Stasis is the corpus instance). Extending by
             // name now would find nothing in the store, so each pending write is wrapped to
-            // grow its own status the moment it lands. Only inflicted scope needs this: an
+            // grow its own status the moment it lands, and to log that growth right after the
+            // landing's own events. Only inflicted scope needs this: an
             // extend-everything sweep is a snapshot of what was standing when it ran, and
             // growing a status the cast had not yet applied would be a different mechanic.
             //
@@ -6797,19 +6795,37 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // would land unextended. Corpus-unreachable today (the only inflicted-scope ship is
             // single-hit), and left that way deliberately rather than guessed at, mirroring the
             // #403/#407 precedent above for the buff-typed enemy predicate.
+            let wrappedLaterWrite = false;
             if (inflictedScope) {
                 for (const pending of deferredEnemyApplications) {
                     const { victimId, buffName } = pending;
                     if (victimId === undefined || buffName === undefined) continue;
                     if (namedBuff !== undefined && buffName !== namedBuff) continue;
                     if (!recipients.includes(victimId)) continue;
+                    wrappedLaterWrite = true;
                     const write = pending.applyState;
+                    const emitLanding = pending.emitEvents;
+                    let moved = 0;
                     pending.applyState = () => {
                         write();
-                        statusEngine.extendAllDebuffsDuration(victimId, turns, new Set([buffName]));
+                        moved = statusEngine.extendAllDebuffsDuration(
+                            victimId,
+                            turns,
+                            new Set([buffName])
+                        );
+                    };
+                    pending.emitEvents = (subAttackIndex) => {
+                        emitLanding(subAttackIndex);
+                        if (moved > 0) {
+                            emitDurationChanged(new Map([[victimId, moved]]), turns, 'debuffs');
+                        }
                     };
                 }
             }
+            // The clause's row for what it moved now. When it moved nothing now but a later
+            // landing will be extended, that landing logs the clause instead.
+            const movedNow = [...movedOn.values()].some((n) => n > 0);
+            if (movedNow || !wrappedLaterWrite) emitDurationChanged(movedOn, turns, 'debuffs');
         } else {
             // 'all-allies' (Fuying) — same allyRoster pattern the ally-charge-gain block uses
             // (above): healing-mode roster when present, else the live same-side

@@ -9,7 +9,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Arcade: ship models now recover automatically after a site update.',
     'Combat simulator: the log now shows cleanses and purges that removed nothing.',
     'Combat simulator: the log now shows status duration extensions and bomb countdown cuts.',
-    'Combat simulator: the log now shows statuses skipped because a stronger one is active.',
+    'Combat simulator: the log now shows debuffs skipped because a stronger one is active.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
