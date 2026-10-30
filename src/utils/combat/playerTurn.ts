@@ -2121,31 +2121,31 @@ function reduceEnemyBombs(args: {
             firingClause: true,
             selectorEnemyIdFor: args.selectorEnemyIdFor,
         }).map((id) => id ?? boundVictimId);
-        // Every landing roll is drawn first, in recipient order, so the clause's
-        // `countdown-changed-log` can precede any detonation the cut forces. `count` is the Bombs
-        // each landed victim holds as the cut starts.
-        const landed: CombatActor[] = [];
+        let cutAny = false;
+        // Each landed victim holding Bombs gets its own `countdown-changed-log` just before its
+        // cut, so the row precedes any detonation that cut forces. Rolls and cuts stay
+        // interleaved in recipient order: a forced detonation resolves before the next recipient
+        // rolls. A clause that landed but found no Bomb logs one attempt row after the loop.
+        const landedEmpty: string[] = [];
         for (const vid of recipients) {
             const victim =
                 args.opposingVictimById?.get(vid) ??
                 (vid === args.anchor.id ? args.anchor : undefined);
             if (!victim) continue;
             if (!args.landsReductionOn(victim)) continue;
-            landed.push(victim);
-        }
-        if (landed.length === 0) continue;
-        const holding = landed.filter((v) => v.pendingBombs.length > 0);
-        const count = holding.reduce((sum, v) => sum + v.pendingBombs.length, 0);
-        args.bus.emit({
-            type: 'countdown-changed-log',
-            casterId: args.detonatorId,
-            targetIds: (count > 0 ? holding : landed).map((v) => v.id),
-            round: args.round,
-            turns: ab.config.turns,
-            count,
-            target: 'bomb',
-        });
-        for (const victim of landed) {
+            if (victim.pendingBombs.length === 0) {
+                landedEmpty.push(victim.id);
+                continue;
+            }
+            args.bus.emit({
+                type: 'countdown-changed-log',
+                casterId: args.detonatorId,
+                targetIds: [victim.id],
+                round: args.round,
+                turns: ab.config.turns,
+                count: victim.pendingBombs.length,
+                target: 'bomb',
+            });
             reduceBombsOnVictim(
                 victim,
                 ab.config.turns,
@@ -2154,6 +2154,18 @@ function reduceEnemyBombs(args: {
                 args.detonatorId,
                 args.forceDetonateBomb
             );
+            cutAny = true;
+        }
+        if (!cutAny && landedEmpty.length > 0) {
+            args.bus.emit({
+                type: 'countdown-changed-log',
+                casterId: args.detonatorId,
+                targetIds: landedEmpty,
+                round: args.round,
+                turns: ab.config.turns,
+                count: 0,
+                target: 'bomb',
+            });
         }
     }
 }
