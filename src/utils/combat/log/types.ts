@@ -65,7 +65,10 @@ export type CombatLogEntryKind =
     | 'cheat-death'
     /** #362 R11: an incoming repair was turned into raw HP damage on its recipient. Booked to the
      *  DEBUFF'S APPLIER (the actor credited with the damage), with the burned ship in `targets`. */
-    | 'reversed-repair';
+    | 'reversed-repair'
+    /** A status duration was extended, or a Bomb countdown cut, by a clause of the actor's kit.
+     *  `targets` are the holders; `attemptOnly` when the clause moved nothing. */
+    | 'duration-changed';
 
 export interface CombatLogEntry {
     kind: CombatLogEntryKind;
@@ -75,7 +78,8 @@ export interface CombatLogEntry {
     targets: CombatLogTarget[]; // 1 = single-target, N = AoE
     reactions: CombatLogEntry[]; // reactions nested under this entry by buildCombatLog's routeReaction
     note?: string;
-    /** The row records an attempt that changed nothing (a cleanse or purge that removed nothing).
+    /** The row records an attempt that changed nothing: a cleanse or purge that removed nothing,
+     *  a duration change that moved nothing, or an application a stronger held status outclassed.
      *  It still counts as its `kind` for the interaction oracle (`oracleKind`), like a resist
      *  counts as the infliction it tried; status-bookkeeping readers (`roundStatusRows`) skip it. */
     attemptOnly?: true;

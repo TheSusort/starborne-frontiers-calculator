@@ -69,6 +69,7 @@ import {
     bombDurationCutCandidates,
     shortenTimedBurstsOnVictim,
 } from './bombCountdown';
+import { durationChangedEvent } from './durationChangeLog';
 import { liveGateConditions } from './abilityStatusGating';
 import { leaderScaledAttack } from './preFight/types';
 import {
@@ -4969,7 +4970,10 @@ export type StampedEventType =
     | 'reversed-repair-log'
     | 'bomb-splash-log'
     | 'purge-attempt-log'
-    | 'cleanse-attempt-log';
+    | 'cleanse-attempt-log'
+    | 'status-duration-changed-log'
+    | 'countdown-changed-log'
+    | 'status-outclassed-log';
 
 /** Forces the array literal passed to it to contain every member of `T` exactly once — a
  *  missing or duplicated tag is a compile error, not a silent gap. Standard TS
@@ -5038,6 +5042,9 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     'bomb-splash-log',
     'purge-attempt-log',
     'cleanse-attempt-log',
+    'status-duration-changed-log',
+    'countdown-changed-log',
+    'status-outclassed-log',
 ]);
 
 const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>(
@@ -5537,9 +5544,15 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // a debuff extension rides the cast path, which owns the hit footprint it extends over.
         if (cfg.statusKind !== 'buff') return;
         if (!passesOncePerCastGate(intent, ctx)) return;
+        const movedOn = new Map<string, number>();
         for (const rid of reactiveRecipients(intent, ctx, intent.ownerId)) {
             if (!(ctx.isActorAlive?.(rid) ?? true)) continue;
-            ctx.statusEngine.extendAllBuffsDuration(rid, cfg.turns, cfg.buffName);
+            movedOn.set(rid, ctx.statusEngine.extendAllBuffsDuration(rid, cfg.turns, cfg.buffName));
+        }
+        if (movedOn.size > 0 && ctx.bus) {
+            ctx.bus.emit(
+                durationChangedEvent(intent.ownerId, ctx.round, movedOn, cfg.turns, 'buffs')
+            );
         }
         return;
     }
@@ -6038,17 +6051,27 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const debuffTargetId = applicationTargetId;
             // #590 R1: a weaker same-family debuff onto a target already holding a stronger one
             // is never attempted — no roll, no landing, no resist. Checked before Block Debuff so
-            // an outclassed reactive application skips silently rather than surfacing as a
-            // Block-Debuff resist (the whole clause behaves as absent).
-            if (
-                ctx.statusEngine.isOutclassedByExistingFamily(
-                    'enemy',
-                    cfg.buffName,
-                    undefined,
-                    debuffTargetId
-                )
-            )
+            // an outclassed reactive application is skipped rather than surfacing as a
+            // Block-Debuff resist (the whole clause behaves as absent; only the log-only
+            // `status-outclassed-log` records it).
+            const heldEffect = ctx.statusEngine.outclassingStatusName(
+                'enemy',
+                cfg.buffName,
+                undefined,
+                debuffTargetId
+            );
+            if (heldEffect !== undefined) {
+                ctx.bus.emit({
+                    type: 'status-outclassed-log',
+                    sourceId: intent.ownerId,
+                    targetId: debuffTargetId,
+                    round: ctx.round,
+                    effect: cfg.buffName,
+                    heldEffect,
+                    side: 'debuff',
+                });
                 continue;
+            }
             if (!passesOncePerRootCastGate(intent, ctx, debuffTargetId)) continue;
             // Block Debuff: a target carrying Block Debuff auto-resists the whole application —
             // one resist, no landing roll drawn (the same rule the DoT branch keeps per DoT). A

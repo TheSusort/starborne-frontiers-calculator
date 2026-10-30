@@ -81,8 +81,9 @@ function isOverclockHangoverRow(entry: CombatLogEntry): boolean {
  *  - A resist booked to its INFLICTOR is an infliction attempt: whether it landed hinges on the
  *    target's security and a landing roll, not on the inflictor's kit, so it counts as the kind it
  *    tried to apply. A source-less resist books to the resister and stays `debuff-resisted`.
- *  - An `attemptOnly` row (a cleanse or purge that removed nothing) counts as its kind, for the
- *    same reason: whether there was anything to remove hinges on the board, not on the kit.
+ *  - An `attemptOnly` row counts as its kind, for the same reason: whether a cleanse or purge
+ *    found anything to remove, a `duration-changed` row anything to move, or a debuff was
+ *    outclassed by a stronger one already held hinges on the board, not on the kit.
  *  - A landed control effect logs a `control` row AND a `debuff` row named after the effect; a
  *    resisted one logs a single resist. Both read as `control`, so landing and resisting the same
  *    Provoke fingerprint alike.

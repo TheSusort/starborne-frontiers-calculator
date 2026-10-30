@@ -5059,7 +5059,9 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         The event log lists every turn-by-turn action, reaction, and
                                         effect for the selected round, including a cleanse or purge
-                                        that found nothing to remove — see below for details
+                                        that found nothing to remove, a duration extension or bomb
+                                        countdown cut, and a debuff skipped because the target
+                                        already holds a stronger one — see below for details
                                     </li>
                                 </ul>
                             </div>

@@ -617,6 +617,52 @@ export type CombatEvent =
           mode?: 'reduce-duration';
           durationTurns?: number;
       } & ReactiveStamp)
+    /** LOG-ONLY: a duration-extension clause resolved ("extends all debuffs by 1 turn",
+     *  "all allies' active buffs are extended by 1 turn", "damage over time debuffs are
+     *  extended"). One per clause per resolution: `count` = the statuses whose duration actually
+     *  moved, `targetIds` = the holders whose statuses moved, or every recipient when `count` is 0.
+     *  `scope` names what the clause reaches: timed `buffs`, `debuffs` (timed debuffs plus, for an
+     *  every-debuff extension, DoTs, Bombs and Echoing Bursts — owner ruling R109), or `dots`.
+     *  NO combat listener subscribes to it; it opens a `duration-changed` row, `attemptOnly` when
+     *  `count` is 0. */
+    | ({
+          type: 'status-duration-changed-log';
+          casterId: string;
+          targetIds: string[];
+          round: number;
+          turns: number;
+          count: number;
+          scope: 'buffs' | 'debuffs' | 'dots';
+      } & ReactiveStamp)
+    /** LOG-ONLY: a countdown cut clause resolved on the enemies whose landing roll it passed
+     *  (Lingshe's `bomb-countdown-reduce`). `count` = the Bombs it reached, `targetIds` = the
+     *  holders of those Bombs, or every landed recipient when `count` is 0. Emitted before the cut
+     *  runs, so the row precedes any detonation the cut forces. NO combat listener subscribes;
+     *  it opens a `duration-changed` row, `attemptOnly` when `count` is 0. */
+    | ({
+          type: 'countdown-changed-log';
+          casterId: string;
+          targetIds: string[];
+          round: number;
+          turns: number;
+          count: number;
+          target: 'bomb';
+      } & ReactiveStamp)
+    /** LOG-ONLY: a debuff application was skipped because its target already holds the same
+     *  family at a STRICTLY higher tier (#590 R1, `isOutclassedByExistingFamily`) — no landing
+     *  roll, no landing, no resist. `effect` is the skipped status, `heldEffect` the one that
+     *  outclassed it. Not emitted for the equal-tier shorter-duration skip, nor for a scheduled
+     *  re-application. NO combat listener subscribes; it opens an `attemptOnly` row of kind
+     *  `side`. */
+    | ({
+          type: 'status-outclassed-log';
+          sourceId: string;
+          targetId: string;
+          round: number;
+          effect: string;
+          heldEffect: string;
+          side: 'debuff';
+      } & ReactiveStamp)
     /** A buff STEAL moved something. Sibling of `purge-performed`, and like it, SUPPRESSED when
      *  nothing actually moved (an empty return from `statusEngine.steal` / `stealStacks` opens no
      *  log row).

@@ -637,6 +637,14 @@ export interface StatusEngine {
         recipientId?: string,
         enemyTargetId?: string
     ): boolean;
+    /** The name of the held status that outclasses `buffName` (the same question as
+     *  `isOutclassedByExistingFamily`), or undefined when it is not outclassed. */
+    outclassingStatusName(
+        side: 'self' | 'enemy',
+        buffName: string,
+        recipientId?: string,
+        enemyTargetId?: string
+    ): string | undefined;
 }
 
 const ROMAN_SUFFIX = /\s+(I{1,3}|IV|V)$/;
@@ -1157,20 +1165,26 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // branch) reads the SAME family entry `applyTimedAbilityStatus` would later contest — never a
     // second copy of the self/enemy map resolution. `__testDisableOutclassSkip` is the ONLY way
     // to turn this off; no production caller sets it.
-    const isOutclassedByExistingFamily = (
+    const outclassingStatusName = (
         side: 'self' | 'enemy',
         buffName: string,
         recipientId?: string,
         enemyTargetId?: string
-    ): boolean => {
-        if (input.__testDisableOutclassSkip) return false;
+    ): string | undefined => {
+        if (input.__testDisableOutclassSkip) return undefined;
         const { familyKey, tier } = deriveFamilyKey(buffName);
         const existing =
             side === 'self'
                 ? getSelfMap(recipientId ?? 'attacker').get(familyKey)
                 : getEnemyMap(enemyTargetId ?? DEFAULT_ENEMY_TARGET).get(familyKey);
-        return outclassedByFamily(existing, tier);
+        return outclassedByFamily(existing, tier) ? existing?.buffName : undefined;
     };
+    const isOutclassedByExistingFamily = (
+        side: 'self' | 'enemy',
+        buffName: string,
+        recipientId?: string,
+        enemyTargetId?: string
+    ): boolean => outclassingStatusName(side, buffName, recipientId, enemyTargetId) !== undefined;
 
     // Add one application's worth of stacks (capped) to a side's persistent entry, creating it
     // on first application. `payload` is stored for ability-sourced applications and refreshed on
@@ -2827,5 +2841,6 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         activeAbilityStatuses,
         timedAbilityStatuses,
         isOutclassedByExistingFamily,
+        outclassingStatusName,
     };
 }

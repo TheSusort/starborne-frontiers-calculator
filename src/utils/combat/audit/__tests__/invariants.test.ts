@@ -338,6 +338,18 @@ describe('checkInvariants — status durations only count down', () => {
         expect(ids(result, 'status-duration-rises')).toEqual([]);
     });
 
+    it('does not accept an attempt-only application row as the explanation', () => {
+        const attempt: CombatLogEntry = {
+            ...noted('debuff', 'C', ['B'], 'Defense Down II'),
+            attemptOnly: true,
+        };
+        const result = audited(twoRounds([turn('C', [attempt])]), [
+            snap(1, 'B', { debuffs: [['Defense Down II', 1]] }),
+            snap(2, 'B', { debuffs: [['Defense Down II', 2]] }),
+        ]);
+        expect(ids(result, 'status-duration-rises')).toHaveLength(1);
+    });
+
     it('does not accept an application onto another holder, of another name, or of the other kind', () => {
         const result = audited(
             twoRounds([

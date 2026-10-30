@@ -251,6 +251,7 @@ exports[`kit fingerprints > Asphyxiator 1`] = `
     "debuff:active",
     "debuff:charged",
     "dot-applied",
+    "duration-changed",
   ],
   "richEnemy": [
     "attack",
@@ -263,6 +264,7 @@ exports[`kit fingerprints > Asphyxiator 1`] = `
     "debuff:active",
     "debuff:charged",
     "dot-applied",
+    "duration-changed",
   ],
   "wounded": [
     "attack",
@@ -275,6 +277,7 @@ exports[`kit fingerprints > Asphyxiator 1`] = `
     "debuff:active",
     "debuff:charged",
     "dot-applied",
+    "duration-changed",
   ],
 }
 `;
@@ -992,6 +995,7 @@ exports[`kit fingerprints > Fuying 1`] = `
     "charge-changed",
     "cleanse",
     "cleanse:charged",
+    "duration-changed:charged",
   ],
   "richEnemy": [
     "buff",
@@ -999,6 +1003,7 @@ exports[`kit fingerprints > Fuying 1`] = `
     "charge-changed",
     "cleanse",
     "cleanse:charged",
+    "duration-changed:charged",
   ],
   "statusRich": [
     "buff",
@@ -1007,6 +1012,7 @@ exports[`kit fingerprints > Fuying 1`] = `
     "charge-changed",
     "cleanse",
     "cleanse:charged",
+    "duration-changed:charged",
   ],
   "wounded": [
     "buff",
@@ -1014,6 +1020,7 @@ exports[`kit fingerprints > Fuying 1`] = `
     "charge-changed",
     "cleanse",
     "cleanse:charged",
+    "duration-changed:charged",
   ],
 }
 `;
@@ -1800,6 +1807,7 @@ exports[`kit fingerprints > Lev 1`] = `
     "buff:charged",
     "charge-changed",
     "cleanse:active",
+    "duration-changed:charged",
   ],
   "richEnemy": [
     "attack",
@@ -1810,6 +1818,7 @@ exports[`kit fingerprints > Lev 1`] = `
     "buff:charged",
     "charge-changed",
     "cleanse:active",
+    "duration-changed:charged",
   ],
   "statusRich": [
     "attack",
@@ -1819,6 +1828,7 @@ exports[`kit fingerprints > Lev 1`] = `
     "buff:charged",
     "charge-changed",
     "cleanse:active",
+    "duration-changed:charged",
   ],
   "wounded": [
     "attack",
@@ -1829,6 +1839,7 @@ exports[`kit fingerprints > Lev 1`] = `
     "buff:charged",
     "charge-changed",
     "cleanse:active",
+    "duration-changed:charged",
   ],
 }
 `;
@@ -1869,18 +1880,21 @@ exports[`kit fingerprints > Lingshe 1`] = `
     "buff",
     "charge-changed",
     "dot-applied",
+    "duration-changed",
   ],
   "richEnemy": [
     "bomb",
     "buff",
     "charge-changed",
     "dot-applied",
+    "duration-changed",
   ],
   "wounded": [
     "bomb",
     "buff",
     "charge-changed",
     "dot-applied",
+    "duration-changed",
   ],
 }
 `;
@@ -2878,6 +2892,7 @@ exports[`kit fingerprints > Provider 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "duration-changed:charged",
   ],
   "richEnemy": [
     "attack:active",
@@ -2885,6 +2900,7 @@ exports[`kit fingerprints > Provider 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "duration-changed:charged",
   ],
   "wounded": [
     "attack:active",
@@ -2892,6 +2908,7 @@ exports[`kit fingerprints > Provider 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "duration-changed:charged",
   ],
 }
 `;
@@ -3127,6 +3144,7 @@ exports[`kit fingerprints > Ripper 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "duration-changed",
   ],
   "richEnemy": [
     "attack:active",
@@ -3135,6 +3153,7 @@ exports[`kit fingerprints > Ripper 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "duration-changed",
   ],
   "wounded": [
     "attack:active",
@@ -3143,6 +3162,7 @@ exports[`kit fingerprints > Ripper 1`] = `
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "duration-changed",
   ],
 }
 `;
@@ -3564,18 +3584,21 @@ exports[`kit fingerprints > Sokol 1`] = `
     "attack:charged",
     "buff",
     "charge-changed",
+    "duration-changed:charged",
   ],
   "richEnemy": [
     "attack:active",
     "attack:charged",
     "buff",
     "charge-changed",
+    "duration-changed:charged",
   ],
   "wounded": [
     "attack:active",
     "attack:charged",
     "buff",
     "charge-changed",
+    "duration-changed:charged",
   ],
 }
 `;

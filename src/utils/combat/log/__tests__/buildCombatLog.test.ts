@@ -114,6 +114,78 @@ describe('buildCombatLog', () => {
         expect(flat).not.toContain('Strike');
     });
 
+    it.each([
+        [{ scope: 'debuffs' as const, count: 2 }, '+1 turn on 2 debuffs', false],
+        [{ scope: 'dots' as const, count: 1 }, '+1 turn on 1 DoT', false],
+        [{ scope: 'buffs' as const, count: 0 }, '+1 turn on 0 buffs', true],
+    ])('logs a duration extension %j as a duration-changed row', (extra, note, attempt) => {
+        const events = oneTurn(
+            ev({
+                type: 'status-duration-changed-log',
+                casterId: 'A',
+                targetIds: ['B'],
+                round: 1,
+                turns: 1,
+                ...extra,
+            })
+        );
+        const [entry] = buildCombatLog(events, roster, initialCharge)[0].turns[0].entries;
+        expect(entry).toMatchObject({
+            kind: 'duration-changed',
+            targets: [{ targetId: 'B' }],
+            note,
+        });
+        expect(entry.attemptOnly === true).toBe(attempt);
+    });
+
+    it('logs a Bomb countdown cut as a duration-changed row, attempt-only at 0', () => {
+        const row = (count: number) =>
+            buildCombatLog(
+                oneTurn(
+                    ev({
+                        type: 'countdown-changed-log',
+                        casterId: 'A',
+                        targetIds: ['B'],
+                        round: 1,
+                        turns: 1,
+                        count,
+                        target: 'bomb',
+                    })
+                ),
+                roster,
+                initialCharge
+            )[0].turns[0].entries[0];
+        expect(row(1)).toMatchObject({
+            kind: 'duration-changed',
+            note: 'bomb countdown -1 on 1 bomb',
+        });
+        expect(row(1).attemptOnly).toBeUndefined();
+        expect(row(0)).toMatchObject({ note: 'bomb countdown -1 on 0 bombs', attemptOnly: true });
+    });
+
+    it('logs an outclassed debuff as an attempt-only debuff row naming the held status', () => {
+        const events = oneTurn(
+            ev({
+                type: 'status-outclassed-log',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                effect: 'Attack Down I',
+                heldEffect: 'Attack Down III',
+                side: 'debuff',
+            })
+        );
+        expect(buildCombatLog(events, roster, initialCharge)[0].turns[0].entries).toEqual([
+            expect.objectContaining({
+                kind: 'debuff',
+                actorId: 'A',
+                targets: [{ targetId: 'B' }],
+                note: 'Attack Down I (outclassed by Attack Down III)',
+                attemptOnly: true,
+            }),
+        ]);
+    });
+
     it('records a landing the kill dropped on the attack row that struck the ship, as no row of its own', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),

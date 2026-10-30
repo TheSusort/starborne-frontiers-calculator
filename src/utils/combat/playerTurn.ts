@@ -86,6 +86,7 @@ import {
 } from './triggers';
 import { STACK_STEALABLE_STATUSES } from './cheatDeathBuffs';
 import { reduceBombsOnVictim, spliceOut } from './bombCountdown';
+import { durationChangedEvent } from './durationChangeLog';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { BARRIER_RECHARGING, holdsBarrierRecharging } from './barrierRecharging';
@@ -1441,6 +1442,8 @@ function extendDoTs(args: {
     selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
     /** See `extensionImmune` in runPlayerTurn. */
     isExtensionImmune: (vid: string | undefined) => boolean;
+    /** Where each resolved clause logs its `status-duration-changed-log`. */
+    log: { bus: CombatEventBus; casterId: string; round: number };
 }): void {
     for (const ab of args.abilities) {
         if (ab.config.type !== 'extend-dot') continue;
@@ -1460,13 +1463,20 @@ function extendDoTs(args: {
             firingClause: args.isFiringClause(ab),
             selectorEnemyIdFor: args.selectorEnemyIdFor,
         });
+        const movedOn = new Map<string, number>();
         for (const vid of recipients) {
             if (args.isExtensionImmune(vid)) continue;
             const holder = args.debuffHolderFor(vid);
             // An id naming no known victim is skipped; a no-victim turn's loose containers are a
             // throwaway default.
             if (!holder) continue;
-            extendDebuffEntries(dotEntriesOf(holder, ab.config.dotType), turns);
+            const moved = extendDebuffEntries(dotEntriesOf(holder, ab.config.dotType), turns);
+            const holderId = vid ?? args.targetId;
+            if (holderId !== undefined) movedOn.set(holderId, moved);
+        }
+        if (movedOn.size > 0) {
+            const { bus, casterId, round } = args.log;
+            bus.emit(durationChangedEvent(casterId, round, movedOn, turns, 'dots'));
         }
     }
 }
@@ -1490,14 +1500,14 @@ const debuffEntryLengths = (h: DebuffEntryHolder): DebuffEntryLengths => ({
 });
 
 /** Extends only the entries `holder` gained since `before` was captured — of those, only the
- *  ones named `name` when it is given (`debuffEntriesNamed`). The slices share their entry objects
+ *  ones named `name` when it is given (`debuffEntriesNamed`). Returns the debuffs extended. The slices share their entry objects
  *  with the live containers, so `extendDebuffEntries` mutates the real entries. */
 const extendDebuffEntriesSince = (
     holder: DebuffEntryHolder,
     before: DebuffEntryLengths,
     turns: number,
     name?: string
-): void => {
+): number => {
     const fresh: DebuffEntryHolder = {
         corrosionEntries: holder.corrosionEntries.slice(before.corrosion),
         infernoEntries: holder.infernoEntries.slice(before.inferno),
@@ -1505,7 +1515,7 @@ const extendDebuffEntriesSince = (
         pendingBombs: holder.pendingBombs.slice(before.bombs),
         pendingAccumulators: holder.pendingAccumulators.slice(before.accumulators),
     };
-    extendDebuffEntries(name === undefined ? fresh : debuffEntriesNamed(fresh, name), turns);
+    return extendDebuffEntries(name === undefined ? fresh : debuffEntriesNamed(fresh, name), turns);
 };
 
 // Step 3a: Extend INFLICTED-scope DoTs — runs AFTER applyNewDoTs and applyAccumulators, extending
@@ -1528,6 +1538,9 @@ function extendInflictedDoTs(args: {
     /** The victim holding these entries is immune to extension (`extensionImmune`). The gate
      *  still draws, so the chance schedule does not depend on the victim's affinity. */
     immune: boolean;
+    /** Where each resolved clause logs its `status-duration-changed-log`, and whose entries
+     *  `holder` holds. */
+    log: { bus: CombatEventBus; casterId: string; round: number; holderId: string };
 }): void {
     for (const ab of args.abilities) {
         if (ab.config.type !== 'extend-dot') continue;
@@ -1538,10 +1551,20 @@ function extendInflictedDoTs(args: {
             if (!args.extendChanceGate(critPowerFactor)) continue;
         }
         if (args.immune) continue;
-        extendDebuffEntriesSince(
+        const moved = extendDebuffEntriesSince(
             dotEntriesOf(args.holder, ab.config.dotType),
             args.before,
             ab.config.turns
+        );
+        const { bus, casterId, round, holderId } = args.log;
+        bus.emit(
+            durationChangedEvent(
+                casterId,
+                round,
+                new Map([[holderId, moved]]),
+                ab.config.turns,
+                'dots'
+            )
         );
     }
 }
@@ -1566,6 +1589,8 @@ function extendInflictedStatusDoTs(args: {
     before: DebuffEntryLengths;
     /** The victim holding these entries is immune to extension (`extensionImmune`). */
     immune: boolean;
+    /** See `extendInflictedDoTs`. */
+    log: { bus: CombatEventBus; casterId: string; round: number; holderId: string };
 }): void {
     if (args.immune) return;
     for (const ab of args.abilities) {
@@ -1573,7 +1598,25 @@ function extendInflictedStatusDoTs(args: {
         if (ab.config.scope !== 'inflicted') continue;
         if (ab.config.statusKind !== 'debuff') continue;
         if (!conditionsMet(ab.conditions, args.ctx)) continue;
-        extendDebuffEntriesSince(args.holder, args.before, ab.config.turns, ab.config.buffName);
+        const moved = extendDebuffEntriesSince(
+            args.holder,
+            args.before,
+            ab.config.turns,
+            ab.config.buffName
+        );
+        // The clause's own row (store half, attempt included) comes from the cast's extend-status
+        // loop; this half logs only what it moved.
+        if (moved === 0) continue;
+        const { bus, casterId, round, holderId } = args.log;
+        bus.emit(
+            durationChangedEvent(
+                casterId,
+                round,
+                new Map([[holderId, moved]]),
+                ab.config.turns,
+                'debuffs'
+            )
+        );
     }
 }
 
@@ -2078,12 +2121,31 @@ function reduceEnemyBombs(args: {
             firingClause: true,
             selectorEnemyIdFor: args.selectorEnemyIdFor,
         }).map((id) => id ?? boundVictimId);
+        // Every landing roll is drawn first, in recipient order, so the clause's
+        // `countdown-changed-log` can precede any detonation the cut forces. `count` is the Bombs
+        // each landed victim holds as the cut starts.
+        const landed: CombatActor[] = [];
         for (const vid of recipients) {
             const victim =
                 args.opposingVictimById?.get(vid) ??
                 (vid === args.anchor.id ? args.anchor : undefined);
             if (!victim) continue;
             if (!args.landsReductionOn(victim)) continue;
+            landed.push(victim);
+        }
+        if (landed.length === 0) continue;
+        const holding = landed.filter((v) => v.pendingBombs.length > 0);
+        const count = holding.reduce((sum, v) => sum + v.pendingBombs.length, 0);
+        args.bus.emit({
+            type: 'countdown-changed-log',
+            casterId: args.detonatorId,
+            targetIds: (count > 0 ? holding : landed).map((v) => v.id),
+            round: args.round,
+            turns: ab.config.turns,
+            count,
+            target: 'bomb',
+        });
+        for (const victim of landed) {
             reduceBombsOnVictim(
                 victim,
                 ab.config.turns,
@@ -4149,15 +4211,33 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // priority over Block-Debuff immunity — the whole clause behaves as absent, not as a
             // Block-Debuff resist. `vid` (not `emitTargetId`) matches the target id `writeState`
             // below hands `applyTimedAbilityStatus`, so the two read the same family entry.
-            if (
-                statusEngine.isOutclassedByExistingFamily(
-                    'enemy',
-                    status.payload.buffName,
-                    undefined,
-                    vid
-                )
-            )
+            const heldEffect = statusEngine.outclassingStatusName(
+                'enemy',
+                status.payload.buffName,
+                undefined,
+                vid
+            );
+            if (heldEffect !== undefined) {
+                // Logged where the landing it replaces would have been.
+                const outclassed: DeferredEnemyApplication = {
+                    applyState: () => {},
+                    emitEvents: () =>
+                        bus.emit({
+                            type: 'status-outclassed-log',
+                            sourceId: actor.id,
+                            targetId: emitTargetId,
+                            round: r,
+                            effect: status.payload.buffName,
+                            heldEffect,
+                            side: 'debuff',
+                        }),
+                };
+                if (collect) collect.push(outclassed);
+                else if (status.afterDamageClause === true)
+                    deferredEnemyApplications.push(outclassed);
+                else outclassed.emitEvents();
                 continue;
+            }
 
             // #413: the DECISION, not just its boolean — the resist emits below need to know
             // whether a gate was drawn. Called exactly once per recipient: both faces draw.
@@ -5812,6 +5892,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     extendDoTs({
         abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
         isExtensionImmune: extensionImmune,
+        log: { bus, casterId: actor.id, round: r },
         isFiringClause: (ab) => firingSkill?.abilities.includes(ab) ?? false,
         ctx,
         effectiveCritDamage,
@@ -6146,6 +6227,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     holder: primaryHolder,
                     before: primaryBefore,
                     immune: extensionImmune(undefined),
+                    log: { bus, casterId: actor.id, round: r, holderId: enemy.id },
                 });
                 extendInflictedStatusDoTs({
                     abilities: [
@@ -6156,6 +6238,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     holder: primaryHolder,
                     before: primaryBefore,
                     immune: extensionImmune(undefined),
+                    log: { bus, casterId: actor.id, round: r, holderId: enemy.id },
                 });
             });
         }
@@ -6365,6 +6448,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 holder: victim,
                 before: victimBefore,
                 immune: extensionImmune(rid),
+                log: { bus, casterId: actor.id, round: r, holderId: rid },
             });
             extendInflictedStatusDoTs({
                 abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
@@ -6372,6 +6456,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 holder: victim,
                 before: victimBefore,
                 immune: extensionImmune(rid),
+                log: { bus, casterId: actor.id, round: r, holderId: rid },
             });
         });
     }
@@ -6600,6 +6685,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
     // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,
     // so both branches no-op harmlessly when the relevant roster is empty.
+    /** One `status-duration-changed-log` for a resolved extension clause: `movedOn` maps each
+     *  recipient to the statuses it moved there. No recipient → no row. */
+    const emitDurationChanged = (
+        movedOn: ReadonlyMap<string, number>,
+        turns: number,
+        scope: 'buffs' | 'debuffs' | 'dots'
+    ): void => {
+        if (movedOn.size === 0) return;
+        bus.emit(durationChangedEvent(actor.id, r, movedOn, turns, scope));
+    };
     const castWideCritCtx = (base: ConditionContext): ConditionContext =>
         base.roundCrit === anyVictimCrit ? base : { ...base, roundCrit: anyVictimCrit };
     const firingExtensions = (firingSkill?.abilities ?? []).filter(
@@ -6662,8 +6757,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     : names.has(namedBuff)
                       ? new Set([namedBuff])
                       : NO_INFLICTED_NAMES;
+            const movedOn = new Map<string, number>();
             for (const vid of recipients) {
-                statusEngine.extendAllDebuffsDuration(
+                let moved = statusEngine.extendAllDebuffsDuration(
                     vid,
                     turns,
                     inflictedScope
@@ -6675,14 +6771,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 if (!inflictedScope) {
                     const holder = debuffHolderFor(vid);
                     if (holder)
-                        extendDebuffEntries(
+                        moved += extendDebuffEntries(
                             namedBuff === undefined
                                 ? holder
                                 : debuffEntriesNamed(holder, namedBuff),
                             turns
                         );
                 }
+                movedOn.set(vid, moved);
             }
+            // The deferred inflicted-scope writes wrapped below extend after this row is logged
+            // and are not counted in it.
+            emitDurationChanged(movedOn, turns, 'debuffs');
             // A clause that follows this cast's damage lands LATER — the engine flushes
             // `deferredEnemyApplications` once the damage has resolved, which is after this
             // block runs (Asphyxiator's charged Stasis is the corpus instance). Extending by
@@ -6739,9 +6839,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                           ability: ab,
                           fromPassive,
                       });
+            const movedOn = new Map<string, number>();
             for (const rid of recipients) {
-                statusEngine.extendAllBuffsDuration(rid, turns, namedBuff);
+                movedOn.set(rid, statusEngine.extendAllBuffsDuration(rid, turns, namedBuff));
             }
+            emitDurationChanged(movedOn, turns, 'buffs');
         }
     }
 
