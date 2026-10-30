@@ -4968,7 +4968,8 @@ export type StampedEventType =
     | 'cheat-death-log'
     | 'reversed-repair-log'
     | 'bomb-splash-log'
-    | 'purge-blocked-log';
+    | 'purge-attempt-log'
+    | 'cleanse-attempt-log';
 
 /** Forces the array literal passed to it to contain every member of `T` exactly once — a
  *  missing or duplicated tag is a compile error, not a silent gap. Standard TS
@@ -5035,7 +5036,8 @@ const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     'cheat-death-log',
     'reversed-repair-log',
     'bomb-splash-log',
-    'purge-blocked-log',
+    'purge-attempt-log',
+    'cleanse-attempt-log',
 ]);
 
 const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>(
@@ -7033,14 +7035,23 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // Log visibility for Heliodor's "reduces the duration of all active Debuffs … by 1
             // turn": reuses reactive-cleanse-performed, flagged `mode: 'reduce-duration'` so the
             // renderer says "-N turn" rather than "cleansed N" and the on-enemy-cleansed listener
-            // ignores it (a duration cut removes nothing). Silent when nothing was shrunk (no
-            // debuffs present), matching the remove twin.
+            // ignores it (a duration cut removes nothing). When nothing was shrunk the log-only
+            // `cleanse-attempt-log` records the attempt instead, matching the remove twin.
             if (reducePerTarget.length > 0 && ctx.bus) {
                 ctx.bus.emit({
                     type: 'reactive-cleanse-performed',
                     casterId: intent.ownerId,
                     round: ctx.round,
                     perTarget: reducePerTarget,
+                    mode: 'reduce-duration',
+                    durationTurns,
+                });
+            } else if (recipients.length > 0 && ctx.bus) {
+                ctx.bus.emit({
+                    type: 'cleanse-attempt-log',
+                    casterId: intent.ownerId,
+                    targetIds: [...recipients],
+                    round: ctx.round,
                     mode: 'reduce-duration',
                     durationTurns,
                 });
@@ -7082,14 +7093,21 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // the owner's own on-own-cleanse listeners). buildCombatLog renders it, stamped
         // duringTurnOf via ctx.bus so it nests under the triggering turn, and the opposing
         // side's on-enemy-cleansed reactions hear it, a chained one included (ruling 66; the
-        // lineage rule `reactionKey` ends the chain). Only emitted when a debuff was actually removed (empty
-        // perTarget → silent, like the heal twin).
+        // lineage rule `reactionKey` ends the chain). Only emitted when a debuff was actually
+        // removed; a cleanse that removed nothing logs the log-only `cleanse-attempt-log`.
         if (cleansePerTarget.length > 0 && ctx.bus) {
             ctx.bus.emit({
                 type: 'reactive-cleanse-performed',
                 casterId: intent.ownerId,
                 round: ctx.round,
                 perTarget: cleansePerTarget,
+            });
+        } else if (recipients.length > 0 && ctx.bus) {
+            ctx.bus.emit({
+                type: 'cleanse-attempt-log',
+                casterId: intent.ownerId,
+                targetIds: [...recipients],
+                round: ctx.round,
             });
         }
         return;
@@ -7461,22 +7479,26 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             });
         }
         // Emit purge-performed UNLESS this purge was itself triggered by a purge (depth-1
-        // guard). Every victim is purged first, so each event carries the wave's total.
+        // guard). Every victim is purged first, so each event carries the wave's total. Attempt
+        // rows follow `purge-attempt-log`'s contract (events.ts).
         if (!intent.eventCtx?.fromPurgeEvent) {
             const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
             let waveLead = true;
+            let logged = false;
             for (const { targetId, removed, blocked } of removals) {
                 if (blocked) {
                     ctx.bus.emit({
-                        type: 'purge-blocked-log',
+                        type: 'purge-attempt-log',
                         casterId: intent.ownerId,
-                        targetId,
+                        targetIds: [targetId],
                         round: ctx.round,
                         reason: 'affinity',
                     });
+                    logged = true;
                     continue;
                 }
                 if (removed <= 0) continue;
+                logged = true;
                 ctx.bus.emit({
                     type: 'purge-performed',
                     casterId: intent.ownerId,
@@ -7487,6 +7509,15 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     waveLead,
                 });
                 waveLead = false;
+            }
+            if (!logged && removals.length > 0) {
+                ctx.bus.emit({
+                    type: 'purge-attempt-log',
+                    casterId: intent.ownerId,
+                    targetIds: removals.map((x) => x.targetId),
+                    round: ctx.round,
+                    reason: 'nothing-to-remove',
+                });
             }
         }
         return;

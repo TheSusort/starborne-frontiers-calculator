@@ -75,6 +75,10 @@ export interface CombatLogEntry {
     targets: CombatLogTarget[]; // 1 = single-target, N = AoE
     reactions: CombatLogEntry[]; // reactions nested under this entry by buildCombatLog's routeReaction
     note?: string;
+    /** The row records an attempt that changed nothing (a cleanse or purge that removed nothing).
+     *  It still counts as its `kind` for the interaction oracle (`oracleKind`), like a resist
+     *  counts as the infliction it tried; status-bookkeeping readers (`roundStatusRows`) skip it. */
+    attemptOnly?: true;
     /** #362 fix-wave-1, `reversed-repair` ONLY: the healer whose repair was reversed, for DISPLAY
      *  alone ("Zosimos → Nova: Medic's repair reversed 10,000"). A dedicated field rather than
      *  folded into `note` — `note` is already spoken for by `debuff-resisted`. Carrying no

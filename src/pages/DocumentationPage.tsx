@@ -5058,7 +5058,8 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         The event log lists every turn-by-turn action, reaction, and
-                                        effect for the selected round — see below for details
+                                        effect for the selected round, including a cleanse or purge
+                                        that found nothing to remove — see below for details
                                     </li>
                                 </ul>
                             </div>

@@ -2885,17 +2885,35 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // anchor id for `vid` to match.
         const victimOf = (vid: string): CombatActor | undefined =>
             opposingVictimById?.get(vid) ?? (hasVictim && vid === enemy.id ? enemy : undefined);
-        const removals = recipients.map((vid) => ({
-            vid,
-            victim: victimOf(vid),
-            removed: extensionImmune(vid) ? 0 : statusEngine.purge(vid, count),
-        }));
+        // `blocked`: the affinity disadvantage alone stopped a purge that had buffs to take.
+        const removals = recipients.map((vid) => {
+            const immune = extensionImmune(vid);
+            return {
+                vid,
+                victim: victimOf(vid),
+                removed: immune ? 0 : statusEngine.purge(vid, count),
+                blocked: immune && statusEngine.removableBuffCount(vid) > 0,
+            };
+        });
         const waveTotal = removals.reduce((sum, x) => sum + x.removed, 0);
         return {
             waveTotal,
             emit: () => {
+                // Attempt rows follow `purge-attempt-log`'s contract (events.ts).
+                let logged = false;
                 let waveLead = true;
-                for (const { vid, victim, removed } of removals) {
+                for (const { vid, victim, removed, blocked } of removals) {
+                    if (blocked) {
+                        bus.emit({
+                            type: 'purge-attempt-log',
+                            casterId: actor.id,
+                            targetIds: [vid],
+                            round: r,
+                            reason: 'affinity',
+                        });
+                        logged = true;
+                        continue;
+                    }
                     if (removed <= 0) continue;
                     bus.emit({
                         type: 'purge-performed',
@@ -2907,6 +2925,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         waveLead,
                     });
                     waveLead = false;
+                    logged = true;
                     // I6: Lodolite legendary refit — "When this Unit Purges a buff from an enemy,
                     // it removes 100% of the enemy's shield." Gated on the parsed ability config
                     // (stripsShield), never a hardcoded ship name — see
@@ -2915,6 +2934,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // in a non-positional cast opposingVictimById is absent and only the anchor
                     // resolves — the real battle sim always positions actors.
                     if (stripsShield && victim) stripShieldPct(victim, 100, bus, actor.id, r);
+                }
+                if (!logged && removals.length > 0) {
+                    bus.emit({
+                        type: 'purge-attempt-log',
+                        casterId: actor.id,
+                        targetIds: removals.map((x) => x.vid),
+                        round: r,
+                        reason: 'nothing-to-remove',
+                    });
                 }
             },
         };
@@ -2964,6 +2992,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     count: removed,
                     round: r,
                     targets: [actor.id],
+                });
+            } else {
+                bus.emit({
+                    type: 'cleanse-attempt-log',
+                    casterId: actor.id,
+                    targetIds: [actor.id],
+                    round: r,
                 });
             }
         }
@@ -7121,6 +7156,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // listener's ally-routing (mirrors healTargets, gated the same way as shieldRecipientIds:
         // only entries where something actually happened are included).
         const cleansedRecipientIds: string[] = [];
+        /** Every recipient a cast cleanse clause reached, removal or not (`cleanse-attempt-log`). */
+        const cleanseReachedIds = new Set<string>();
         // Per-recipient breakdown for heal-performed.perTarget (additive — one entry per recipient).
         const healPerTarget: {
             targetId: string;
@@ -7451,6 +7488,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             cfg.debuffType
                         );
                         removed += removedForRid;
+                        cleanseReachedIds.add(rid);
                         // PR-H: only recipients with a REAL removal are on-own-cleanse's
                         // ally-routing candidates (mirrors shieldRecipientIds' granted>0 gate) — a
                         // targeted-but-untouched ally (e.g. an all-allies cleanse hitting a debuff-free
@@ -7507,6 +7545,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     count: cleansePerformedCount,
                     round: r,
                     targets: cleansedRecipientIds,
+                });
+            } else if (cleanseReachedIds.size > 0) {
+                bus.emit({
+                    type: 'cleanse-attempt-log',
+                    casterId: actor.id,
+                    targetIds: [...cleanseReachedIds],
+                    round: r,
                 });
             }
         };

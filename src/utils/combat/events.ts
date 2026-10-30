@@ -586,18 +586,36 @@ export type CombatEvent =
           waveTotal?: number;
           waveLead?: boolean;
       } & ReactiveStamp)
-    /** LOG-ONLY: a reactive purge (`triggers.ts`'s purge executor) was aimed at an enemy holding
-     *  at least one removable buff and removed nothing, because the purger is at an affinity
-     *  disadvantage against it (a purge lands like an 'apply' debuff). `reason` names why. NO
-     *  combat listener subscribes to it, so a purge that did not happen wakes nothing; it opens a
-     *  `purge` row of 0 so the attempt is visible. Suppressed under the same depth-1 chain guard
-     *  as `purge-performed`. */
+    /** LOG-ONLY: a purge clause resolved and removed nothing. Emitted by the cast path
+     *  (`playerTurn.ts` `purgeStruck`) and the reactive purge executor (`triggers.ts`) under the
+     *  same rules, after every gate the clause has passed:
+     *  - `reason: 'affinity'` — one per recipient that held at least one removable buff and was
+     *    spared by the purger's affinity disadvantage (a purge lands like an 'apply' debuff);
+     *    `targetIds` holds that one recipient.
+     *  - `reason: 'nothing-to-remove'` — one per wave that removed nothing and logged no affinity
+     *    row; `targetIds` = every recipient the clause reached. A purge that resolved no
+     *    recipient at all logs nothing.
+     *  NO combat listener subscribes to it, so a purge that removed nothing wakes nothing; it opens
+     *  a `purge` row of 0 marked `attemptOnly`. Suppressed under the same depth-1 chain guard as
+     *  `purge-performed`. */
     | ({
-          type: 'purge-blocked-log';
+          type: 'purge-attempt-log';
           casterId: string;
-          targetId: string;
+          targetIds: string[];
           round: number;
-          reason: 'affinity';
+          reason: 'affinity' | 'nothing-to-remove';
+      } & ReactiveStamp)
+    /** LOG-ONLY twin of `cleanse-performed` / `reactive-cleanse-performed`: a cleanse clause
+     *  resolved to at least one recipient and removed (or, with `mode: 'reduce-duration'`,
+     *  shrank) nothing. `targetIds` = the clause's recipients. NO combat listener subscribes to it
+     *  and it books no `cleanseCount`; it opens a `cleanse` row marked `attemptOnly`. */
+    | ({
+          type: 'cleanse-attempt-log';
+          casterId: string;
+          targetIds: string[];
+          round: number;
+          mode?: 'reduce-duration';
+          durationTurns?: number;
       } & ReactiveStamp)
     /** A buff STEAL moved something. Sibling of `purge-performed`, and like it, SUPPRESSED when
      *  nothing actually moved (an empty return from `statusEngine.steal` / `stealStacks` opens no

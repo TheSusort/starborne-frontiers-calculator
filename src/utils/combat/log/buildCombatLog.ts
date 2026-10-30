@@ -1103,15 +1103,35 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
-    // A reactive purge an affinity disadvantage stopped: the attempt, as a purge of 0.
-    'purge-blocked-log': (e, ctx) => {
+    // A purge or cleanse clause that removed nothing: the attempt, as a row of 0. A cast-path row
+    // reads the pending skill tag WITHOUT consuming it: the attempt changed nothing, so the row the
+    // tag would otherwise reach (the cast's attack) keeps it. A reactive row nests under its trigger.
+    'purge-attempt-log': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         ctx.attachEntry({
             kind: 'purge',
             actorId: e.casterId,
-            targets: [{ targetId: e.targetId }],
+            targets: e.targetIds.map((targetId) => ({ targetId })),
             reactions: [],
-            note: `purged 0 (${e.reason})`,
+            note: e.reason === 'affinity' ? 'purged 0 (affinity)' : 'purged 0 (nothing to remove)',
+            attemptOnly: true,
+            ...(e.reactive ? {} : (ctx.pendingSkill ?? {})),
+        });
+    },
+
+    'cleanse-attempt-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        ctx.attachEntry({
+            kind: 'cleanse',
+            actorId: e.casterId,
+            targets: e.targetIds.map((targetId) => ({ targetId })),
+            reactions: [],
+            note:
+                e.mode === 'reduce-duration'
+                    ? `-${e.durationTurns ?? 1} turn on 0 debuffs`
+                    : 'cleansed 0 (nothing to remove)',
+            attemptOnly: true,
+            ...(e.reactive ? {} : (ctx.pendingSkill ?? {})),
         });
     },
 

@@ -37,6 +37,7 @@ import { parseShipTargeting } from '../../../targetingParser';
 import type { Ship } from '../../../../types/ship';
 import type { Position } from '../../../../types/encounters';
 import type { CombatActor } from '../../state';
+import type { CombatLogEntry } from '../../log/types';
 
 function requireReferenceData(): void {
     if (!csvAvailable() || !shipDataAvailable()) {
@@ -479,11 +480,24 @@ describe('statusRich scenario', () => {
     const statusRichNames = (): string[] =>
         corpusNames().filter((n) => statusRichShipNames().has(n.toUpperCase()));
 
+    /** The focus's tokens from rows that CHANGED something. An `attemptOnly` row (a cleanse or
+     *  purge that removed nothing) fires on a clean board too, so it cannot witness that the arm
+     *  gave the clause something to take. */
     const tokensFor = (name: string, scenario: FingerprintScenario): string[] => {
         const ship = buildTraceShip(name);
         expect(ship, `${name} did not resolve from the corpus`).not.toBeNull();
         const result = runSeededBattle(buildScenarioBattle(ship!, scenario), SEED);
-        return fingerprintActorTokens(result, FOCUS_ACTOR_ID);
+        const landed = (entries: CombatLogEntry[]): CombatLogEntry[] =>
+            entries
+                .filter((e) => !e.attemptOnly)
+                .map((e) => ({ ...e, reactions: landed(e.reactions ?? []) }));
+        const combatLog = result.combatLog.map((r) => ({
+            ...r,
+            startOfRound: landed(r.startOfRound),
+            endOfRound: landed(r.endOfRound),
+            turns: r.turns.map((t) => ({ ...t, entries: landed(t.entries) })),
+        }));
+        return fingerprintActorTokens({ ...result, combatLog }, FOCUS_ACTOR_ID);
     };
 
     it('applies to exactly the ships whose kit CONSUMES a status, derived from the parse', () => {

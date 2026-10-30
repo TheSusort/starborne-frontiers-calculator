@@ -539,6 +539,18 @@ describe('checkInvariants — a lower tier never replaces a higher one', () => {
         );
         expect(ids(drop(round2.turns), 'status-tier-drop')).toEqual([]);
     });
+
+    it.each(['cleanse', 'purge'] as const)(
+        'still flags a tier drop when the only %s row reaching the holder is an attempt',
+        (kind) => {
+            const attempt: CombatLogEntry = { ...entry(kind, 'C', ['A']), attemptOnly: true };
+            const result = drop([
+                turn('A', []),
+                turn('B', [noted('debuff', 'B', ['A'], 'Defense Down I'), attempt]),
+            ]);
+            expect(ids(result, 'status-tier-drop')).toHaveLength(1);
+        }
+    );
 });
 
 describe('checkInvariants — non-defence damage reduction is capped at 70%', () => {
