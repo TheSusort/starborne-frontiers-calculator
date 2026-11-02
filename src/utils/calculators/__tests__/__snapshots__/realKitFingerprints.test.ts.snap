@@ -3464,6 +3464,7 @@ exports[`kit fingerprints > Shelter 1`] = `
     "buff:charged",
     "charge-changed",
     "heal",
+    "heal:active",
   ],
   "richEnemy": [
     "buff",
@@ -3472,6 +3473,7 @@ exports[`kit fingerprints > Shelter 1`] = `
     "buff:charged",
     "charge-changed",
     "heal",
+    "heal:active",
   ],
   "wounded": [
     "buff",
@@ -3480,6 +3482,7 @@ exports[`kit fingerprints > Shelter 1`] = `
     "buff:charged",
     "charge-changed",
     "heal",
+    "heal:active",
   ],
 }
 `;

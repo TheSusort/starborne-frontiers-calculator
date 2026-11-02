@@ -648,12 +648,17 @@ export type CombatEvent =
           count: number;
           target: 'bomb';
       } & ReactiveStamp)
-    /** LOG-ONLY: a debuff application was skipped because its target already holds the same
-     *  family at a STRICTLY higher tier (#590 R1, `isOutclassedByExistingFamily`) — no landing
-     *  roll, no landing, no resist. `effect` is the skipped status, `heldEffect` the one that
-     *  outclassed it. Not emitted for the equal-tier shorter-duration skip, nor for a scheduled
-     *  re-application. NO combat listener subscribes; it opens an `attemptOnly` row of kind
-     *  `side`. */
+    /** LOG-ONLY: a status application fizzled because its recipient already holds the same
+     *  family at a STRICTLY higher tier (#590 R1, `statusEngine.outclassingStatusName`). `effect`
+     *  is the skipped status, `heldEffect` the one that outclassed it.
+     *  - `side: 'debuff'`: no landing roll, no landing, no resist.
+     *  - `side: 'buff'`: a timed buff grant is not applied and is NOT a buff gain — it is emitted
+     *    INSTEAD of `buff-applied`, so no buff-gain reaction (`on-enemy-buffed`, Nuqtu's Terran
+     *    Bolster) fires for that recipient. Accumulating stack banks are not family-tiered and
+     *    never take this path.
+     *  Not emitted for an equal-tier application (that is a re-application, not outclassed), nor
+     *  for a scheduled re-application. NO combat listener subscribes; it opens an `attemptOnly`
+     *  row of kind `side`. */
     | ({
           type: 'status-outclassed-log';
           sourceId: string;
@@ -661,7 +666,7 @@ export type CombatEvent =
           round: number;
           effect: string;
           heldEffect: string;
-          side: 'debuff';
+          side: 'buff' | 'debuff';
       } & ReactiveStamp)
     /** A buff STEAL moved something. Sibling of `purge-performed`, and like it, SUPPRESSED when
      *  nothing actually moved (an empty return from `statusEngine.steal` / `stealStacks` opens no

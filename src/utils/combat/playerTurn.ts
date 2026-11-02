@@ -2808,8 +2808,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 continue;
             }
             const capped = statusEngine.selfBuffAtCap(rid, status.payload.buffName);
+            // #590 R1 buff side: see `status-outclassed-log`. Read before the write below.
+            const heldEffect = statusEngine.outclassingStatusName(
+                'self',
+                status.payload.buffName,
+                rid
+            );
             statusEngine.applyTimedAbilityStatus(r, grant, rid);
             if (capped) continue;
+            if (heldEffect !== undefined) {
+                bus.emit({
+                    type: 'status-outclassed-log',
+                    sourceId: status.casterId ?? actor.id,
+                    targetId: rid,
+                    round: r,
+                    effect: status.payload.buffName,
+                    heldEffect,
+                    side: 'buff',
+                });
+                continue;
+            }
             bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
