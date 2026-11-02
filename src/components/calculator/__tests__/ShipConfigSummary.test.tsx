@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * SP-2 Task 3: the summary's buffed numbers come from the engine's per-turn stat snapshots.
  *

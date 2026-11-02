@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * The player's engineering applies on BOTH boards of the combat simulator (owner ruling
  * 2026-10-22), including a ship the player puts on the enemy board: `useSimulatorRuns` builds

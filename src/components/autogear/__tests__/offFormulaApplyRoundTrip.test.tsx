@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { readFileSync } from 'fs';
 import React, { useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';

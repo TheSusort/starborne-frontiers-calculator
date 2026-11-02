@@ -193,7 +193,7 @@ describe('the real files', () => {
 });
 
 describe('commitRelease', () => {
-    it('streams the commit instead of buffering it, so the pre-commit suite cannot overflow it', () => {
+    it('streams the commit instead of buffering it, so the pre-commit hook output cannot overflow it', () => {
         const run = vi.fn();
         commitRelease('1.68.0', run);
         expect(run).toHaveBeenCalledTimes(1);

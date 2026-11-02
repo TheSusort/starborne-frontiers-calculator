@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * The page must be able to REACH the zero-enemy scenario end to end. Before SP-4b-2b the roster was
  * floored at one because an empty one handed the run to the engine's vestigial dummy; the practice

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { loadShipModel, modelUrls, noseUpCorrection } from '../shipModelLoader';
 

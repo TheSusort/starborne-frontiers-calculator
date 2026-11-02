@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { render, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AnimatedHexBoard, type HexBoardShip } from '../AnimatedHexBoard';
