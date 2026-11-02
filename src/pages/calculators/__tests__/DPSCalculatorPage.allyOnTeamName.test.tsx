@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * #426 — the DPS page must pass the picked ship's NAME into `simulateDPS`.
  *

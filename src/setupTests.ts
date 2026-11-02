@@ -1,20 +1,11 @@
-// jest-dom adds custom jest matchers for asserting on DOM nodes.
-// allows you to do things like:
-// expect(element).toHaveTextContent(/react/i)
-// learn more: https://github.com/testing-library/jest-dom
-import '@testing-library/jest-dom';
-import { expect, afterEach, beforeEach } from 'vitest';
-import { cleanup } from '@testing-library/react';
-import * as matchers from '@testing-library/jest-dom/matchers';
+import { afterEach, beforeEach } from 'vitest';
 import { setupKeyedRng, resetRateGateRng } from './utils/calculators/rateAccumulator';
 
-// Extend Vitest's expect method with testing-library methods
-expect.extend(matchers);
-
-// Cleanup after each test case
-afterEach(() => {
-    cleanup();
-});
+// Shared by every test file. Files run under node unless they opt into jsdom (see `test` in
+// vite.config.ts); the DOM matchers and RTL cleanup load only under jsdom.
+if (typeof document !== 'undefined') {
+    await import('./setupTests.dom');
+}
 
 // Make the combat RNG deterministic per test. Outside a seeded run the default stream is
 // real Math.random; tests install both a fixed-seed mulberry32 (unkeyed gates) and a keyed

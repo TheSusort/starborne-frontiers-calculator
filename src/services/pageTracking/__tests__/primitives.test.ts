@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ActiveTimer, MAX_ACTIVE_MS } from '../activeTimer';
 import { addClick, navTrackId, trackIdFromTarget, MAX_CLICK_KEYS } from '../clicks';

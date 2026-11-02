@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import userEvent from '@testing-library/user-event';

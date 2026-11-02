@@ -3,4 +3,11 @@
 
 npx lint-staged
 npx tsc --noEmit
-npm test -- --run
+
+# Tests related to the staged src/ TypeScript files; the full suite runs on pre-push.
+# Hooks run under `sh -e`, so a grep with no match must not end the hook.
+staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^src/.*\.tsx?$' || true)
+if [ -n "$staged" ]; then
+    # Word splitting of $staged is intended: one argument per file.
+    npx vitest related --run --passWithNoTests $staged
+fi

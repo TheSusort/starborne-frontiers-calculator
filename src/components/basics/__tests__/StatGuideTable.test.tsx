@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import StatGuideTable, { STAT_GUIDE, NOT_A_GAME_STAT } from '../StatGuideTable';

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { migratePlayerData, syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { fakeSupabase } from '../services/fakeSupabase';

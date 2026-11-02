@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * SP-2 Task 5: the panel's "End of Round" section reads the engine's round-tail status snapshot.
  *

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * #358 TASK 13, BLOCKER 2 — the ZERO-PRESSURE default must not rank on `elapsedRounds`.
  *
