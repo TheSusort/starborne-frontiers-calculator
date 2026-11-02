@@ -173,9 +173,10 @@ type Run = (file: string, args: string[], options: ExecFileSyncOptions) => unkno
 
 /**
  * The release commit runs the husky pre-commit hook, whose vitest step prints under the verbose
- * reporter — megabytes of output when the staged files reach much of the suite. It streams to the terminal rather than through `git()`'s buffer: past
- * execFileSync's 1 MB `maxBuffer` Node SIGTERMs git, the commit aborts with ENOBUFS, and the
- * hook's vitest keeps running orphaned with nobody reading its result.
+ * reporter — megabytes of output when the staged files reach much of the suite. It streams to the
+ * terminal rather than through `git()`'s buffer: past execFileSync's 1 MB `maxBuffer` Node
+ * SIGTERMs git, the commit aborts with ENOBUFS, and the hook's vitest keeps running orphaned with
+ * nobody reading its result.
  */
 export function commitRelease(version: string, run: Run = execFileSync): void {
     run('git', ['commit', '-m', `chore(release): cut ${version}`], { cwd: ROOT, stdio: 'inherit' });
