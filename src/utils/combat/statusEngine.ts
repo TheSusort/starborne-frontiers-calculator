@@ -751,7 +751,9 @@ function familyApplicationWins(
 
 /** #590 R1 (game-verified 2026-09-30): a weaker same-family debuff onto a target already holding
  *  a STRONGER one is never attempted — no landing roll is drawn, nothing lands, nothing resists,
- *  as if the clause were absent from the skill. TIER-ONLY, unlike `familyApplicationWins`'s
+ *  as if the clause were absent from the skill. A weaker timed buff onto a stronger held one
+ *  fizzles the same way and is not a buff gain (owner ruling, game-verified with Grif's
+ *  Attack Up III vs Paracelsus's Attack Up II: Nuqtu does not react). TIER-ONLY, unlike `familyApplicationWins`'s
  *  duration tie-break: a SAME-tier (or stronger) challenger is never outclassed regardless of how
  *  long `existing` has left, and still draws its roll normally (see `familyApplicationWins` for
  *  what the STORE then does with a landed same-tier, shorter-duration re-land). A DoT/bomb name
@@ -1160,10 +1162,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return m;
     };
 
-    // #590 R1: the pre-roll skip, exposed so every roll site (playerTurn.ts's ability-timed
-    // loop, this engine's own scheduled `sourceFired` upsert below, triggers.ts's reactive debuff
-    // branch) reads the SAME family entry `applyTimedAbilityStatus` would later contest — never a
-    // second copy of the self/enemy map resolution. `__testDisableOutclassSkip` is the ONLY way
+    // #590 R1: the outclassed check, exposed so every debuff roll site and every timed buff-grant
+    // site (`status-outclassed-log`) reads the SAME family entry `applyTimedAbilityStatus` would
+    // later contest — never a second copy of the self/enemy map resolution. `__testDisableOutclassSkip` is the ONLY way
     // to turn this off; no production caller sets it.
     const outclassingStatusName = (
         side: 'self' | 'enemy',

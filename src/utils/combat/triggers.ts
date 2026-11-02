@@ -5870,6 +5870,11 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 continue;
             }
             const capped = ctx.statusEngine.selfBuffAtCap(rid, cfg.buffName);
+            // #590 R1 buff side: see `status-outclassed-log`. A stack bank is not family-tiered,
+            // so only the timed write is checked, and before it lands.
+            const heldEffect = banksStacks
+                ? undefined
+                : ctx.statusEngine.outclassingStatusName('self', cfg.buffName, rid);
             if (banksStacks) {
                 ctx.statusEngine.addSelfAccumulatingStacks(rid, status.payload, cfg.stacks, {
                     maxStacks: cfg.maxStacks ?? (cfg.isStackable ? undefined : cfg.stacks),
@@ -5879,6 +5884,18 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
             }
             if (capped) continue;
+            if (heldEffect !== undefined) {
+                ctx.bus.emit({
+                    type: 'status-outclassed-log',
+                    sourceId: intent.ownerId,
+                    targetId: rid,
+                    round: ctx.round,
+                    effect: cfg.buffName,
+                    heldEffect,
+                    side: 'buff',
+                });
+                continue;
+            }
             ctx.bus.emit({
                 type: 'buff-applied',
                 actorId: rid,
@@ -5925,7 +5942,25 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             };
             for (const rid of recipients) {
                 if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip
+                // #590 R1 buff side: see `status-outclassed-log`.
+                const extraHeld = ctx.statusEngine.outclassingStatusName(
+                    'self',
+                    extra.buffName,
+                    rid
+                );
                 ctx.statusEngine.applyTimedAbilityStatus(ctx.round, extraStatus, rid);
+                if (extraHeld !== undefined) {
+                    ctx.bus.emit({
+                        type: 'status-outclassed-log',
+                        sourceId: intent.ownerId,
+                        targetId: rid,
+                        round: ctx.round,
+                        effect: extra.buffName,
+                        heldEffect: extraHeld,
+                        side: 'buff',
+                    });
+                    continue;
+                }
                 ctx.bus.emit({
                     type: 'buff-applied',
                     actorId: rid,
