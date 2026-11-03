@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BUCKET_RATIO, bucketRadiusPx, fitShield, MIN_BUCKET_PX, shieldBucket } from '../shield';
 import { laneWidthAtPlayer, project } from '../projection';

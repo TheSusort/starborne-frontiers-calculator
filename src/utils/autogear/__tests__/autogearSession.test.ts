@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import {
     AutogearSession,

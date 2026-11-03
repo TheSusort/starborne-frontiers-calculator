@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { reuploadLocalDataToSupabase } from '../../services/userDataService';
 import { StorageKey } from '../../constants/storage';

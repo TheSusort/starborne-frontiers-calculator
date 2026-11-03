@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { act, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuelSummary } from '../DuelSummary';

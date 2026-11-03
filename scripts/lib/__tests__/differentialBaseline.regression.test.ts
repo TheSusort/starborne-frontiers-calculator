@@ -68,9 +68,10 @@ const inertPoolFrom = (tagged: TaggedShip[]): Ship[] =>
 
 /**
  * The subject the finding was filed against. The SHIP is the load-bearing part, not the seed: the
- * canned arm's `cleanse` differential is Makoli's own cleanse firing in the canned baseline, where
- * `buildStandardScenario`'s debuffer filler always hands it something to remove. A re-anchor onto
- * a ship that does not cleanse would silently stop testing the reported case.
+ * finding was a `cleanse` differential from Makoli's own cleanse firing in the canned baseline,
+ * where `buildStandardScenario`'s debuffer filler always hands it something to remove, and not in
+ * the composition. A cleanse that removes nothing now logs an attempt the oracle counts as
+ * `cleanse`, so that token cancels; the canned arm still differs on other kinds.
  */
 const SUBJECT = 'Makoli';
 
@@ -104,9 +105,8 @@ function appliesEnemyStatus(ship: Ship): boolean {
  *   - enemyTeam[0] — the only opponent the minimized repro keeps — places NOTHING on the subject.
  *     The canned baseline hands the subject a debuff to remove on every run: its `enemyDebuffer`
  *     filler carries hacking 260, above every corpus ship's security, so its Defense Down II
- *     always lands. `cleanse` is therefore in the subject's canned fingerprint either way, and it
- *     survives into the DIFFERENTIAL only while the composition arm has nothing to cleanse. An
- *     opponent that debuffs the subject makes it cleanse in both arms and the token cancels out.
+ *     always lands. Against an opponent that places nothing, the composition's cleanse only ever
+ *     logs attempts — the case the finding was filed on.
  * The minimized repro then keeps playerTeam[0] alone, which is what makes ally interference
  * impossible by construction.
  */
@@ -193,9 +193,9 @@ describe('differential baseline — FINDING-003 (Makoli, derived anchor seed)', 
         requireReferenceData();
         // The ddmin'd repro, rebuilt from the fuzz composition it came from rather than
         // hand-transcribed: the minimizer kept playerTeam[0] and enemyTeam[0] and dropped the
-        // rest. The OPPONENT is whatever the derived seed composes, and it IS load-bearing — the
-        // canned arm reports a `cleanse` differential only while that opponent leaves the subject
-        // nothing to cleanse, which is the property anchorSeed() screens for. It is a REAL corpus
+        // rest. The OPPONENT is whatever the derived seed composes, and it IS load-bearing — it
+        // leaves the subject nothing to cleanse, which is the property anchorSeed() screens for
+        // and the shape of the reported case. It is a REAL corpus
         // ship, which is what made the canned baseline (three synthetic fillers at security 20)
         // differ in the first place.
         const tagged = buildTaggedCorpus();
@@ -218,7 +218,11 @@ describe('differential baseline — FINDING-003 (Makoli, derived anchor seed)', 
         const compResult = runSeededBattle(minimized, anchorSeed());
         const diff = cannedArmDiff(minimized, 0, compResult);
         expect(diff).not.toBeNull();
-        expect([...diff!.missingInComposition, ...diff!.extraInComposition]).toContain('cleanse');
+        // The subject's cleanse is in BOTH fingerprints: where it had nothing to remove it logs an
+        // attempt row, which the oracle counts as `cleanse` (`oracleKind`).
+        expect([...diff!.missingInComposition, ...diff!.extraInComposition]).not.toContain(
+            'cleanse'
+        );
     });
 
     it('the INERT-ALLY baseline collapses it to no diff at all', () => {

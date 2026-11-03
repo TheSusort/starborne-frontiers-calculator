@@ -413,7 +413,7 @@ interface RoundStatusRows {
     /** Names any steal row moved this round. A steal row targets the SOURCE, so its recipients
      *  are not named. */
     stolen: Set<string>;
-    /** Holders a cleanse, purge or steal row reached this round, and every ship that cheated
+    /** Holders a cleanse, purge or steal row (never an `attemptOnly` one) reached this round, and every ship that cheated
      *  death (Cheat Death clears its removable statuses, `lethalHp.ts`). */
     removalTouched: Set<string>;
     /** `${holderId}|${name}` for each `buff-expired` row. */
@@ -439,6 +439,9 @@ function roundStatusRows(result: BattleResult): Map<number, RoundStatusRows> {
             ...lr.endOfRound,
         ]);
         for (const e of entries) {
+            // An attempt row changed nothing: a removal that removed nothing must not excuse a
+            // status drop, and an application that did not land must not count as applied.
+            if (e.attemptOnly) continue;
             if ((e.kind === 'buff' || e.kind === 'debuff') && e.note !== undefined) {
                 for (const t of e.targets) rows.applied.add(`${e.kind}|${t.targetId}|${e.note}`);
             } else if (e.kind === 'steal') {

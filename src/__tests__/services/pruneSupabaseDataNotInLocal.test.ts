@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { pruneSupabaseDataNotInLocal, PRUNABLE_SECTIONS } from '../../services/userDataService';
 import { StorageKey, inventoryCacheKey } from '../../constants/storage';

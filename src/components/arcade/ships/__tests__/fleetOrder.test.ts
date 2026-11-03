@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { beforeEach, describe, it, expect } from 'vitest';
 import { filterFleet, orderFleet, readLastShipId, writeLastShipId } from '../fleetOrder';
 import type { Ship } from '../../../../types/ship';

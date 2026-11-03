@@ -393,17 +393,21 @@ export default defineConfig({
     },
     test: {
         globals: true,
-        environment: 'jsdom',
+        // Test files run under node. A file that needs a DOM (window, document, localStorage,
+        // React rendering) opts in with a `// @vitest-environment jsdom` docblock on line 1.
+        environment: 'node',
         setupFiles: './src/setupTests.ts',
-        css: true,
+        css: false,
         reporters: ['verbose'],
-        // 17 suites walk the real ship corpus inside a `beforeAll` — the audit/fingerprint
+        // Half the cores: a run on every core starves the rest of the machine. `--maxWorkers`
+        // on the command line overrides it.
+        maxWorkers: '50%',
+        // Some suites walk the real ship corpus inside a `beforeAll` — the audit/fingerprint
         // triages replay hundreds of seeded battles to build their ledger before any assertion
         // runs. Alone each finishes in a few seconds, but under full-suite CPU contention they
         // can blow Vitest's 10s hook default and fail the file with every test inside it green
-        // (`Hook timed out in 10000ms`), which blocks the husky pre-commit gate for unrelated
-        // work. These hooks are deterministic corpus walks, so a timeout here only ever means
-        // "the machine was busy" — never a real defect. Raised to give them headroom.
+        // (`Hook timed out in 10000ms`). These hooks are deterministic corpus walks, so a timeout
+        // here only ever means "the machine was busy" — never a real defect.
         hookTimeout: 60_000,
         // Exclude the Playwright e2e workspace — those tests use @playwright/test,
         // not Vitest, and will fail if Vitest tries to execute them.
@@ -435,6 +439,6 @@ export default defineConfig({
             },
         },
         chunkSizeWarningLimit: 1000,
-        sourcemap: true,
+        sourcemap: false,
     },
 });

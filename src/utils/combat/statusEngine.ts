@@ -637,6 +637,14 @@ export interface StatusEngine {
         recipientId?: string,
         enemyTargetId?: string
     ): boolean;
+    /** The name of the held status that outclasses `buffName` (the same question as
+     *  `isOutclassedByExistingFamily`), or undefined when it is not outclassed. */
+    outclassingStatusName(
+        side: 'self' | 'enemy',
+        buffName: string,
+        recipientId?: string,
+        enemyTargetId?: string
+    ): string | undefined;
 }
 
 const ROMAN_SUFFIX = /\s+(I{1,3}|IV|V)$/;
@@ -743,7 +751,9 @@ function familyApplicationWins(
 
 /** #590 R1 (game-verified 2026-09-30): a weaker same-family debuff onto a target already holding
  *  a STRONGER one is never attempted — no landing roll is drawn, nothing lands, nothing resists,
- *  as if the clause were absent from the skill. TIER-ONLY, unlike `familyApplicationWins`'s
+ *  as if the clause were absent from the skill. A weaker timed buff onto a stronger held one
+ *  fizzles the same way and is not a buff gain (owner ruling, game-verified with Grif's
+ *  Attack Up III vs Paracelsus's Attack Up II: Nuqtu does not react). TIER-ONLY, unlike `familyApplicationWins`'s
  *  duration tie-break: a SAME-tier (or stronger) challenger is never outclassed regardless of how
  *  long `existing` has left, and still draws its roll normally (see `familyApplicationWins` for
  *  what the STORE then does with a landed same-tier, shorter-duration re-land). A DoT/bomb name
@@ -1152,25 +1162,30 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return m;
     };
 
-    // #590 R1: the pre-roll skip, exposed so every roll site (playerTurn.ts's ability-timed
-    // loop, this engine's own scheduled `sourceFired` upsert below, triggers.ts's reactive debuff
-    // branch) reads the SAME family entry `applyTimedAbilityStatus` would later contest — never a
-    // second copy of the self/enemy map resolution. `__testDisableOutclassSkip` is the ONLY way
+    // #590 R1: the outclassed check, exposed so every debuff roll site and every timed buff-grant
+    // site (`status-outclassed-log`) reads the SAME family entry `applyTimedAbilityStatus` would
+    // later contest — never a second copy of the self/enemy map resolution. `__testDisableOutclassSkip` is the ONLY way
     // to turn this off; no production caller sets it.
-    const isOutclassedByExistingFamily = (
+    const outclassingStatusName = (
         side: 'self' | 'enemy',
         buffName: string,
         recipientId?: string,
         enemyTargetId?: string
-    ): boolean => {
-        if (input.__testDisableOutclassSkip) return false;
+    ): string | undefined => {
+        if (input.__testDisableOutclassSkip) return undefined;
         const { familyKey, tier } = deriveFamilyKey(buffName);
         const existing =
             side === 'self'
                 ? getSelfMap(recipientId ?? 'attacker').get(familyKey)
                 : getEnemyMap(enemyTargetId ?? DEFAULT_ENEMY_TARGET).get(familyKey);
-        return outclassedByFamily(existing, tier);
+        return outclassedByFamily(existing, tier) ? existing?.buffName : undefined;
     };
+    const isOutclassedByExistingFamily = (
+        side: 'self' | 'enemy',
+        buffName: string,
+        recipientId?: string,
+        enemyTargetId?: string
+    ): boolean => outclassingStatusName(side, buffName, recipientId, enemyTargetId) !== undefined;
 
     // Add one application's worth of stacks (capped) to a side's persistent entry, creating it
     // on first application. `payload` is stored for ability-sourced applications and refreshed on
@@ -2827,5 +2842,6 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         activeAbilityStatuses,
         timedAbilityStatuses,
         isOutclassedByExistingFamily,
+        outclassingStatusName,
     };
 }

@@ -22,7 +22,7 @@ const SCRIPT = resolve(__dirname, '../../../scripts/netlify-ignore.sh');
 // against the disposable `repo` below, but with GIT_DIR set and no
 // GIT_WORK_TREE, git treats cwd as the work tree while still reading/writing
 // the CALLER's repository — so run from inside a hook (e.g. husky's
-// pre-commit, which shells out to this test suite), every `git` call here
+// pre-commit or pre-push, which shell out to this test suite), every `git` call here
 // would target the real repository with `repo` as its work tree, committing
 // fixture files into the caller's history. Stripping these vars keeps repo
 // discovery anchored to `cwd`.

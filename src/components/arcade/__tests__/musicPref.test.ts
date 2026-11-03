@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ARCADE_MUSIC_KEY, readMusicPref, resumeArcadeMusic, writeMusicPref } from '../musicPref';
 

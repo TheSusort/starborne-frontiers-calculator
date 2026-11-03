@@ -22,27 +22,166 @@ const roster: RosterEntry[] = [
 const initialCharge = new Map<string, { charge: number; max: number }>();
 
 describe('buildCombatLog', () => {
-    it('logs a purge an affinity disadvantage blocked as a purge row of 0', () => {
-        const events: CombatEvent[] = [
-            ev({ type: 'round-started', round: 1 }),
-            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
-            ev({
-                type: 'purge-blocked-log',
-                casterId: 'A',
-                targetId: 'B',
-                round: 1,
-                reason: 'affinity',
-            }),
-            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
-            ev({ type: 'round-ended', round: 1 }),
-        ];
+    const oneTurn = (...mid: CombatEvent[]): CombatEvent[] => [
+        ev({ type: 'round-started', round: 1 }),
+        ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+        ...mid,
+        ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+        ev({ type: 'round-ended', round: 1 }),
+    ];
+
+    it.each([
+        ['affinity', 'purged 0 (affinity)'],
+        ['nothing-to-remove', 'purged 0 (nothing to remove)'],
+    ] as const)('logs a purge attempt (%s) as an attempt-only purge row of 0', (reason, note) => {
+        const events = oneTurn(
+            ev({ type: 'purge-attempt-log', casterId: 'A', targetIds: ['B'], round: 1, reason })
+        );
         const entries = buildCombatLog(events, roster, initialCharge)[0].turns[0].entries;
         expect(entries).toEqual([
             expect.objectContaining({
                 kind: 'purge',
                 actorId: 'A',
                 targets: [{ targetId: 'B' }],
-                note: 'purged 0 (affinity)',
+                note,
+                attemptOnly: true,
+            }),
+        ]);
+    });
+
+    it.each([
+        [{}, 'cleansed 0 (nothing to remove)'],
+        [{ mode: 'reduce-duration' as const, durationTurns: 1 }, '-1 turn on 0 debuffs'],
+    ])('logs a cleanse attempt %j as an attempt-only cleanse row', (extra, note) => {
+        const events = oneTurn(
+            ev({ type: 'cleanse-attempt-log', casterId: 'A', targetIds: ['A'], round: 1, ...extra })
+        );
+        const entries = buildCombatLog(events, roster, initialCharge)[0].turns[0].entries;
+        expect(entries).toEqual([
+            expect.objectContaining({
+                kind: 'cleanse',
+                actorId: 'A',
+                targets: [{ targetId: 'A' }],
+                note,
+                attemptOnly: true,
+            }),
+        ]);
+    });
+
+    it('a cast-path attempt row reads the skill tag without taking it; a reactive one never reads it', () => {
+        const skill = ev({
+            type: 'skill-fired',
+            actorId: 'A',
+            round: 1,
+            slot: 'active',
+            skillName: 'Strike',
+        });
+        const cast = buildCombatLog(
+            oneTurn(
+                skill,
+                ev({ type: 'cleanse-attempt-log', casterId: 'A', targetIds: ['A'], round: 1 }),
+                ev({
+                    type: 'cleanse-performed',
+                    casterId: 'A',
+                    count: 1,
+                    round: 1,
+                    targets: ['A'],
+                })
+            ),
+            roster,
+            initialCharge
+        )[0].turns[0].entries;
+        expect(cast[0]).toMatchObject({ kind: 'cleanse', attemptOnly: true, skillName: 'Strike' });
+        expect(cast[1]).toMatchObject({ kind: 'cleanse', note: 'cleansed 1', skillName: 'Strike' });
+        const reactive = buildCombatLog(
+            oneTurn(
+                skill,
+                ev({
+                    type: 'purge-attempt-log',
+                    casterId: 'B',
+                    targetIds: ['A'],
+                    round: 1,
+                    reason: 'nothing-to-remove',
+                    reactive: true,
+                    duringTurnOf: 'A',
+                })
+            ),
+            roster,
+            initialCharge
+        )[0].turns[0].entries;
+        const flat = JSON.stringify(reactive);
+        expect(flat).toContain('purged 0 (nothing to remove)');
+        expect(flat).not.toContain('Strike');
+    });
+
+    it.each([
+        [{ scope: 'debuffs' as const, count: 2 }, '+1 turn on 2 debuffs', false],
+        [{ scope: 'dots' as const, count: 1 }, '+1 turn on 1 DoT', false],
+        [{ scope: 'buffs' as const, count: 0 }, '+1 turn on 0 buffs', true],
+    ])('logs a duration extension %j as a duration-changed row', (extra, note, attempt) => {
+        const events = oneTurn(
+            ev({
+                type: 'status-duration-changed-log',
+                casterId: 'A',
+                targetIds: ['B'],
+                round: 1,
+                turns: 1,
+                ...extra,
+            })
+        );
+        const [entry] = buildCombatLog(events, roster, initialCharge)[0].turns[0].entries;
+        expect(entry).toMatchObject({
+            kind: 'duration-changed',
+            targets: [{ targetId: 'B' }],
+            note,
+        });
+        expect(entry.attemptOnly === true).toBe(attempt);
+    });
+
+    it('logs a Bomb countdown cut as a duration-changed row, attempt-only at 0', () => {
+        const row = (count: number) =>
+            buildCombatLog(
+                oneTurn(
+                    ev({
+                        type: 'countdown-changed-log',
+                        casterId: 'A',
+                        targetIds: ['B'],
+                        round: 1,
+                        turns: 1,
+                        count,
+                        target: 'bomb',
+                    })
+                ),
+                roster,
+                initialCharge
+            )[0].turns[0].entries[0];
+        expect(row(1)).toMatchObject({
+            kind: 'duration-changed',
+            note: 'bomb countdown -1 on 1 bomb',
+        });
+        expect(row(1).attemptOnly).toBeUndefined();
+        expect(row(0)).toMatchObject({ note: 'bomb countdown -1 on 0 bombs', attemptOnly: true });
+    });
+
+    it('logs an outclassed debuff as an attempt-only debuff row naming the held status', () => {
+        const events = oneTurn(
+            ev({
+                type: 'status-outclassed-log',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                effect: 'Attack Down I',
+                heldEffect: 'Attack Down III',
+                side: 'debuff',
+            })
+        );
+        expect(buildCombatLog(events, roster, initialCharge)[0].turns[0].entries).toEqual([
+            expect.objectContaining({
+                kind: 'debuff',
+                actorId: 'A',
+                targets: [{ targetId: 'B' }],
+                note: 'Attack Down I (outclassed by Attack Down III)',
+                attemptOnly: true,
             }),
         ]);
     });

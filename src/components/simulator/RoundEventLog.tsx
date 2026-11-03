@@ -162,6 +162,17 @@ const sourceTargetNoteLine = (entry: CombatLogEntry, ctx: FormatterCtx): React.R
     return label ? `${src}: ${label}` : src;
 };
 
+/** "{src} → {tgt1, tgt2}: {note}", collapsing to "{src}: {note}" when the only recipient is the
+ *  acting ship itself. */
+const recipientsNoteLine = (entry: CombatLogEntry, ctx: FormatterCtx): React.ReactNode => {
+    const src = ctx.nameOf(entry.actorId);
+    const label = entry.note ?? '';
+    const others = entry.targets.filter((t) => t.targetId !== entry.actorId);
+    if (others.length === 0) return label ? `${src}: ${label}` : src;
+    const tgts = entry.targets.map((t) => ctx.nameOf(t.targetId)).join(', ');
+    return label ? `${src} → ${tgts}: ${label}` : `${src} → ${tgts}`;
+};
+
 /**
  * Per-kind formatter map. Every kind resolves to a renderable node; unmapped/future kinds
  * fall through to the neutral `noteLine` fallback (never throws — forward-compatible).
@@ -215,14 +226,8 @@ const formatters: Record<
     control: noteLine,
     // A cleanse row carries every recipient that lost a debuff → "AEGIS → Ally, Ally2: cleansed N";
     // a self-cleanse collapses to "AEGIS: cleansed N".
-    cleanse: (entry, ctx) => {
-        const src = ctx.nameOf(entry.actorId);
-        const label = entry.note ?? '';
-        const others = entry.targets.filter((t) => t.targetId !== entry.actorId);
-        if (others.length === 0) return label ? `${src}: ${label}` : src;
-        const tgts = entry.targets.map((t) => ctx.nameOf(t.targetId)).join(', ');
-        return label ? `${src} → ${tgts}: ${label}` : `${src} → ${tgts}`;
-    },
+    cleanse: (entry, ctx) => recipientsNoteLine(entry, ctx),
+    'duration-changed': (entry, ctx) => recipientsNoteLine(entry, ctx),
     purge: noteLine,
     // "{thief} → {source}: stole Protection" — the source→target shape, because unlike a purge a
     // steal has a destination that matters.

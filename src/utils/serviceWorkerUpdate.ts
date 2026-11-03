@@ -1,6 +1,5 @@
 import { registerSW } from 'virtual:pwa-register';
-
-const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+import { scheduleSwUpdateChecks } from './swUpdateCheck';
 
 let needRefresh = false;
 let applyUpdate: ((reloadPage?: boolean) => Promise<void>) | undefined;
@@ -28,7 +27,7 @@ export function registerServiceWorker(): void {
         },
         onRegisteredSW(_swScriptUrl, registration) {
             if (!registration) return;
-            setInterval(() => void registration.update(), UPDATE_CHECK_INTERVAL_MS);
+            scheduleSwUpdateChecks(registration);
         },
     });
 }

@@ -3,5 +3,10 @@ https://starborne-planner.netlify.app/* https://starborneplanner.com/:splat 301!
 
 /ships/index /ships/index/index.html 200!
 
+# A build file a deploy removed is a 404, never the SPA shell: a page still on the old build
+# then gets a chunk-load error it can recover from instead of HTML parsed as a script. Not
+# forced, so a file that exists is served as usual.
+/assets/* /404.html 404
+
 # SPA fallback
 /* /index.html 200

@@ -329,6 +329,9 @@ describe('suite health', () => {
      *  Re-measured by parse, the corpus carries 4 steal / 14 purge / 19 cleanse ships, 36 distinct
      *  (Tithonus carries both a purge and a steal) — each now runs a `statusRich` arm.
      *
+     *  `duration-changed` is a duration extension or a Bomb countdown cut (Lev, Provider, Ripper,
+     *  Lingshe and the other extenders), logged even when it moved nothing.
+     *
      *  `detonation` IS here: an Echoing Burst going off is booked to the ship that applied it
      *  (Valkyrie), so it reaches a focus-actor fingerprint. A damage-over-time detonation is
      *  booked to the victim and still cannot.
@@ -352,6 +355,7 @@ describe('suite health', () => {
         'debuff-resisted',
         'detonation',
         'dot-applied',
+        'duration-changed',
         'dot-ticked',
         'heal',
         'hot-ticked',

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import type React from 'react';
 import { render, screen, fireEvent } from '../../../test-utils/test-utils';

@@ -162,6 +162,13 @@ around it. A comment that no longer matches the code is worse than no comment: a
 
 Focus on utility functions (autogear scoring, stat calculations) and data transformations (import pipeline).
 
+- **Environment:** tests run under `node`. A test file that needs a DOM (React rendering,
+  `window`, `document`, `localStorage`) starts with `// @vitest-environment jsdom` on line 1;
+  every `.test.tsx` file carries it.
+- **Workers:** the config caps vitest at half the cores; `--maxWorkers=N` overrides it.
+- **Hooks (husky; there is no CI):** pre-commit runs lint-staged, `tsc --noEmit`, and
+  `vitest related` on the staged `src/` files. Pre-push runs the full suite.
+
 ## Database Migrations
 
 **Location:** `supabase/migrations/` — naming: `YYYYMMDD[sequence]_description.sql`. **The user applies them**, via the Supabase dashboard or the CLI; an agent never runs the CLI itself (Security rule 8).

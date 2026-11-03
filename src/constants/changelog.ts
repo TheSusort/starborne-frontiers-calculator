@@ -6,6 +6,11 @@ import { ChangelogEntry } from '../types/changelog';
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'App updates: a banner now lets you choose when to refresh.',
+    'Arcade: ship models now recover automatically after a site update.',
+    'Combat simulator: the log now shows cleanses and purges that removed nothing.',
+    'Combat simulator: the log now shows status duration extensions and bomb countdown cuts.',
+    'Combat simulator: the log now shows buffs and debuffs skipped by a stronger one.',
+    'Combat simulator: a weaker buff on a stronger one no longer triggers reactions.',
     'Ship data: LUXX, Ripper and Sokol updated to the latest game patch.',
     'Ship database: the "control" skill keyword now lists which effects count.',
 ];

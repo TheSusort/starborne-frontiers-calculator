@@ -47,6 +47,14 @@
 #   - index.tsx hostname check (app-level, fires after SW serves new code)
 #   - public/sw-redirect.js (SW-level fetch + activate handlers)
 
+# `public/_redirects` is applied before these rules and carries the same two below. A missing
+# build file is a 404, not the SPA shell (see the note there); `netlifyRedirects.test.ts`
+# checks both files.
+[[redirects]]
+  from = "/assets/*"
+  to = "/404.html"
+  status = 404
+
 # SPA fallback
 [[redirects]]
   from = "/*"

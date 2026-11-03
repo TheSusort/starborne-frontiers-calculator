@@ -4,9 +4,25 @@ import { z } from 'zod';
 // keys we don't use, and we don't want to break imports when it does.
 // We only validate the fields importPlayerData.ts actually reads.
 
+// Upper bounds on every array and string the import reads. These guard against a hostile or
+// corrupt upload, not the game format: each is roughly 10x the largest real export measured
+// (a whale account: ~2.8k units, ~12k equipment, 16 refit attributes, 21 skills, 4 substats,
+// 82-char strings). Raise a bound if a real export ever trips it.
+export const IMPORT_LIMITS = {
+    units: 30_000,
+    equipment: 150_000,
+    engineering: 500,
+    refitAttributes: 200,
+    skills: 250,
+    statsPerGear: 50,
+    stringLength: 512,
+} as const;
+
+const boundedString = () => z.string().max(IMPORT_LIMITS.stringLength);
+
 const attributeStatSchema = z.object({
-    Attribute: z.string(),
-    Type: z.string(),
+    Attribute: boundedString(),
+    Type: boundedString(),
     Value: z.number(),
 });
 
@@ -32,63 +48,65 @@ const statBlockSchema = z
 
 const unitSchema = z
     .object({
-        Id: z.string(),
-        Name: z.string(),
-        Faction: z.string(),
-        Rarity: z.string(),
-        ShipType: z.string(),
-        Affinity: z.string(),
+        Id: boundedString(),
+        Name: boundedString(),
+        Faction: boundedString(),
+        Rarity: boundedString(),
+        ShipType: boundedString(),
+        Affinity: boundedString(),
         Rank: z.number(),
         Level: z.number(),
         Refit: z.number(),
         Attributes: z
             .object({
                 BaseWithLevelAndRank: statBlockSchema,
-                Refit: z.array(
-                    z
-                        .object({
-                            Attribute: z.string(),
-                            Type: z.string(),
-                            Value: z.number(),
-                        })
-                        .passthrough()
-                ),
+                Refit: z
+                    .array(
+                        z
+                            .object({
+                                Attribute: boundedString(),
+                                Type: boundedString(),
+                                Value: z.number(),
+                            })
+                            .passthrough()
+                    )
+                    .max(IMPORT_LIMITS.refitAttributes),
             })
             .passthrough(),
-        Skills: z.array(z.string()),
+        Skills: z.array(boundedString()).max(IMPORT_LIMITS.skills),
     })
     .passthrough();
 
 const equipmentSchema = z
     .object({
-        Id: z.string(),
-        EquippedOnUnit: z.string().nullable(),
-        Slot: z.string(),
+        Id: boundedString(),
+        EquippedOnUnit: boundedString().nullable(),
+        Slot: boundedString(),
         Level: z.number(),
         Rank: z.number(),
-        Set: z.string(),
-        Rarity: z.string(),
+        Set: boundedString(),
+        Rarity: boundedString(),
         Locked: z.boolean(),
-        CalibratedForUnitId: z.string().nullable(),
+        CalibratedForUnitId: boundedString().nullable(),
         CalibrationLevel: z.number().nullable(),
-        MainStats: z.array(statEntrySchema),
-        SubStats: z.array(statEntrySchema),
+        MainStats: z.array(statEntrySchema).max(IMPORT_LIMITS.statsPerGear),
+        SubStats: z.array(statEntrySchema).max(IMPORT_LIMITS.statsPerGear),
     })
     .passthrough();
 
 const engineeringSchema = z
     .object({
-        Type: z.string(),
-        Attribute: z.string(),
-        ModifierType: z.string(),
+        Type: boundedString(),
+        Attribute: boundedString(),
+        ModifierType: boundedString(),
         Level: z.number(),
     })
     .passthrough();
 
 export const exportedPlayDataSchema = z.object({
-    Units: z.array(unitSchema),
-    Equipment: z.array(equipmentSchema),
-    Engineering: z.array(engineeringSchema),
+    Units: z.array(unitSchema).max(IMPORT_LIMITS.units),
+    Equipment: z.array(equipmentSchema).max(IMPORT_LIMITS.equipment),
+    Engineering: z.array(engineeringSchema).max(IMPORT_LIMITS.engineering),
 });
 
 export type ValidatedExportedPlayData = z.infer<typeof exportedPlayDataSchema>;
