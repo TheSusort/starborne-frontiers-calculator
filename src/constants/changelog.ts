@@ -4,18 +4,20 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'App updates: a banner now lets you choose when to refresh.',
-    'Arcade: ship models now recover automatically after a site update.',
-    'Combat simulator: the log now shows cleanses and purges that removed nothing.',
-    'Combat simulator: the log now shows status duration extensions and bomb countdown cuts.',
-    'Combat simulator: the log now shows buffs and debuffs skipped by a stronger one.',
-    'Combat simulator: a weaker buff on a stronger one no longer triggers reactions.',
-    'Ship data: LUXX, Ripper and Sokol updated to the latest game patch.',
-    'Ship database: the "control" skill keyword now lists which effects count.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.85.1',
+        date: '2026-11-03',
+        changes: [
+            'App updates: a banner now lets you choose when to refresh.',
+            'Arcade: ship models now recover automatically after a site update.',
+            '4 combat simulator fixes and adjustments.',
+            'Ship data: LUXX, Ripper and Sokol updated to the latest game patch.',
+            'Ship database: the "control" skill keyword now lists which effects count.',
+        ],
+    },
     {
         version: '1.85.0',
         date: '2026-10-29',
