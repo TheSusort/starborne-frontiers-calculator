@@ -890,4 +890,9 @@ export const BUFFS: Buff[] = [
         description: 'Allows the Unit to perform another action this round.',
         type: 'effect',
     },
+    {
+        name: 'Control Effect',
+        description: 'Any of Stasis, Disable, Provoke, Taunt or Concentrate Fire.',
+        type: 'effect',
+    },
 ];

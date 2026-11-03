@@ -3140,28 +3140,28 @@ exports[`kit fingerprints > Ripper 1`] = `
   "plain": [
     "attack:active",
     "attack:charged",
-    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "dot-applied",
     "duration-changed",
   ],
   "richEnemy": [
     "attack:active",
     "attack:charged",
-    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "dot-applied",
     "duration-changed",
   ],
   "wounded": [
     "attack:active",
     "attack:charged",
-    "buff",
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "dot-applied",
     "duration-changed",
   ],
 }
@@ -3587,21 +3587,18 @@ exports[`kit fingerprints > Sokol 1`] = `
     "attack:charged",
     "buff",
     "charge-changed",
-    "duration-changed:charged",
   ],
   "richEnemy": [
     "attack:active",
     "attack:charged",
     "buff",
     "charge-changed",
-    "duration-changed:charged",
   ],
   "wounded": [
     "attack:active",
     "attack:charged",
     "buff",
     "charge-changed",
-    "duration-changed:charged",
   ],
 }
 `;
@@ -4531,7 +4528,7 @@ exports[`kit fingerprints > Zosimos 1`] = `
 
 exports[`suite health > pins the corpus shape so a data refresh announces itself in ONE diff 1`] = `
 {
-  "digest": 284351159,
+  "digest": 890907920,
   "shipCount": 150,
 }
 `;

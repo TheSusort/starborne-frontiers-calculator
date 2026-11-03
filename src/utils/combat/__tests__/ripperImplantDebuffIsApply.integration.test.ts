@@ -1,6 +1,6 @@
 /**
  * Owner ruling R206 (2026-10-17): every debuff an implant lands is an "apply", never an "inflict",
- * so an "after it inflicts a debuff" reaction does not answer it. Ripper (real game 3.23 kit, R2)
+ * so an "after it inflicts a debuff" reaction does not answer it. Ripper (game 3.23 kit, R2)
  * gains Marauder Rage II and extends all allies' active buffs by 1 turn "after it inflicts a
  * debuff"; neither fires on the Concentrate Fire his Doomsayer lands or the Provoke his Bulwark
  * lands. The implant's stamp lives in `buildEquipmentAbilities`; the tripwire that every implant
@@ -16,17 +16,12 @@ import { createEventBus } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
-import {
-    boardInput,
-    realKit,
-    hitKit,
-    type BoardUnit,
-    type Placement,
-} from '../__testutils__/realKitBoard';
+import { boardInput, hitKit, type BoardUnit, type Placement } from '../__testutils__/realKitBoard';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 
 beforeAll(() => {
     if (!csvAvailable() || !shipDataAvailable())
@@ -54,7 +49,21 @@ const asInflict = (ability: Ability): Ability => {
     return { ...ability, config: { ...ability.config, application: 'inflict' } };
 };
 
-const ripperKit = realKit('Ripper');
+/** Ripper's game 3.23 kit, verbatim, at refit 4. Pinned inline: his 3.24 passives answer only debuffs
+ *  his active or charged inflicts, so an implant-landed debuff could not wake them either way and
+ *  the instrument control below would have nothing to see. */
+const ripperKit = buildShipAbilities({
+    refits: [{}, {}, {}, {}],
+    activeSkillText:
+        'This Unit deals <unit-damage>165% damage</unit-damage> and inflicts <unit-skill>Inc. Repair Down II</unit-skill> for 1 turn.',
+    chargeSkillText:
+        'This Unit deals <unit-damage>195% damage</unit-damage>, inflicts <unit-skill>Inc. Repair Down III</unit-skill> for 3 turns, and <unit-skill>Inc. DoT Damage Up II</unit-skill> for 2 turns.',
+    chargeSkillCharge: 3,
+    firstPassiveSkillText:
+        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a <unit-aid>debuff</unit-aid>.',
+    secondPassiveSkillText:
+        'This Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns after it inflicts a <unit-aid>debuff</unit-aid> and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.',
+} as unknown as Ship);
 const realActive = () => ripperKit.slots.find((s) => s.slot === 'active')!;
 
 /** Ripper with his real R2 passives plus `implants`, casting `active`. Fastest, so Doomsayer's

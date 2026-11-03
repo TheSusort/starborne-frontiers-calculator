@@ -1,44 +1,46 @@
 /**
  * "This Unit gains 1 stack of Blast every turn" counts every ACTION the unit takes, extra actions
  * included (owner ruling R58, 2026-10-05). Round 1: Sokol holds 1 Blast stack, kills an enemy and
- * takes his extra action at the end of the round — that extra action is a turn, so he holds 2
- * stacks on it, and 3 on his round-2 turn.
+ * takes his extra action — that extra action is a turn, so he holds 2 stacks on it, and 3 on his
+ * round-2 turn.
  *
- * Blast is +15% outgoing damage per stack, so Sokol's 130% active on an enemy with no defence deals
- * 1300 × (1 + 0.15 × stacks) at attack 1000: 1495 at 1 stack, 1690 at 2, 1885 at 3.
+ * Blast is +15% outgoing damage per stack, so Sokol's 80% active on an enemy with no control effect
+ * and no defence deals 800 × (1 + 0.15 × stacks) at attack 1000: 920 at 1 stack, 1040 at 2, 1160
+ * at 3.
  *
- * Real parsed kits (buildTraceShip on docs/ship-skills.csv). Sokol at refit 4 carries the extra
- * action ("upon destroying an enemy, once per round, this Unit gains 1 extra end of round action");
- * at refit 0 his passive is the Blast clause alone.
+ * Sokol's kit is his game 3.24 text, verbatim, parsed inline (buildShipAbilities) so the suite does
+ * not depend on which text docs/ship-skills.csv holds. At refit 4 his passive carries the extra
+ * action ("When an enemy is destroyed, once per round, this Unit gains 1 extra action"); at refit 0
+ * it is the Blast clause alone.
  */
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
-import { buildTraceShip, type RefitLevel } from '../../../../scripts/lib/traceShipFactory';
-import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
-import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
-
-beforeAll(() => {
-    if (!csvAvailable() || !shipDataAvailable()) {
-        throw new Error(
-            'This suite requires docs/ship-skills.csv and docs/ship-data.json (gitignored reference data) — copy them in before running'
-        );
-    }
-});
+import type { Ship } from '../../../types/ship';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
-/** Sokol's real active + passive at `refit`. */
-const sokol = (refit: RefitLevel): ShipSkills => {
-    const built = buildTraceShip('Sokol', { refitLevel: refit });
-    if (!built) throw new Error('Sokol missing from reference data');
-    const slots = buildShipAbilities(built).slots.filter(
+const SOKOL_ACTIVE =
+    'This Unit deals <unit-damage>80% damage</unit-damage> and, if the target is affected by a <unit-skill>control</unit-skill> effect, deals an additional <unit-damage>130% damage</unit-damage>.';
+const SOKOL_PASSIVE_R0 = 'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.';
+const SOKOL_PASSIVE_R2 =
+    'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.<br /><br />When an enemy is destroyed, once per round, this Unit <unit-skill>gains 1 extra action</unit-skill>.';
+
+/** Sokol's active + passive at `refit`. */
+const sokol = (refit: 0 | 4): ShipSkills => {
+    const ship = {
+        refits: Array.from({ length: refit }, () => ({})),
+        activeSkillText: SOKOL_ACTIVE,
+        firstPassiveSkillText: SOKOL_PASSIVE_R0,
+        secondPassiveSkillText: SOKOL_PASSIVE_R2,
+    } as unknown as Ship;
+    const slots = buildShipAbilities(ship).slots.filter(
         (s) => s.slot === 'active' || s.slot === 'passive'
     );
     const passive = slots.find((s) => s.slot === 'passive')?.abilities ?? [];
@@ -172,7 +174,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 position: 'M4',
                 enemyAttackers: [enemyAt('enemy-a', 'M4', FRAGILE), enemyAt('enemy-b', 'M3', BIG)],
             });
-            expect(hitsBy(input, 'attacker', 'enemy-a')).toEqual(['1:1690', '2:1885']);
+            expect(hitsBy(input, 'attacker', 'enemy-a')).toEqual(['1:1040', '2:1160']);
         });
         it(`enemy Sokol, ${order}: kill → extra action at 2 stacks, round 2 at 3`, () => {
             const input = base({
@@ -181,7 +183,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 teamActors: [teamAt('ally-front', 'M4', FRAGILE)],
                 enemyAttackers: [enemyAt('enemy-sokol', 'M4', BIG, sokol(4), sokolSpeed)],
             });
-            expect(hitsBy(input, 'enemy-sokol', 'ally-front')).toEqual(['1:1690', '2:1885']);
+            expect(hitsBy(input, 'enemy-sokol', 'ally-front')).toEqual(['1:1040', '2:1160']);
         });
         it(`player Sokol, ${order}: no kill → no extra action, one stack per round`, () => {
             const input = base({
@@ -191,7 +193,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 position: 'M4',
                 enemyAttackers: [enemyAt('enemy-a', 'M4', BIG)],
             });
-            expect(hitsBy(input, 'attacker', 'none')).toEqual(['1:1495', '2:1690']);
+            expect(hitsBy(input, 'attacker', 'none')).toEqual(['1:920', '2:1040']);
         });
         it(`enemy Sokol, ${order}: no kill → no extra action, one stack per round`, () => {
             const input = base({
@@ -199,7 +201,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 position: 'M4',
                 enemyAttackers: [enemyAt('enemy-sokol', 'M4', BIG, sokol(4), sokolSpeed)],
             });
-            expect(hitsBy(input, 'enemy-sokol', 'none')).toEqual(['1:1495', '2:1690']);
+            expect(hitsBy(input, 'enemy-sokol', 'none')).toEqual(['1:920', '2:1040']);
         });
     }
 
@@ -214,9 +216,9 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
             teamActors: [teamAt('ally-sokol', 'M4', BIG, sokol(4), 200)],
             enemyAttackers: [enemyAt('enemy-a', 'M4', FRAGILE), enemyAt('enemy-b', 'M3', BIG)],
         });
-        expect(hitsBy(input, 'attacker', 'none')).toEqual(['1:1495', '2:1690']);
+        expect(hitsBy(input, 'attacker', 'none')).toEqual(['1:920', '2:1040']);
         // The instrument: the ally really did take an extra action at 2 stacks.
-        expect(hitsBy(input, 'ally-sokol', 'enemy-a')).toEqual(['1:1690', '2:1885']);
+        expect(hitsBy(input, 'ally-sokol', 'enemy-a')).toEqual(['1:1040', '2:1160']);
     });
 
     it("an enemy ally's extra action does not add a stack to the enemy Sokol", () => {
@@ -229,7 +231,7 @@ describe("Sokol's 'gains 1 stack of Blast every turn' counts his extra action (R
                 enemyAt('enemy-sokol-r0', 'M3', BIG, sokol(0), 10),
             ],
         });
-        expect(hitsBy(input, 'enemy-sokol-r0', 'none')).toEqual(['1:1495', '2:1690']);
-        expect(hitsBy(input, 'enemy-sokol-r4', 'ally-front')).toEqual(['1:1690', '2:1885']);
+        expect(hitsBy(input, 'enemy-sokol-r0', 'none')).toEqual(['1:920', '2:1040']);
+        expect(hitsBy(input, 'enemy-sokol-r4', 'ally-front')).toEqual(['1:1040', '2:1160']);
     });
 });

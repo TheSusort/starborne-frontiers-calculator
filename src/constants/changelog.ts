@@ -11,6 +11,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: the log now shows status duration extensions and bomb countdown cuts.',
     'Combat simulator: the log now shows buffs and debuffs skipped by a stronger one.',
     'Combat simulator: a weaker buff on a stronger one no longer triggers reactions.',
+    'Ship data: LUXX, Ripper and Sokol updated to the latest game patch.',
+    'Ship database: the "control" skill keyword now lists which effects count.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
