@@ -384,6 +384,8 @@ const getSetBonus = (set: string): GearSetName | null => {
             return 'BURNER';
         case 'DoT_Potency':
             return 'DECIMATION';
+        case 'DoT_Extender':
+            return 'VIRAL';
         case 'DebuffChance':
             return 'HACKING';
         case 'Hull_Leech':

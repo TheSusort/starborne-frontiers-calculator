@@ -174,6 +174,19 @@ const GEAR_SET_ABILITIES: Partial<
         config: { type: 'buff-duration-extension', turns: 1 },
         autoFilled: true,
     }),
+    // Viral (4pc set): every DoT the wearer applies from its ACTIVE or CHARGED skill lasts +1
+    // turn; passive-slot DoTs (its own passive, gear sets, implants) and Bombs do not. A marker
+    // the engine collects into a per-owner extension map (`dotDurationExtension.ts`), applied
+    // where a DoT entry's duration is written. Top-level type:'modifier' is a placeholder, as
+    // for BOOST.
+    VIRAL: () => ({
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'dot-duration-extension', turns: 1 },
+        autoFilled: true,
+    }),
 };
 
 // ---------------------------------------------------------------------------

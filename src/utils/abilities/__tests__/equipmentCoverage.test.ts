@@ -126,7 +126,7 @@ function implantAbilities(implantKey: GearSetName, rarity: string) {
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { BOOST + BURNER + DECIMATION + LEECH + REFLECT + CLOAKING + HARDENED + REVENGE + SHIELD (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SMOKESCREEN + SYNAPTIC_RESONANCE + VOIDFIRE_CATALYST + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { BOOST + BURNER + DECIMATION + VIRAL + LEECH + REFLECT + CLOAKING + HARDENED + REVENGE + SHIELD (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SMOKESCREEN + SYNAPTIC_RESONANCE + VOIDFIRE_CATALYST + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = (Object.keys(GEAR_SETS) as (keyof typeof GEAR_SETS)[]).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -135,6 +135,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'BOOST',
             'BURNER',
             'DECIMATION',
+            'VIRAL',
             'LEECH',
             'REFLECT',
             'REVENGE',
@@ -208,6 +209,7 @@ const IMPLEMENTED_SETS = new Set([
     'BOOST',
     'BURNER',
     'DECIMATION',
+    'VIRAL',
     'LEECH',
     'REFLECT',
     'REVENGE',
@@ -227,6 +229,10 @@ describe('equipmentCoverage — gear sets', () => {
 
     it('DECIMATION produces exactly 1 ability (the dotDamage modifier)', () => {
         expect(gearSetAbilityCount('DECIMATION')).toBe(1);
+    });
+
+    it('VIRAL produces exactly 1 ability (the dot-duration-extension marker)', () => {
+        expect(gearSetAbilityCount('VIRAL')).toBe(1);
     });
 
     it('LEECH produces exactly 1 ability (the standing leech)', () => {

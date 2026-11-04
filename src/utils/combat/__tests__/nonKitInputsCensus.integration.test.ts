@@ -195,6 +195,35 @@ const GEAR_SET_ROWS: Row[] = [
         },
     },
     {
+        // "DoTs from active and charged skills last 1 extra turn": W's charged Inferno ticks on O
+        // one more time per cast. Its Bomb is not a DoT and keeps its countdown.
+        key: 'VIRAL',
+        board: {
+            player: [
+                unit('W', 'M4', {
+                    set: { name: 'VIRAL', pieces: 4 },
+                    active: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+                    charged:
+                        'This Unit inflicts <unit-skill>Inferno III</unit-skill> and <unit-skill>Bomb III</unit-skill> for 2 turns.',
+                    chargeCount: 2,
+                    stats: { hacking: 1000 },
+                }),
+            ],
+            enemy: [unit('O', 'M4', IDLE)],
+            // The charged skill fires in round 3; six rounds let the extra tick land on either
+            // side of the board.
+            rounds: 6,
+        },
+        check: (w, c) => {
+            const ticks = (r: BoardRun) => entriesOf(r, 'dot-ticked', { target: 'O' }).length;
+            const bombs = (r: BoardRun) => entriesOf(r, 'bomb', { actor: 'W', target: 'O' }).length;
+            expect(ticks(c)).toBeGreaterThan(0);
+            expect(ticks(w)).toBe(ticks(c) + 1);
+            expect(bombs(c)).toBeGreaterThan(0);
+            expect(bombs(w)).toBe(bombs(c));
+        },
+    },
+    {
         // "Applies Inferno 1 for 2 turns."
         key: 'BURNER',
         board: {

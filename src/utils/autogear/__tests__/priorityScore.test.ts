@@ -56,6 +56,20 @@ describe('calculatePriorityScore — set thresholds are "at least", never "exact
         expect(three).toBe(two);
         expect(six).toBeCloseTo(none * 1.3, 6);
     });
+
+    it('DEBUFFER_CORROSION: a complete Viral set scores 1.5x, three pieces nothing', () => {
+        const none = scoreWith('DEBUFFER_CORROSION', {});
+        expect(scoreWith('DEBUFFER_CORROSION', { VIRAL: 3 })).toBe(none);
+        expect(scoreWith('DEBUFFER_CORROSION', { VIRAL: 4 })).toBeCloseTo(none * 1.5, 6);
+    });
+
+    it('DEBUFFER_CORROSION: Viral stacks multiplicatively with Decimation', () => {
+        const none = scoreWith('DEBUFFER_CORROSION', {});
+        expect(scoreWith('DEBUFFER_CORROSION', { VIRAL: 4, DECIMATION: 2 })).toBeCloseTo(
+            none * 1.5 * 1.1,
+            6
+        );
+    });
 });
 
 describe('calculatePriorityScore — implant set requirements', () => {

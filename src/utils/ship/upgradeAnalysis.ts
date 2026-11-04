@@ -13,7 +13,15 @@ const DESIRED_SETS: Partial<Record<ShipTypeName, string[]>> = {
     DEFENDER: ['DEFENSE', 'FORTITUDE', 'ABYSSAL_SAFEGUARD', 'ABYSSAL_WARD', 'PROTECTION'],
     SUPPORTER: ['REPAIR', 'FORTITUDE', 'CRITICAL', 'ABYSSAL_SAFEGUARD'],
     SUPPORTER_BUFFER: ['BOOST', 'SPEED', 'FORTITUDE', 'AMBUSH'],
-    DEBUFFER: ['HACKING', 'ABYSSAL_BREACH', 'ATTACK', 'CRITICAL', 'ABYSSAL_ASSULT', 'AMBUSH'],
+    DEBUFFER: [
+        'HACKING',
+        'ABYSSAL_BREACH',
+        'ATTACK',
+        'CRITICAL',
+        'ABYSSAL_ASSULT',
+        'AMBUSH',
+        'VIRAL',
+    ],
 };
 
 export function analyzeUpgrades(

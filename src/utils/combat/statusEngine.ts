@@ -90,6 +90,11 @@ export interface StatusEngineInput {
      *  (the firing source for scheduled buffs, `status.casterId` for ability buffs). Returns 0
      *  for non-wearers. Default → always 0 (no wearer, no change). */
     buffDurationExtensionFor?: (casterId: string) => number;
+    /** Viral gear set: extra turns to add to a DoT `ownerId` applies from its active or charged
+     *  skill. Returns 0 for non-wearers. Default → always 0. Served back as
+     *  `StatusEngine.dotDurationExtensionFor` for the DoT write sites, which live outside the
+     *  status engine (`applyNewDoTs` in playerTurn.ts, `landDotOn` in triggers.ts). */
+    dotDurationExtensionFor?: (ownerId: string) => number;
     /** TEST-ONLY: disables the outclass pre-roll skip (#590 R1 — a weaker same-family debuff onto
      *  a target already holding a stronger one is never attempted). Lets a golden/fingerprint
      *  fixture be reran byte-for-byte with the skip off, to attribute a moved golden to it. No
@@ -435,6 +440,9 @@ export interface StatusEngine {
     /** The last number `nextAppliedSeq` handed out (0 before the first), without advancing it:
      *  everything stamped later carries a larger number. */
     lastAppliedSeq(): number;
+    /** Viral gear set: extra turns a DoT `ownerId` applies from its active or charged skill
+     *  lasts (`StatusEngineInput.dotDurationExtensionFor`); 0 for non-wearers. */
+    dotDurationExtensionFor(ownerId: string): number;
     /** Reduce the duration of ONE debuff on `actorId` by `turns`, picked at RANDOM (owner ruling
      *  R35, Warpstrike's "reduces a random active debuff's duration by 1 turn"). The pool is every
      *  timed debuff in the actor's per-victim enemy store plus `extra` — its DoT and Bomb
@@ -2807,6 +2815,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         takeTimedWrites,
         nextAppliedSeq,
         lastAppliedSeq: () => appliedSeqCounter,
+        dotDurationExtensionFor: (ownerId: string) => input.dotDurationExtensionFor?.(ownerId) ?? 0,
         sourceFired,
         setLandsTimedEnemyApplication,
         setTurnBlockedReader,

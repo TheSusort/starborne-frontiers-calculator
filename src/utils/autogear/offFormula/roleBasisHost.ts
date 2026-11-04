@@ -37,7 +37,7 @@ const noHost: RoleBasisHost = { axis: null, primaryStat: null };
  * - DEBUFFER_DEFENSIVE and DEBUFFER_DEFENSIVE_SECURITY score hacking against effective HP, which
  *   already folds defence into its mitigation curve — same double-counting reason as the
  *   defenders, since effective HP is an hp/defence blend rather than hp alone.
- * - DEBUFFER_CORROSION scores hacking against Decimation-set count, which has no `attack`/`hp`
+ * - DEBUFFER_CORROSION scores hacking against Decimation and Viral set counts, which have no `attack`/`hp`
  *   substitution point at all.
  * - SUPPORTER_BUFFER adds speed and effective HP; ruled out for the same double-counting reason
  *   as the defenders.

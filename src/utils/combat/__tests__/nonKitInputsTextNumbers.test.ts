@@ -122,4 +122,9 @@ describe('equipment text numbers match the built abilities', () => {
         const [boost] = buildFor('BOOST', 'legendary', false, 4);
         expect(boost.config).toMatchObject({ type: 'buff-duration-extension', turns: 1 });
     });
+
+    it('Viral: "1 extra turn" is the marker\'s turns', () => {
+        const [viral] = buildFor('VIRAL', 'legendary', false, 4);
+        expect(viral.config).toMatchObject({ type: 'dot-duration-extension', turns: 1 });
+    });
 });
