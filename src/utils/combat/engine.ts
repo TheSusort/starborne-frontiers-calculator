@@ -176,6 +176,7 @@ import {
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
+import { buildDotDurationExtensionByOwner } from './dotDurationExtension';
 import { isDamageClause } from './castClauseOrder';
 import {
     CastNamesBeforeDamage,
@@ -2749,6 +2750,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         ...teamActors.map((t) => ({ id: t.id, shipSkills: t.walk?.shipSkills })),
         ...(input.enemyAttackers ?? []).map((e) => ({ id: e.id, shipSkills: e.shipSkills })),
     ]);
+    // Viral gear set: per-owner DoT-duration extension, over the same actor set.
+    const dotDurationExtensionByOwner = buildDotDurationExtensionByOwner([
+        { id: 'attacker', shipSkills: input.shipSkills },
+        ...teamActors.map((t) => ({ id: t.id, shipSkills: t.walk?.shipSkills })),
+        ...(input.enemyAttackers ?? []).map((e) => ({ id: e.id, shipSkills: e.shipSkills })),
+    ]);
 
     // Per-actor-id map of this actor's PASSIVE `all-allies`-
     // targeted `modifier` abilities (Lodolite's "+15% to enemies with Concentrate Fire/
@@ -2797,6 +2804,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         })),
         landsTimedEnemyApplication: (buff) => landsTimedEnemyApplication(buff.application),
         buffDurationExtensionFor: (casterId) => buffDurationExtensionByOwner.get(casterId) ?? 0,
+        dotDurationExtensionFor: (ownerId) => dotDurationExtensionByOwner.get(ownerId) ?? 0,
         __testDisableOutclassSkip: input.__testDisableOutclassSkip,
     });
 

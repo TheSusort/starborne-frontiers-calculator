@@ -1898,6 +1898,15 @@ const landedStackProcs = new WeakMap<
     (Record<string, boolean> | undefined)[]
 >();
 
+/** `dots` with `extension` added to every non-bomb duration, as `applyNewDoTs` writes them. New
+ *  entries, so the cast's own configs (keys of `landedStackProcs`) are left untouched. */
+function withDotExtension(dots: DoTApplicationConfig, extension: number): DoTApplicationConfig {
+    if (extension <= 0) return dots;
+    return dots.map((dot) =>
+        dot.type === 'bomb' ? dot : { ...dot, duration: dot.duration + extension }
+    );
+}
+
 // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
 // `sourceId` (the applier) is stamped on every appended entry for per-actor attribution.
 function applyNewDoTs(args: {
@@ -1914,6 +1923,10 @@ function applyNewDoTs(args: {
      *  DoT is dealt by its applier, so an entry made here needs no `dealtCreditId`. */
     genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
+    /** Extra turns every non-bomb entry lasts (the caster's Viral set,
+     *  `StatusEngine.dotDurationExtensionFor`): each DoT reaching here is from the fired active
+     *  or charged skill. A bomb's countdown is never extended. */
+    durationExtension: number;
     /** `appliedSeq` is the pushed entry's (`ActiveDoTStack.appliedSeq`). */
     emitDotApplied: (
         dotType: DoTType,
@@ -1933,7 +1946,7 @@ function applyNewDoTs(args: {
             args.corrosionEntries.push({
                 stacks: dot.stacks,
                 tier: dot.tier,
-                remainingRounds: dot.duration,
+                remainingRounds: dot.duration + args.durationExtension,
                 sourceId: args.sourceId,
                 appliedSeq,
             });
@@ -1942,7 +1955,7 @@ function applyNewDoTs(args: {
             args.infernoEntries.push({
                 stacks: dot.stacks,
                 tier: dot.tier,
-                remainingRounds: dot.duration,
+                remainingRounds: dot.duration + args.durationExtension,
                 sourceId: args.sourceId,
                 appliedSeq,
                 appliedAttack: args.effectiveAttack,
@@ -1964,7 +1977,7 @@ function applyNewDoTs(args: {
             args.genericDoTEntries.push({
                 stacks: dot.stacks,
                 tier: dot.tier,
-                remainingRounds: dot.duration,
+                remainingRounds: dot.duration + args.durationExtension,
                 sourceId: args.sourceId,
                 appliedSeq,
             });
@@ -5465,6 +5478,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const effectiveMultiplier = rawMultiplier * hits;
     const secondary = secondaryFromSkill(gatedSkill);
     const dotsConfig = dotsFromSkill(gatedSkill);
+    /** The caster's Viral extension for this cast's DoTs (`applyNewDoTs`). */
+    const dotExtension = statusEngine.dotDurationExtensionFor(actor.id);
 
     let secondaryStatValue = 0;
     if (secondary) {
@@ -6171,6 +6186,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 infernoEntries,
                 genericDoTEntries,
                 pendingBombs,
+                durationExtension: dotExtension,
                 nextAppliedSeq: statusEngine.nextAppliedSeq,
                 emitDotApplied: (dotType, stacks, tier, appliedSeq, preDecidedProcsPerStack) =>
                     emit({
@@ -6397,6 +6413,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         infernoEntries: victim.infernoEntries,
                         genericDoTEntries: victim.genericDoTEntries,
                         pendingBombs: victim.pendingBombs,
+                        durationExtension: dotExtension,
                         nextAppliedSeq: statusEngine.nextAppliedSeq,
                         emitDotApplied: (
                             dotType,
@@ -7968,7 +7985,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // if `dotsLanded` were flipped to false — a resist implies a target that resisted. Emptying
         // the LIST makes both answer "nothing happened" and leaves `dotsLanded` immaterial, which is
         // exactly the reading a cast with no DoT clauses already gets.
-        dotsConfig: hasVictim ? reportedDots : [],
+        // The reported DoTs carry the durations `applyNewDoTs` wrote, Viral's extension included.
+        dotsConfig: hasVictim ? withDotExtension(reportedDots, dotExtension) : [],
         dotsLanded,
         activeSelfBuffs: activeSelfBuffsForRound,
         landedEnemyDebuffs,

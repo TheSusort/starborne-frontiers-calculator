@@ -170,6 +170,10 @@ function calculateBomberDebufferScore(
     return (hacking * attackWithMultiplier + additiveBonus) * (1 + multiplierFactor);
 }
 
+/** DoT-term multiplier for a complete Viral set: DoTs from the active and charged skill last one
+ *  turn longer, and the usual DoT lasts 2 turns, so +1 turn is about +50% DoT damage. */
+const VIRAL_DOT_MULTIPLIER = 1.5;
+
 function calculateCorrosionDebufferScore(
     stats: BaseStats,
     setCount?: Record<string, number>,
@@ -181,9 +185,12 @@ function calculateCorrosionDebufferScore(
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
 
     // Hacking is the primary stat that inflicts the DoT. Each COMPLETE Decimation set adds 10%
-    // DoT damage (`completeSetCount`), so a lone piece adds nothing and 6 pieces add 30%.
+    // DoT damage (`completeSetCount`), so a lone piece adds nothing and 6 pieces add 30%. A
+    // complete Viral set multiplies on top of that.
     const decimationMultiplier = completeSetCount('DECIMATION', decimation) * 0.1;
-    const totalDamage = hacking * (1 + decimationMultiplier);
+    const viralMultiplier =
+        completeSetCount('VIRAL', setCount?.VIRAL || 0) >= 1 ? VIRAL_DOT_MULTIPLIER : 1;
+    const totalDamage = hacking * (1 + decimationMultiplier) * viralMultiplier;
 
     return (totalDamage + additiveBonus) * (1 + multiplierFactor);
 }

@@ -114,7 +114,7 @@ describe('fastScore equivalence with calculateTotalScore', () => {
     });
 
     it('covers explicit set bonus thresholds (2, 4 pieces) for each test set', () => {
-        const setNames = ['SHIELD', 'DECIMATION', 'BOOST', 'HARDENED'] as const;
+        const setNames = ['SHIELD', 'DECIMATION', 'BOOST', 'HARDENED', 'VIRAL'] as const;
         const gearSlots = GEAR_SLOT_ORDER;
 
         for (const setName of setNames) {

@@ -869,6 +869,7 @@ describe('importPlayerData field mappings', () => {
             ['Attack_Speed', 'AMBUSH'],
             ['Crafted_All_Stats', 'OMNICORE'],
             ['Inc_Crit_Down', 'HARDENED'],
+            ['DoT_Extender', 'VIRAL'],
             ['Some_Future_Set', null],
         ])('gear Set %s maps to %s', async (set, expected) => {
             const { inventory } = await importOne({ Equipment: [makeGearItem({ Set: set })] });

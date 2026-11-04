@@ -76,6 +76,14 @@ export const GEAR_SETS = {
         description: '10% extra DoT damage',
         color: '#4a490a',
     },
+    VIRAL: {
+        name: 'Viral',
+        stats: [{ name: 'hacking', value: 25, type: 'flat' }],
+        iconUrl: '/images/gear-sets/viral.webp',
+        minPieces: 4,
+        description: 'DoTs from active and charged skills last 1 extra turn',
+        color: '#2a4a0a',
+    },
     HACKING: {
         name: 'Hacking',
         stats: [{ name: 'hacking', value: 30, type: 'flat' }],

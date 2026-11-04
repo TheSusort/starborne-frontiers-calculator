@@ -1300,6 +1300,10 @@ const DocumentationPage: React.FC = () => {
                                             </p>
                                             <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Hacking stat × Decimation</li>
+                                                <li>
+                                                    A complete Viral set scores 1.5×, since its DoTs
+                                                    last a turn longer
+                                                </li>
                                                 <li>Optimized for corrosion stacking</li>
                                             </ul>
                                         </div>
@@ -5297,7 +5301,11 @@ const DocumentationPage: React.FC = () => {
                                     against the target) and <strong>Decimation</strong> (+10% DoT
                                     damage per equipped set, up to +30%, boosting your Inferno and
                                     Corrosion ticks in both the combat simulator and the DPS
-                                    calculator). Five shield sources are also modeled: the{' '}
+                                    calculator). The <strong>Viral</strong> gear set (4 pieces, +25
+                                    hacking) makes every DoT the wearer applies with its active or
+                                    charged skill last one extra turn; DoTs from passive skills,
+                                    gear sets and implants keep their duration, and Bombs keep their
+                                    countdown. Five shield sources are also modeled: the{' '}
                                     <strong>Shield</strong> gear set (grants the equipped ship a
                                     shield each turn, 4% of its max HP per set),{' '}
                                     <strong>Adaptive Plating</strong> (grants the ship a shield from

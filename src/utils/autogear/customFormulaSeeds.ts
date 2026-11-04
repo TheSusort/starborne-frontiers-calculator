@@ -61,7 +61,7 @@ export const CUSTOM_FORMULA_SEEDS: Record<
     DEBUFFER_CORROSION: {
         rows: [core('hacking')],
         fidelity:
-            'Approximation. The role also grows with every Decimation piece equipped, which stat rows cannot express.',
+            'Approximation. The role also grows with complete Decimation and Viral sets, which stat rows cannot express.',
     },
     SUPPORTER: {
         rows: [core('hp'), bonus('healModifier'), bonus('crit', 50), bonus('critDamage', 50)],

@@ -101,6 +101,7 @@ import {
 // imports buildActorConditionContext/ReactiveAbility from this module.
 import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx, RateGate } from './playerTurn';
 import type { ActorTargetingStatus } from './positionalBinding';
+import { extendsDotFrom } from './dotDurationExtension';
 
 /** The trigger values the engine consumes — defined next to AbilityTrigger in
  *  types/abilities.ts (so UI consumers don't import the engine for one constant)
@@ -6265,11 +6266,17 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         ): void => {
             // The pushed entry's `appliedSeq`, carried on the landing event.
             let appliedSeq: number | undefined;
+            // Viral: a DoT from the owner's active or charged skill lasts longer; a bomb never.
+            const duration =
+                cfg.duration +
+                (extendsDotFrom(intent.sourceSlot, intent.ability)
+                    ? ctx.statusEngine.dotDurationExtensionFor(intent.ownerId)
+                    : 0);
             if (cfg.dotType === 'corrosion') {
                 (victim?.corrosionEntries ?? ctx.corrosionEntries).push({
                     stacks,
                     tier: cfg.tier,
-                    remainingRounds: cfg.duration,
+                    remainingRounds: duration,
                     sourceId: intent.ownerId,
                     appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                 });
@@ -6280,7 +6287,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 (victim?.infernoEntries ?? ctx.infernoEntries).push({
                     stacks,
                     tier: cfg.tier,
-                    remainingRounds: cfg.duration,
+                    remainingRounds: duration,
                     sourceId: intent.ownerId,
                     appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                     ...(appliedAttack !== undefined ? { appliedAttack } : {}),

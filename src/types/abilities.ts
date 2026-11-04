@@ -1237,6 +1237,14 @@ export type AbilityConfig =
           /** Extra turns added to buffs this wearer applies (Boost = 1). */
           turns: number;
       }
+    // Viral gear set: caster-side extension on every DoT the wearer applies from its active or
+    // charged skill. No-op marker config, read by the engine when building the per-owner DoT
+    // extension map (`dotDurationExtension.ts`), NEVER executed by the ability fold.
+    | {
+          type: 'dot-duration-extension';
+          /** Extra turns added to the DoTs this wearer's active and charged skills apply (Viral = 1). */
+          turns: number;
+      }
     // PR F4: pre-fight base-stat grant (trigger 'pre-combat', target 'self'/'adjacent-allies').
     // Consumed ONCE by the battle sim's pre-fight layer (F5), which mutates plan stats from a
     // frozen post-leader snapshot; adjacency gates live HERE (evaluated against board geometry
