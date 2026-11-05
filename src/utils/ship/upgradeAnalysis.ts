@@ -5,6 +5,7 @@ import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { getGearSet } from '../../constants/gearSets';
 import { ShipTypeName, resolveRoleEntry } from '../../constants/shipTypes';
+import { viralExtendsShipDoTs } from '../autogear/viralEligibility';
 import { analyzeGearQuality } from './gearSuggestions';
 import { SlotContribution } from './statDistribution';
 
@@ -33,7 +34,10 @@ export function analyzeUpgrades(
     orphanSetPieces: GearPiece[]
 ): UpgradeSuggestion[] {
     const suggestions: UpgradeSuggestion[] = [];
-    const desiredSets = resolveRoleEntry(DESIRED_SETS, ship.type) ?? [];
+    // Viral is only worth wanting when it lengthens a DoT this kit applies.
+    const desiredSets = (resolveRoleEntry(DESIRED_SETS, ship.type) ?? []).filter(
+        (set) => set !== 'VIRAL' || viralExtendsShipDoTs(ship)
+    );
 
     slotContributions.forEach((contribution) => {
         const gearId = equipment[contribution.slotName];

@@ -44,3 +44,20 @@ export function buildDotDurationExtensionByOwner(
 export function extendsDotFrom(sourceSlot: SkillSlot, ability: Ability): boolean {
     return (sourceSlot === 'active' || sourceSlot === 'charged') && ability.source !== 'equipment';
 }
+
+/**
+ * Whether a Viral set would extend anything this kit applies: an active- or charged-slot DoT
+ * that is not a bomb (`applyNewDoTs` never extends a bomb's countdown) and passes
+ * `extendsDotFrom`. Autogear gates the Viral score bonus on this.
+ */
+export function skillsApplyExtendableDoT(skills: ShipSkills | undefined): boolean {
+    if (!skills?.slots) return false;
+    return skills.slots.some((skill) =>
+        skill.abilities.some(
+            (ability) =>
+                ability.config.type === 'dot' &&
+                ability.config.dotType !== 'bomb' &&
+                extendsDotFrom(skill.slot, ability)
+        )
+    );
+}

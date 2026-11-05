@@ -8,6 +8,7 @@ import { GearPiece } from '../../types/gear';
 import { performanceTracker } from './performanceTimer';
 import { applyArenaModifiers } from './arenaModifiers';
 import { applyFleetBuffs } from './fleetBuffs';
+import { viralExtendsShipDoTs } from './viralEligibility';
 import {
     calculatePriorityScore,
     calculateDamageReduction,
@@ -340,7 +341,8 @@ export function calculateTotalScore(
         arcaneSiegeMultiplier,
         implantSetCount,
         customFormula,
-        roleBasis
+        roleBasis,
+        viralExtendsShipDoTs(ship)
     );
     performanceTracker.endTimer('CalculatePriorityScore');
 

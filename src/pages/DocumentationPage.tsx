@@ -1301,7 +1301,8 @@ const DocumentationPage: React.FC = () => {
                                             <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Hacking stat × Decimation</li>
                                                 <li>
-                                                    A complete Viral set scores 1.5×, since its DoTs
+                                                    A complete Viral set scores 1.5× when the active
+                                                    or charged skill applies a DoT, since those DoTs
                                                     last a turn longer
                                                 </li>
                                                 <li>Optimized for corrosion stacking</li>
