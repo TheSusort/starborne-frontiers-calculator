@@ -124,7 +124,8 @@ export function fastScore(
         arcaneSiegeMultiplier,
         implantSetCount,
         context.customFormula,
-        context.roleBasis
+        context.roleBasis,
+        context.viralExtendsDoTs
     );
 
     const violation = hasHardRequirements

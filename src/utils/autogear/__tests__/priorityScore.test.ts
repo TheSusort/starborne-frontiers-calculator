@@ -63,6 +63,25 @@ describe('calculatePriorityScore — set thresholds are "at least", never "exact
         expect(scoreWith('DEBUFFER_CORROSION', { VIRAL: 4 })).toBeCloseTo(none * 1.5, 6);
     });
 
+    it('DEBUFFER_CORROSION: Viral pays nothing when the kit has no DoT it extends', () => {
+        const none = scoreWith('DEBUFFER_CORROSION', {});
+        const ineligible = calculatePriorityScore(
+            stats,
+            [],
+            'DEBUFFER_CORROSION',
+            { VIRAL: 4 },
+            undefined,
+            undefined,
+            undefined,
+            0,
+            undefined,
+            undefined,
+            undefined,
+            false
+        );
+        expect(ineligible).toBe(none);
+    });
+
     it('DEBUFFER_CORROSION: Viral stacks multiplicatively with Decimation', () => {
         const none = scoreWith('DEBUFFER_CORROSION', {});
         expect(scoreWith('DEBUFFER_CORROSION', { VIRAL: 4, DECIMATION: 2 })).toBeCloseTo(

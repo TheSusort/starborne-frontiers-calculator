@@ -177,7 +177,8 @@ const VIRAL_DOT_MULTIPLIER = 1.5;
 function calculateCorrosionDebufferScore(
     stats: BaseStats,
     setCount?: Record<string, number>,
-    statBonuses?: StatBonus[]
+    statBonuses?: StatBonus[],
+    viralExtendsDoTs: boolean = true
 ): number {
     const hacking = stats.hacking || 0;
     const decimation = setCount?.DECIMATION || 0;
@@ -186,10 +187,12 @@ function calculateCorrosionDebufferScore(
 
     // Hacking is the primary stat that inflicts the DoT. Each COMPLETE Decimation set adds 10%
     // DoT damage (`completeSetCount`), so a lone piece adds nothing and 6 pieces add 30%. A
-    // complete Viral set multiplies on top of that.
+    // complete Viral set multiplies on top of that, when the kit has a DoT Viral extends.
     const decimationMultiplier = completeSetCount('DECIMATION', decimation) * 0.1;
     const viralMultiplier =
-        completeSetCount('VIRAL', setCount?.VIRAL || 0) >= 1 ? VIRAL_DOT_MULTIPLIER : 1;
+        viralExtendsDoTs && completeSetCount('VIRAL', setCount?.VIRAL || 0) >= 1
+            ? VIRAL_DOT_MULTIPLIER
+            : 1;
     const totalDamage = hacking * (1 + decimationMultiplier) * viralMultiplier;
 
     return (totalDamage + additiveBonus) * (1 + multiplierFactor);
@@ -311,7 +314,9 @@ export function calculatePriorityScore(
     arcaneSiegeMultiplier: number = 0,
     implantSetCount?: Record<string, number>,
     customFormula?: CustomFormula,
-    roleBasis?: RoleBasis
+    roleBasis?: RoleBasis,
+    // `viralExtendsShipDoTs(ship)`. Defaults to eligible for callers that score without a ship.
+    viralExtendsDoTs: boolean = true
 ): number {
     let penalties = 0;
 
@@ -410,7 +415,12 @@ export function calculatePriorityScore(
                 );
                 break;
             case 'DEBUFFER_CORROSION':
-                baseScore = calculateCorrosionDebufferScore(stats, setCount, statBonuses);
+                baseScore = calculateCorrosionDebufferScore(
+                    stats,
+                    setCount,
+                    statBonuses,
+                    viralExtendsDoTs
+                );
                 break;
             case 'SUPPORTER':
                 baseScore = calculateHealerScore(stats, statBonuses, basisTerms);

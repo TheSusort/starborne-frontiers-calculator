@@ -5,6 +5,7 @@ import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { getGearSet } from '../../constants/gearSets';
 import { ShipTypeName, resolveRoleEntry } from '../../constants/shipTypes';
+import { viralExtendsShipDoTs } from '../autogear/viralEligibility';
 import { analyzeGearQuality } from './gearSuggestions';
 import { SlotContribution } from './statDistribution';
 
@@ -33,7 +34,10 @@ export function analyzeUpgrades(
     orphanSetPieces: GearPiece[]
 ): UpgradeSuggestion[] {
     const suggestions: UpgradeSuggestion[] = [];
-    const desiredSets = resolveRoleEntry(DESIRED_SETS, ship.type) ?? [];
+    // Viral is only worth wanting when it lengthens a DoT this kit applies.
+    const desiredSets = (resolveRoleEntry(DESIRED_SETS, ship.type) ?? []).filter(
+        (set) => set !== 'VIRAL' || viralExtendsShipDoTs(ship)
+    );
 
     slotContributions.forEach((contribution) => {
         const gearId = equipment[contribution.slotName];
@@ -110,18 +114,13 @@ export function analyzeUpgrades(
 
         if (orphanSetPieces.length > 0 && !relevantSet) {
             // check for pieces with orphan relevant set bonus
-            const orphanSetPiecesOtherThanThis = orphanSetPieces.filter(
-                (piece) => piece.setBonus !== gear.setBonus
+            const mostRelevantSetPiece = orphanSetPieces.find(
+                (piece) =>
+                    piece.setBonus !== gear.setBonus &&
+                    !!piece.setBonus &&
+                    desiredSets.includes(piece.setBonus)
             );
-            if (orphanSetPiecesOtherThanThis.length > 0) {
-                const mostRelevantSetPiece = orphanSetPiecesOtherThanThis.reduce(
-                    (mostRelevant, piece) => {
-                        const hasRelevantSet =
-                            piece.setBonus && desiredSets.includes(piece.setBonus);
-                        return hasRelevantSet ? piece : mostRelevant;
-                    },
-                    orphanSetPiecesOtherThanThis[0]
-                );
+            if (mostRelevantSetPiece) {
                 if (existingSuggestion) {
                     existingSuggestion.reasons.push({
                         title: 'Not optimal set bonus',

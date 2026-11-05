@@ -12,6 +12,7 @@ import type {
 import type { GearSlotName, ShipTypeName } from '../../../constants';
 import { type ImplantSlotName, isEquipmentSlotName } from '../../../constants/gearTypes';
 import { FastCache } from '../../fastScoring/fastCache';
+import { viralExtendsShipDoTs } from '../viralEligibility';
 import { statVectorToBaseStats, type StatVector } from '../../fastScoring/statVector';
 import { buildGearRegistry, type GearRegistry } from './gearRegistry';
 import { computeShipPrefix } from './shipPrefix';
@@ -53,6 +54,9 @@ export interface FastScoringContext {
     readonly fixedImplantIds: readonly number[];
 
     readonly hasHardRequirements: boolean;
+
+    /** `viralExtendsShipDoTs(ship)`, resolved once per context. */
+    readonly viralExtendsDoTs: boolean;
 }
 
 export interface BuildContextInput {
@@ -154,5 +158,6 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
         optimizingImplants,
         fixedImplantIds,
         hasHardRequirements: input.priorities.some((p) => p.hardRequirement),
+        viralExtendsDoTs: viralExtendsShipDoTs(input.ship),
     };
 }
