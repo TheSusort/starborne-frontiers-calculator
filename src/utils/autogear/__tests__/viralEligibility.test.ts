@@ -46,6 +46,19 @@ describe('viralExtendsShipDoTs', () => {
         expect(viralExtendsShipDoTs(makeTestShip(WARDEN))).toBe(true);
     });
 
+    it('an active-skill Corrosion is extended (Belladonna)', () => {
+        const belladonna = makeTestShip({
+            name: 'Belladonna',
+            activeSkillText:
+                'This Unit deals <unit-damage>140% damage</unit-damage> and inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns.',
+        });
+        expect(viralExtendsShipDoTs(belladonna)).toBe(true);
+    });
+
+    it('a ship with no active or charged text yet keeps the bonus', () => {
+        expect(viralExtendsShipDoTs(makeTestShip())).toBe(true);
+    });
+
     it('a passive-only Corrosion is not (Shepherd)', () => {
         expect(viralExtendsShipDoTs(makeTestShip(SHEPHERD))).toBe(false);
     });

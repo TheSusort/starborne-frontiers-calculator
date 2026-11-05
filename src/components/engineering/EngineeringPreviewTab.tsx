@@ -20,6 +20,7 @@ import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { calculatePriorityScore } from '../../utils/autogear/scoring';
+import { viralExtendsShipDoTs } from '../../utils/autogear/viralEligibility';
 
 export const EngineeringPreviewTab: React.FC = () => {
     const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
@@ -151,17 +152,48 @@ export const EngineeringPreviewTab: React.FC = () => {
         return counts;
     }, [selectedShip, getGearPiece]);
 
+    const viralEligible = useMemo(
+        () => (selectedShip ? viralExtendsShipDoTs(selectedShip) : true),
+        [selectedShip]
+    );
+
     // Calculate current role score (uses scoring role)
     const currentRoleScore = useMemo(() => {
         if (!currentStats || !scoringRole) return null;
-        return calculatePriorityScore(currentStats.final, [], scoringRole, setCount);
-    }, [currentStats, scoringRole, setCount]);
+        return calculatePriorityScore(
+            currentStats.final,
+            [],
+            scoringRole,
+            setCount,
+            undefined,
+            undefined,
+            undefined,
+            0,
+            undefined,
+            undefined,
+            undefined,
+            viralEligible
+        );
+    }, [currentStats, scoringRole, setCount, viralEligible]);
 
     // Calculate preview role score (uses scoring role)
     const previewRoleScore = useMemo(() => {
         if (!previewStats || !scoringRole || !selectedStat) return null;
-        return calculatePriorityScore(previewStats.final, [], scoringRole, setCount);
-    }, [previewStats, scoringRole, selectedStat, setCount]);
+        return calculatePriorityScore(
+            previewStats.final,
+            [],
+            scoringRole,
+            setCount,
+            undefined,
+            undefined,
+            undefined,
+            0,
+            undefined,
+            undefined,
+            undefined,
+            viralEligible
+        );
+    }, [previewStats, scoringRole, selectedStat, setCount, viralEligible]);
 
     // Level up a stat by 1
     const handleLevelUp = useCallback(
