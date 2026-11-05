@@ -29,6 +29,7 @@ const ICONS: Record<string, string> = {
     EXPLOIT: 'https://cdn.discordapp.com/emojis/1312034713745227796.webp',
     PIERCER: 'https://cdn.discordapp.com/emojis/1379810146212909097.webp',
     HARDENED: 'https://cdn.discordapp.com/emojis/1379810150465929286.webp',
+    VIRAL: 'https://cdn.discordapp.com/emojis/1567569562168459465.webp',
 };
 
 const OUTPUT_DIR = join(process.cwd(), 'public/images/gear-sets');
