@@ -1131,8 +1131,9 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Entry results:</strong> Each entry row shows how
                                         many gear pieces in your inventory match it. Click a row to
                                         see its matching gear below. Use &quot;Hide max
-                                        levelled&quot; and &quot;Hide equipped&quot; to narrow the
-                                        list; each card shows which ship the piece is equipped on.
+                                        levelled&quot;, &quot;Hide all levelled&quot; and &quot;Hide
+                                        equipped&quot; to narrow the list; each card shows which
+                                        ship the piece is equipped on.
                                     </li>
                                     <li>
                                         <strong>Targets:</strong> An entry can target a role or a

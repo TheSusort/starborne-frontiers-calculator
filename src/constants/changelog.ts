@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Gear wishlist: main stat options narrow to what the selected slots can roll.',
     'Gear wishlist: the gear set picker can now be filtered by name.',
     'Gear wishlist: results can now hide gear already equipped on ships.',
+    'Gear wishlist: results can now hide every levelled piece, not just maxed ones.',
     'Gear wishlist: entries can target a ship or role and rank their matches.',
     'Gear wishlist: Upgrade Analysis can save its settings as a wishlist entry.',
     'Gear wishlist: targeted entries open in Upgrade Analysis with one click.',

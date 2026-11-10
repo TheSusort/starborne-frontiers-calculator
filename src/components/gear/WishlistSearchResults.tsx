@@ -29,11 +29,12 @@ export const WishlistSearchResults: React.FC<Props> = ({
     const { gearToShipMap } = useShips();
     const [currentPage, setCurrentPage] = useState(1);
     const [hideMaxLevel, setHideMaxLevel] = useState(false);
+    const [hideAnyLevelled, setHideAnyLevelled] = useState(false);
     const [hideEquipped, setHideEquipped] = useState(false);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [entry.id, hideMaxLevel, hideEquipped]);
+    }, [entry.id, hideMaxLevel, hideAnyLevelled, hideEquipped]);
 
     const scoreById = useMemo(
         () => new Map((scoreResult?.scores ?? []).map((score) => [score.pieceId, score])),
@@ -47,6 +48,7 @@ export const WishlistSearchResults: React.FC<Props> = ({
                 .filter(
                     (g) =>
                         (!hideMaxLevel || g.level < 16) &&
+                        (!hideAnyLevelled || g.level === 0) &&
                         (!hideEquipped || !gearToShipMap.has(g.id))
                 )
                 .sort(
@@ -56,7 +58,7 @@ export const WishlistSearchResults: React.FC<Props> = ({
                         b.stars - a.stars ||
                         b.level - a.level
                 ),
-        [allMatches, hideMaxLevel, hideEquipped, gearToShipMap, scoreById]
+        [allMatches, hideMaxLevel, hideAnyLevelled, hideEquipped, gearToShipMap, scoreById]
     );
 
     const totalPages = Math.ceil(matches.length / ITEMS_PER_PAGE);
@@ -72,6 +74,12 @@ export const WishlistSearchResults: React.FC<Props> = ({
                     label="Hide max levelled (Lv.16)"
                     checked={hideMaxLevel}
                     onChange={setHideMaxLevel}
+                    className="mb-4"
+                />
+                <Checkbox
+                    label="Hide all levelled (Lv.1+)"
+                    checked={hideAnyLevelled}
+                    onChange={setHideAnyLevelled}
                     className="mb-4"
                 />
                 <Checkbox
