@@ -1,10 +1,12 @@
 import { neighbors } from '../targeting/board';
 import type { Position } from '../../types/encounters';
+import { cellsOf } from './cellIndex';
 
 /** Minimal shape this helper needs from a combat actor. CombatActor satisfies it. */
 interface AdjacencyActor {
     id: string;
     position?: Position;
+    footprint?: readonly Position[];
     destroyedRound?: number;
 }
 
@@ -12,7 +14,8 @@ interface AdjacencyActor {
  * Resolve the recipient id list for an `adjacent-allies` grant.
  *
  * Positional (the owner AND at least one OTHER actor carry a board position):
- *   living same-side actors whose position is a hex-neighbour of the owner's, owner excluded.
+ *   living same-side actors with a cell that is a hex-neighbour of any of the owner's cells, owner
+ *   excluded. A multi-hex unit (a bounty boss) is adjacent to every unit touching any of its hexes.
  * Non-positional (no board positions wired — every current production path):
  *   all living same-side actors, owner excluded (the all-allies fallback, per spec §3.3).
  *
@@ -28,8 +31,11 @@ export function adjacentAllyIds(ownerId: string, actors: AdjacencyActor[]): stri
     const living = actors.filter((x) => x.destroyedRound === undefined && x.id !== ownerId);
     const anyOtherPositioned = actors.some((x) => x.id !== ownerId && x.position != null);
     if (owner.position != null && anyOtherPositioned) {
-        const nbrs = new Set<Position>(neighbors(owner.position));
-        return living.filter((x) => x.position != null && nbrs.has(x.position)).map((x) => x.id);
+        const ownerCells = cellsOf(owner);
+        const nbrs = new Set<Position>(
+            ownerCells.flatMap(neighbors).filter((c) => !ownerCells.includes(c))
+        );
+        return living.filter((x) => cellsOf(x).some((c) => nbrs.has(c))).map((x) => x.id);
     }
     return living.map((x) => x.id);
 }

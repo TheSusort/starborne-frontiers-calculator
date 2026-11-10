@@ -556,6 +556,9 @@ export interface CombatActor {
     /** Board position of this actor — set at construction and consumed by the positional path:
      *  `isPositional` gates on it and `resolvePositionalTarget` reads it as the acting anchor. */
     position?: Position;
+    /** Every board cell this actor occupies, anchor (`position`) first — a multi-hex bounty boss.
+     *  Absent → the actor occupies `position` only. Targeting reads it through `cellsOf`. */
+    footprint?: readonly Position[];
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
      *  plumbing — set at construction, consumed by resolvePositionalTarget. ORed at the
      *  engine.ts read sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts), so this
@@ -611,6 +614,7 @@ export function createActor(
         chargeCount?: number;
         startCharged?: boolean;
         position?: Position;
+        footprint?: readonly Position[];
         ignoresForcedTargeting?: boolean;
         ignoresStealth?: boolean;
         doesntBreakStasis?: boolean;
@@ -639,6 +643,7 @@ export function createActor(
         pendingBombs: [],
         pendingAccumulators: [],
         position: partial.position,
+        footprint: partial.footprint,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
         ignoresStealth: partial.ignoresStealth,
         doesntBreakStasis: partial.doesntBreakStasis,

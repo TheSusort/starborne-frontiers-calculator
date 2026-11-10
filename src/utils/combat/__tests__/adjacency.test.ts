@@ -45,3 +45,26 @@ describe('adjacentAllyIds', () => {
         expect(adjacentAllyIds('not-in-roster', actors)).toEqual([]);
     });
 });
+
+describe('adjacentAllyIds — multi-hex units', () => {
+    const boss = { id: 'boss', position: 'M1' as Position, footprint: ['M1', 'M2'] as Position[] };
+
+    it('a two-hex owner at M1+M2 is adjacent to every unit touching either hex', () => {
+        const actors = [
+            boss,
+            a('T1', 'T1'),
+            a('T2', 'T2'),
+            a('B1', 'B1'),
+            a('B2', 'B2'),
+            a('M3', 'M3'),
+            a('T3', 'T3'), // touches neither hex
+            a('M4', 'M4'),
+        ];
+        expect(adjacentAllyIds('boss', actors).sort()).toEqual(['B1', 'B2', 'M3', 'T1', 'T2']);
+    });
+
+    it('an ally at M3 is adjacent to the boss through its M2 hex', () => {
+        const actors = [a('ally', 'M3'), boss, a('far', 'B4')];
+        expect(adjacentAllyIds('ally', actors)).toEqual(['boss']);
+    });
+});

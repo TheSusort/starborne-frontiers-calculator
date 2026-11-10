@@ -8,6 +8,7 @@ import {
     type VictimDefenseProfile,
 } from '../victimDamage';
 import type { CombatActor } from '../state';
+import type { Position } from '../../../types/encounters';
 
 const actor = (id: string, position: CombatActor['position'], currentHp = 100): CombatActor =>
     ({ id, position, currentHp }) as CombatActor;
@@ -415,5 +416,67 @@ describe('applyPositionalDamage', () => {
         ).not.toThrow();
 
         expect(emitCalls.map((c) => c.didCrit)).toEqual([true, false, false]);
+    });
+});
+
+describe('multi-hex victims', () => {
+    // A two-hex unit (a bounty boss); anchor first.
+    const bossAt = (cells: [Position, Position], currentHp = 1e9): CombatActor =>
+        ({ id: 'boss', position: cells[0], footprint: cells, currentHp }) as unknown as CombatActor;
+
+    it('Line-Range-2 covering both hexes, one of them the origin → one hit at scale 1.0', () => {
+        // Line-Range-2 @ M2 → origin M2, covered M1.
+        const hits = footprintVictims(parsePattern('Pattern-Line-Range-2'), 'M2', [
+            bossAt(['M1', 'M2']),
+        ]);
+        expect(hits.map((h) => [h.victim.id, h.roleScale])).toEqual([['boss', 1.0]]);
+    });
+
+    it('Line-Range-2 covering both hexes, neither the origin → one hit at scale 0.5', () => {
+        // Line-Range-2 @ M3 → origin M3 (empty), covered M2, M1.
+        const hits = footprintVictims(parsePattern('Pattern-Line-Range-2'), 'M3', [
+            bossAt(['M1', 'M2']),
+        ]);
+        expect(hits.map((h) => [h.victim.id, h.roleScale])).toEqual([['boss', 0.5]]);
+    });
+
+    const run = (opposingLiving: CombatActor[], extra: { firstAnchorId?: string } = {}) => {
+        const emitCalls: Call[] = [];
+        const primaries: string[][] = [];
+        applyPositionalDamage({
+            hitCrits: [false],
+            scalars: { ...scalars(), hits: 1 },
+            pattern: parsePattern('Pattern-Line-Range-2'),
+            actorPosition: 'M2',
+            target: parseTarget('front'),
+            opposingLiving,
+            defenseProfileOf: profile,
+            ...extra,
+            applyToVictim: (victim, damage) => {
+                victim.currentHp -= damage;
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
+            },
+            emitHit: (victim, damage, didCrit) => {
+                emitCalls.push({ id: victim.id, damage, didCrit });
+            },
+            onSubAttackStart: (b) => primaries.push(b.primaryVictimIds),
+        });
+        return { emitCalls, primaries };
+    };
+
+    it('the pattern expands from the selected hex, not the anchor, and hits the boss once', () => {
+        // Boss at M3+M4 (anchor M3), another enemy at M1. Front targeting aims at M4, so
+        // Line-Range-2 covers M4, M3, M2: the M1 ship is outside it. From the anchor M3 it
+        // would reach M1.
+        const { emitCalls, primaries } = run([bossAt(['M3', 'M4']), actor('back', 'M1', 1e9)]);
+        expect(emitCalls.map((c) => c.id)).toEqual(['boss']);
+        expect(primaries).toEqual([['boss']]);
+    });
+
+    it('a locked first anchor without its cell is aimed the same way', () => {
+        const { emitCalls } = run([bossAt(['M3', 'M4']), actor('back', 'M1', 1e9)], {
+            firstAnchorId: 'boss',
+        });
+        expect(emitCalls.map((c) => c.id)).toEqual(['boss']);
     });
 });

@@ -5,6 +5,7 @@ import {
     isPositional,
     isTargetableRosterMember,
     resolvePositionalTarget,
+    resolvePositionalTargetCell,
     resolvesPositionalVictim,
 } from './positionalBinding';
 import type { ActorTargetingStatus } from './positionalBinding';
@@ -398,5 +399,64 @@ describe('resolvePositionalTarget — several Concentrate Fire carriers', () => 
                 concentrateFirePickId: 'front',
             })?.id
         ).toBe('mid');
+    });
+});
+
+describe('resolvePositionalTargetCell — multi-hex units', () => {
+    // Fenri occupies M1+M2 (anchor M1); column 4 is the front.
+    const boss = (): CombatActor =>
+        ({
+            id: 'boss',
+            position: 'M1',
+            footprint: ['M1', 'M2'],
+            currentHp: 100,
+        }) as unknown as CombatActor;
+
+    it('front targeting from row M hits the boss at its front-most hex (M2)', () => {
+        const hit = resolvePositionalTargetCell('M3', enemyTarget('front'), [boss()]);
+        expect(hit?.actor.id).toBe('boss');
+        expect(hit?.cell).toBe('M2');
+    });
+
+    it('back targeting from row M hits the boss at its back-most hex (M1)', () => {
+        const hit = resolvePositionalTargetCell('M3', enemyTarget('back'), [boss()]);
+        expect(hit?.actor.id).toBe('boss');
+        expect(hit?.cell).toBe('M1');
+    });
+
+    it('a caster in row T with no T enemies scans on to the boss in row M', () => {
+        const hit = resolvePositionalTargetCell('T2', enemyTarget('front'), [boss()]);
+        expect(hit).toMatchObject({ actor: { id: 'boss' }, cell: 'M2' });
+    });
+
+    it('skip passes over a whole multi-hex unit, not one of its hexes', () => {
+        // Boss at M3+M4 is the front-most unit; skip must land on the next unit (M1).
+        const frontBoss = {
+            id: 'boss',
+            position: 'M3',
+            footprint: ['M3', 'M4'],
+            currentHp: 100,
+        } as unknown as CombatActor;
+        const hit = resolvePositionalTargetCell('M2', enemyTarget('skip'), [
+            frontBoss,
+            actor('behind', 'M1'),
+        ]);
+        expect(hit).toMatchObject({ actor: { id: 'behind' }, cell: 'M1' });
+    });
+
+    it('a forced pick (Concentrate Fire) aims at the boss the normal way', () => {
+        const so = statusFrom({ boss: { concentrated: true } });
+        const hit = resolvePositionalTargetCell(
+            'M3',
+            enemyTarget('back'),
+            [actor('front', 'M4'), boss()],
+            so
+        );
+        expect(hit).toMatchObject({ actor: { id: 'boss' }, cell: 'M1' });
+    });
+
+    it('a single-hex target resolves to its own cell', () => {
+        const hit = resolvePositionalTargetCell('M3', enemyTarget('front'), [actor('e', 'B2')]);
+        expect(hit).toMatchObject({ actor: { id: 'e' }, cell: 'B2' });
     });
 });

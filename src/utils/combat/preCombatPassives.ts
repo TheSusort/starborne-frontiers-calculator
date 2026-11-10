@@ -34,6 +34,8 @@ import { adjacentAllyIds } from './adjacency';
 export interface PreCombatPlanLike {
     id: string;
     position: Position;
+    /** Every cell the plan occupies, `position` first. Absent → `position` only. */
+    footprint?: readonly Position[];
     /** The plan's derived combat stats (post-squad-leader) — mutated in place. */
     stats: PreFightStatBlock;
     shipSkills: ShipSkills;

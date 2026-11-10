@@ -875,6 +875,9 @@ export interface BattlePlacement {
      *  See the WARNING on `BattlePlacement`: omitting this yields un-geared base stats. */
     statOverrides?: Partial<CombatStatBlock & { speed: number }>;
     position: Position;
+    /** Every cell the ship occupies, `position` first (a multi-hex bounty boss). Absent →
+     *  `position` only. */
+    footprint?: readonly Position[];
 }
 
 export interface BattleSimulationInput {
@@ -1009,6 +1012,7 @@ interface PlacementPlan {
     id: string;
     name: string;
     position: Position;
+    footprint: readonly Position[] | undefined;
     /** Raw `Ship.faction` — drives the pre-fight squad-leader aura's faction gating.
      *  Narrowed to the real union via `asFactionName` only at the engine-input boundary
      *  (`EnemyActorInput.faction` etc.), not here. */
@@ -1059,6 +1063,7 @@ function planPlacement(
         id,
         name: p.ship.name,
         position: p.position,
+        footprint: p.footprint,
         faction: p.ship.faction,
         role: p.ship.type,
         stats: resolveStats(p),
@@ -1231,6 +1236,7 @@ export function simulateBattle(
             enemyDebuffs: [],
             ...preFightModifiersFor(plan.id),
             position: plan.position,
+            footprint: plan.footprint,
             target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
             pattern: plan.targeting?.pattern,
             chargedPattern: plan.chargedTargeting?.pattern,
@@ -1308,6 +1314,7 @@ export function simulateBattle(
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
                 position: plan.position,
+                footprint: plan.footprint,
                 target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
                 pattern: plan.targeting?.pattern,
                 chargedPattern: plan.chargedTargeting?.pattern,
@@ -1370,6 +1377,7 @@ export function simulateBattle(
         security: focus.stats.security,
         /* eslint-enable no-restricted-syntax */
         position: focus.position,
+        footprint: focus.footprint,
         target: withStealthBypass(focus.targeting?.target, focus.activeIgnoresStealth),
         pattern: focus.targeting?.pattern,
         chargedPattern: focus.chargedTargeting?.pattern,

@@ -439,6 +439,9 @@ export interface TeamActorInput {
     /** Board slot for this team actor. Forwarded to the engine's `teamActors[].position` by
      *  `deriveTeamEngineActors`'s spread, driving positional target selection + footprint apply. */
     position?: Position;
+    /** Every board cell this actor occupies, anchor first (a multi-hex bounty boss). Absent →
+     *  `position` only. */
+    footprint?: readonly Position[];
     /** Parsed ACTIVE targeting for this team actor. Forwarded to the engine's
      *  `teamActors[].target` / `.pattern` by `deriveTeamEngineActors`'s spread. Both are needed:
      *  the positional apply gate requires target AND pattern, and a missing pattern fails
