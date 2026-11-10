@@ -99,6 +99,22 @@ describe('wantedSets', () => {
         const sets = wantedSets(defender, config({ statPriorities: [{ stat: 'speed' }] }));
         expect(sets).not.toContain('SPEED');
     });
+
+    it('drops a set whose priority count is 0, from either path', () => {
+        // ATTACK is a formula-stat set for an attacker; BOOST is an effect-only priority.
+        const sets = wantedSets(
+            attacker,
+            config({
+                setPriorities: [
+                    { setName: 'ATTACK', count: 0 },
+                    { setName: 'BOOST', count: 0 },
+                ],
+            })
+        );
+        expect(sets).not.toContain('ATTACK');
+        expect(sets).not.toContain('BOOST');
+        expect(sets).toContain('CRITICAL');
+    });
 });
 
 describe('buildEntriesFromAutogearConfig', () => {

@@ -77,12 +77,15 @@ const GEAR_SET_KEYS = Object.keys(GEAR_SETS) as (keyof typeof GEAR_SETS)[];
  * The gear sets a generated entry accepts: the config's gear set priorities (implant priorities
  * and unknown names dropped), then every gear set with a stat bonus on one of the formula stats.
  * Stat priorities and bonuses add substats, not sets; an effect-only set comes only from a set
- * priority.
+ * priority. A set priority with `count: 0` excludes that set, as it does in autogear
+ * (`runShipOptimizer`), so neither path adds it.
  */
 export function wantedSets(ship: Ship, config: SavedAutogearConfig | null): GearSetName[] {
+    const gearPriorities = (config?.setPriorities ?? []).filter((p) => p.kind !== 'implant');
+    const excluded = new Set(gearPriorities.filter((p) => p.count === 0).map((p) => p.setName));
     const sets = new Set<GearSetName>();
-    for (const priority of config?.setPriorities ?? []) {
-        if (priority.kind === 'implant') continue;
+    for (const priority of gearPriorities) {
+        if (excluded.has(priority.setName)) continue;
         if (Object.hasOwn(GEAR_SETS, priority.setName)) {
             sets.add(priority.setName as GearSetName);
         }
@@ -90,7 +93,7 @@ export function wantedSets(ship: Ship, config: SavedAutogearConfig | null): Gear
     const formula = new Set(formulaStats(ship, config));
     for (const key of GEAR_SET_KEYS) {
         const bonusStats = GEAR_SETS[key].stats as readonly { name: StatName }[];
-        if (bonusStats.some((s) => formula.has(s.name))) sets.add(key);
+        if (!excluded.has(key) && bonusStats.some((s) => formula.has(s.name))) sets.add(key);
     }
     return [...sets];
 }
