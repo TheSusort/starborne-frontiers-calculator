@@ -295,6 +295,22 @@ describe('evaluateCondition', () => {
         ).toBe(0);
     });
 
+    it("'hp-threshold' at-or-above is the exact complement of below at the same percent", () => {
+        const below = cond({
+            subject: 'hp-threshold',
+            derivable: true,
+            hpComparator: 'below',
+            hpPercent: 33,
+            hpSubject: 'self',
+        });
+        const atOrAbove = { ...below, hpComparator: 'at-or-above' as const };
+        for (const selfHpPct of [0, 32.9, 33, 33.1, 100]) {
+            const c = makeConditionContext({ selfHpPct });
+            expect(evaluateCondition(atOrAbove, c)).toBe(selfHpPct >= 33 ? 1 : 0);
+            expect(evaluateCondition(below, c)).toBe(selfHpPct >= 33 ? 0 : 1);
+        }
+    });
+
     it('non-derivable uses manualCount (default 1)', () => {
         expect(
             evaluateCondition(

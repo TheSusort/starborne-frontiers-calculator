@@ -5919,3 +5919,68 @@ describe('leading "Every turn, this Unit gains <X>" accrual guards', () => {
         ).toMatchObject({ stacks: 1, duration: 'recurring', stackTrigger: 'per-round' });
     });
 });
+
+describe('Fenri charged (Doom Shot): HP thresholds read at cast', () => {
+    const skills = buildShipAbilities(bossShip('fenri', 32)!);
+    const charged = slot(skills.slots, 'charged')!.abilities;
+    const selfHp = (hpComparator: 'below' | 'at-or-above', hpPercent: number) => [
+        { subject: 'hp-threshold', derivable: true, hpComparator, hpPercent, hpSubject: 'self' },
+    ];
+
+    it('deals 400% damage', () => {
+        const dmg = charged.filter((a) => a.type === 'damage');
+        expect(dmg).toHaveLength(1);
+        expect(dmg[0].config).toMatchObject({ multiplier: 400 });
+        expect(dmg[0].conditions).toEqual([]);
+    });
+
+    it('gains +50% outgoing damage below 66% HP', () => {
+        const mods = charged.filter((a) => a.type === 'modifier');
+        expect(mods).toHaveLength(1);
+        expect(mods[0]).toMatchObject({
+            target: 'self',
+            trigger: 'on-cast',
+            config: { channel: 'outgoingDamage', value: 50 },
+        });
+        expect(mods[0].conditions).toEqual(selfHp('below', 66));
+    });
+
+    it('inflicts White Phosphorus III for 3 turns at or above 33% HP and 4 turns below', () => {
+        const dots = charged.filter((a) => a.type === 'dot');
+        expect(dots).toHaveLength(2);
+        for (const d of dots) {
+            expect(d.trigger).toBe('on-cast');
+            expect(d.config).toMatchObject({
+                dotType: 'inferno',
+                tier: 45,
+                stacks: 1,
+                family: 'White Phosphorus',
+                unremovable: true,
+            });
+        }
+        const byDuration = (n: number) =>
+            dots.find((d) => d.config.type === 'dot' && d.config.duration === n)!;
+        expect(byDuration(3).conditions).toEqual(selfHp('at-or-above', 33));
+        expect(byDuration(4).conditions).toEqual(selfHp('below', 33));
+    });
+
+    it('emits nothing else: no White Phosphorus debuff, no crossing reaction', () => {
+        // In text order: the skill's clauses resolve in the order they are written.
+        expect(charged.map((a) => a.type)).toEqual(['damage', 'dot', 'dot', 'modifier']);
+        const all = skills.slots.flatMap((s) => s.abilities);
+        expect(all.some((a) => a.trigger === 'on-hp-threshold-crossed')).toBe(false);
+    });
+
+    it('a White Phosphorus inflict is a dot, like an Inferno inflict, never a named debuff', () => {
+        const active = slot(
+            buildShipAbilities(
+                ship({
+                    activeSkillText:
+                        'This Unit inflicts <unit-skill>White Phosphorus II</unit-skill> for 2 turns.',
+                })
+            ).slots,
+            'active'
+        )!.abilities;
+        expect(active.map((a) => a.type)).toEqual(['dot']);
+    });
+});

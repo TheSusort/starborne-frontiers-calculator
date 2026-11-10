@@ -157,6 +157,7 @@ import {
     detectEnemyGrantScope,
     adjacentEnemyScopeForName,
     adjacentEnemyScopeAtPos,
+    parseDotDurationHpOverrides,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -822,8 +823,36 @@ function parseModifiers(text: string): ParsedModifier[] {
         }
     }
 
+    // "When this Unit's HP drops below N%, the damage increases by X%" (Fenri's Doom Shot) — an
+    // outgoing bonus on the skill's own cast, gated on the caster's HP when it casts. The "drops
+    // below" reads as a cast-time state here, not a crossing reaction (owner ruling, #519).
+    const increaseM = DAMAGE_INCREASES_BY_RE.exec(plain);
+    if (increaseM) {
+        const hpGateM = SELF_HP_DROPS_BELOW_RE.exec(sentenceContaining(plain, increaseM.index));
+        out.push({
+            channel: 'outgoingDamage',
+            value: parseFloat(increaseM[1]),
+            isMultiplicative: true,
+            target: 'self',
+            conditions: hpGateM
+                ? [
+                      {
+                          subject: 'hp-threshold',
+                          derivable: true,
+                          hpComparator: 'below',
+                          hpPercent: parseFloat(hpGateM[1]),
+                          hpSubject: 'self',
+                      },
+                  ]
+                : [],
+        });
+    }
+
     return out;
 }
+
+const DAMAGE_INCREASES_BY_RE = /\bthe damage increases by (\d+(?:\.\d+)?)%/i;
+const SELF_HP_DROPS_BELOW_RE = /\bthis unit['’]s hp (?:drops|falls|is) below (\d+(?:\.\d+)?)\s*%/i;
 
 /**
  * Detects Iridium's crit reduction — "has N% damage reduction from critical hits" — and returns
@@ -3610,11 +3639,13 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     }
 
     // Merge ship-level DoTs into their slots (creating the slot entry if needed).
-    // Position anchor: index of the DoT type name (e.g. "Corrosion", "Inferno") in the row text.
+    // Position anchor: index of the DoT's name in the row text — its family for a named DoT
+    // ("White Phosphorus"), else its type ("Corrosion", "Inferno").
     for (const slot of ['active', 'charged'] as const) {
         const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
-        const dots = dotsForSlot(slot).map((entry) => {
-            const pos = rowText.search(new RegExp(entry.type, 'i'));
+        const hpOverrides = parseDotDurationHpOverrides(rowText);
+        const dots = dotsForSlot(slot).flatMap((entry) => {
+            const pos = rowText.search(new RegExp(entry.family ?? entry.type, 'i'));
             const ability = dotAbility(entry);
             // Crit-inflicted DoT form ("When this Unit critically hits an enemy it inflicts
             // Corrosion …"): route through the reactive machinery. Anchor on the DoT type name,
@@ -3628,7 +3659,37 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             // separate Stasis sentence, so it resolves to null and the DoT stays 'enemy'.
             const adjacentScope = rowText ? adjacentEnemyScopeForName(rowText, entry.type) : null;
             if (adjacentScope) ability.target = adjacentScope;
-            return { ability, pos: pos >= 0 ? pos : MAX_POS };
+            const anchor = pos >= 0 ? pos : MAX_POS;
+            // "When this Unit's HP falls below N%, <DoT> duration increases to M turns": the cast
+            // inflicts exactly one of a twin pair, split on the caster's HP at cast.
+            const override = hpOverrides.find((o) => {
+                const named = DOT_TIER_MAP[o.statusName];
+                return (
+                    !!named &&
+                    named.type === entry.type &&
+                    named.tier === entry.tier &&
+                    named.family === entry.family
+                );
+            });
+            if (!override || ability.config.type !== 'dot') return [{ ability, pos: anchor }];
+            const selfHp = (hpComparator: 'below' | 'at-or-above'): Condition => ({
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator,
+                hpPercent: override.hpBelowPct,
+                hpSubject: 'self',
+            });
+            ability.conditions = [selfHp('at-or-above')];
+            const lowHp: Ability = {
+                ...ability,
+                id: nextId(),
+                conditions: [selfHp('below')],
+                config: { ...ability.config, duration: override.duration },
+            };
+            return [
+                { ability, pos: anchor },
+                { ability: lowHp, pos: anchor },
+            ];
         });
         if (!dots.length) continue;
         pushToSlot(bySlot, slot, dots);

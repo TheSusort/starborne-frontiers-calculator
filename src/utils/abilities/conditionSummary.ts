@@ -138,7 +138,7 @@ export function conditionSummary(condition: Condition): string {
     }
     switch (condition.subject) {
         case 'hp-threshold': {
-            const comparator = condition.hpComparator ?? 'below';
+            const comparator = (condition.hpComparator ?? 'below').replace(/-/g, ' ');
             const percent = condition.hpPercent ?? 0;
             const hpSubject = condition.hpSubject ?? 'enemy';
             const whose =

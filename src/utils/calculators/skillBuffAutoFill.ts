@@ -16,10 +16,11 @@ const ENEMY_SIDE_TARGETS = new Set<SkillEffect['target']>([
     'target-and-adjacent-enemies',
 ]);
 
-// DoT buff name prefixes — these go to the DoT config, not the buff picker
+// DoT buff names — these go to the DoT config, not the buff picker: the base DoT families by
+// prefix, plus every named DoT in DOT_TIER_MAP (White Phosphorus, an Inferno by another name).
 const DOT_PREFIXES = new Set(['Corrosion', 'Inferno', 'Bomb']);
 function isDoTBuffName(name: string): boolean {
-    return DOT_PREFIXES.has(name.split(' ')[0]);
+    return DOT_PREFIXES.has(name.split(' ')[0]) || Object.hasOwn(DOT_TIER_MAP, name);
 }
 
 export interface SkillBuffAutoFill {

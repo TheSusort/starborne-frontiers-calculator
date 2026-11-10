@@ -3688,6 +3688,23 @@ export function detectHpCrossingTrigger(
     };
 }
 
+// "When this Unit's HP falls below N%, <DoT> duration increases to M turns." (Fenri's Doom Shot)
+// — the same cast's DoT lasts M turns instead when the caster casts below N% HP. A cast-time
+// state, not a crossing reaction (owner ruling, #519).
+const DOT_DURATION_HP_OVERRIDE_RE =
+    /\bthis unit['’]s hp (?:drops|falls) below (\d+(?:\.\d+)?)\s*%,\s*<unit-skill>([^<]+)<\/unit-skill>\s+duration increases to (\d+) turns?\b/gi;
+
+/** Every "below N% HP, <DoT> duration increases to M turns" clause in `text` (tagged). */
+export function parseDotDurationHpOverrides(
+    text: string
+): { statusName: string; hpBelowPct: number; duration: number }[] {
+    return [...text.matchAll(DOT_DURATION_HP_OVERRIDE_RE)].map((m) => ({
+        statusName: m[2].trim(),
+        hpBelowPct: parseFloat(m[1]),
+        duration: parseInt(m[3], 10),
+    }));
+}
+
 // Hermes charged skill: "If an ally has less than N% HP" gate on a grant clause.
 // Distinct from the self-subject HP_CROSSING_RE — this reads the grant RECIPIENT's HP and is a
 // one-shot cast-time gate, not a reactive crossing.

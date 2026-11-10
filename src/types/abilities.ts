@@ -621,7 +621,9 @@ export interface Condition {
     // (e.g. "when this attack targets non-defenders").
     negate?: boolean;
     buffName?: string;
-    hpComparator?: 'below' | 'above';
+    /** 'below' and 'above' are strict; 'at-or-above' is the exact complement of 'below' at the
+     *  same percent, for a twin pair that splits one cast on a threshold (Fenri's Doom Shot). */
+    hpComparator?: 'below' | 'above' | 'at-or-above';
     hpPercent?: number;
     // For 'hp-threshold': whose HP the threshold applies to. Defaults to 'enemy' (offensive
     // scaling). 'target' = the heal target's live HP%. Until #415 this was threaded in healing
