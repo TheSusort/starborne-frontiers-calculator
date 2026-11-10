@@ -61,6 +61,19 @@ export function describeBestHit(result: WishlistScoreResult | undefined): string
 }
 
 /**
+ * `describeBestHit` across a group's entries, pooling only ship-target scores: a role rank is
+ * not comparable with a ship's levelled delta. Undefined when no ship-target match was scored.
+ */
+export function describeGroupBestHit(
+    results: readonly (WishlistScoreResult | undefined)[]
+): string | undefined {
+    const scores = results.flatMap((r) =>
+        r?.status === 'scored' ? r.scores.filter((s) => s.potentialRank === undefined) : []
+    );
+    return describeBestHit({ status: 'scored', scores });
+}
+
+/**
  * A hit that matched several targeted entries sorts by its strongest score: an upgrade beats a
  * non-upgrade, and between equals the earlier entry wins (scores of different target kinds
  * are not comparable).

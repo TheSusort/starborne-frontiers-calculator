@@ -21,4 +21,8 @@ export interface WishlistEntry {
         subStatsMin?: number; // how many of subStats must match (default = all)
     };
     target?: WishlistTarget;
+    /** Groups entries under a shared header; absent means ungrouped. Max 64 chars. */
+    group?: string;
+    /** Marks an entry generated from a ship's autogear config; regenerating replaces it. */
+    source?: 'autogear';
 }

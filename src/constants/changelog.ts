@@ -22,6 +22,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Import summary: wishlist hits for targeted entries show upgrade value, best first.',
     'Import summary: Notable Gear and Wishlist Hits now both show after an import.',
     'Import summary: a piece matching several wishlist entries now appears once.',
+    'Gear wishlist: entries can be sorted into named, collapsible, reorderable groups.',
+    'Gear wishlist: build entries for a ship from its autogear settings.',
+    'Gear wishlist: the Ambush gear set can now be picked as a filter.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

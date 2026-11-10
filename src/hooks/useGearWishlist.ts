@@ -5,7 +5,8 @@ import { supabase } from '../config/supabase';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from '../contexts/ActiveProfileProvider';
 import { StorageKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
-import { moveWishlistEntry } from '../utils/wishlist/moveWishlistEntry';
+import { moveWishlistEntry, moveWishlistGroup } from '../utils/wishlist/moveWishlistEntry';
+import { insertWishlistEntries } from '../utils/wishlist/groupWishlistEntries';
 import { useStorage } from './useStorage';
 
 export const useGearWishlist = () => {
@@ -77,66 +78,69 @@ export const useGearWishlist = () => {
         [activeProfileId]
     );
 
-    const addEntry = useCallback(
-        async (entry: Omit<WishlistEntry, 'id'>) => {
-            const newEntry: WishlistEntry = { ...entry, id: uuidv4() };
-            const updated = [newEntry, ...entries];
-            void setEntries(updated);
+    /** Writes `updatedEntries` optimistically, rolling back if the upsert fails. */
+    const commit = useCallback(
+        async (updatedEntries: WishlistEntry[]) => {
+            const previous = entries;
+            void setEntries(updatedEntries);
             try {
-                await upsertToSupabase(updated);
+                await upsertToSupabase(updatedEntries);
             } catch (error) {
-                void setEntries(entries); // rollback
+                void setEntries(previous); // rollback
                 throw error;
             }
         },
         [entries, setEntries, upsertToSupabase]
+    );
+
+    /** Adds `added` and removes `replaceIds` in one write; placement is `insertWishlistEntries`'. */
+    const addEntries = useCallback(
+        async (added: Omit<WishlistEntry, 'id'>[], replaceIds: string[] = []) => {
+            const newEntries = added.map((entry) => ({ ...entry, id: uuidv4() }));
+            await commit(insertWishlistEntries(entries, newEntries, replaceIds));
+        },
+        [commit, entries]
+    );
+
+    const addEntry = useCallback(
+        (entry: Omit<WishlistEntry, 'id'>) => addEntries([entry]),
+        [addEntries]
     );
 
     const updateEntry = useCallback(
-        async (updated: WishlistEntry) => {
-            const previous = entries;
-            const updatedEntries = entries.map((e) => (e.id === updated.id ? updated : e));
-            void setEntries(updatedEntries);
-            try {
-                await upsertToSupabase(updatedEntries);
-            } catch (error) {
-                void setEntries(previous); // rollback
-                throw error;
-            }
-        },
-        [entries, setEntries, upsertToSupabase]
+        (updated: WishlistEntry) => commit(entries.map((e) => (e.id === updated.id ? updated : e))),
+        [commit, entries]
     );
 
     const deleteEntry = useCallback(
-        async (id: string) => {
-            const previous = entries;
-            const updatedEntries = entries.filter((e) => e.id !== id);
-            void setEntries(updatedEntries);
-            try {
-                await upsertToSupabase(updatedEntries);
-            } catch (error) {
-                void setEntries(previous); // rollback
-                throw error;
-            }
-        },
-        [entries, setEntries, upsertToSupabase]
+        (id: string) => commit(entries.filter((e) => e.id !== id)),
+        [commit, entries]
     );
 
     const moveEntry = useCallback(
         async (id: string, offset: -1 | 1) => {
-            const previous = entries;
             const updatedEntries = moveWishlistEntry(entries, id, offset);
-            if (updatedEntries === previous) return;
-            void setEntries(updatedEntries);
-            try {
-                await upsertToSupabase(updatedEntries);
-            } catch (error) {
-                void setEntries(previous); // rollback
-                throw error;
-            }
+            if (updatedEntries !== entries) await commit(updatedEntries);
         },
-        [entries, setEntries, upsertToSupabase]
+        [commit, entries]
     );
 
-    return { entries, loading, addEntry, updateEntry, deleteEntry, moveEntry };
+    const moveGroup = useCallback(
+        async (group: string, offset: -1 | 1) => {
+            const updatedEntries = moveWishlistGroup(entries, group, offset);
+            if (updatedEntries !== entries) await commit(updatedEntries);
+        },
+        [commit, entries]
+    );
+
+    return {
+        entries,
+        loading,
+        addEntry,
+        addEntries,
+        updateEntry,
+        deleteEntry,
+        moveEntry,
+        moveGroup,
+    };
 };

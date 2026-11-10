@@ -5,6 +5,7 @@ import {
     compareHitScores,
     pickBestScore,
     describeBestHit,
+    describeGroupBestHit,
     describeMatchScore,
     describeWishlistTarget,
 } from './wishlistScoreDisplay';
@@ -47,6 +48,21 @@ describe('wishlist score display', () => {
             'Best: +4.2% levelled'
         );
         expect(describeBestHit({ status: 'ship-missing', scores: [] })).toBeUndefined();
+    });
+
+    it('describes the best hit of a group from ship-target scores only', () => {
+        expect(
+            describeGroupBestHit([
+                { status: 'scored', scores: [ship('a', 1)] },
+                undefined,
+                { status: 'scored', scores: [role('r', 1), ship('b', 3)] },
+                { status: 'ship-missing', scores: [] },
+            ])
+        ).toBe('Best: +3.0% levelled');
+        expect(
+            describeGroupBestHit([{ status: 'scored', scores: [role('r', 1)] }])
+        ).toBeUndefined();
+        expect(describeGroupBestHit([])).toBeUndefined();
     });
 
     it('describes targets, flagging a missing ship and an unknown role', () => {
