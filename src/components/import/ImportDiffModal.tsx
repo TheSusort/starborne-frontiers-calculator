@@ -282,26 +282,8 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                     )}
                                 </p>
                             )}
-                            {hasWishlistHits ? (
-                                <div>
-                                    <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
-                                        Wishlist Hits
-                                    </div>
-                                    <div className="space-y-2">
-                                        {(diff.wishlistHits ?? []).map(
-                                            ({ entryId, entryName, gear: g }) => (
-                                                <div key={`${entryId}-${g.id}`}>
-                                                    <div className="text-xs text-theme-text-secondary mb-0.5">
-                                                        {entryName}
-                                                    </div>
-                                                    <GearLine gear={g} />
-                                                </div>
-                                            )
-                                        )}
-                                    </div>
-                                </div>
-                            ) : gear.newLegendary6Star.length > 0 ? (
-                                <div>
+                            {gear.newLegendary6Star.length > 0 && (
+                                <div className={hasWishlistHits ? 'mb-3' : undefined}>
                                     <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
                                         Notable Gear
                                     </div>
@@ -309,7 +291,26 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                         <GearLine key={g.id} gear={g} />
                                     ))}
                                 </div>
-                            ) : null}
+                            )}
+                            {hasWishlistHits && (
+                                <div>
+                                    <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
+                                        Wishlist Hits
+                                    </div>
+                                    <div className="space-y-2">
+                                        {(diff.wishlistHits ?? []).map(
+                                            ({ gear: g, entryNames }) => (
+                                                <div key={g.id}>
+                                                    <div className="text-xs text-theme-text-secondary mb-0.5">
+                                                        {entryNames.join(', ')}
+                                                    </div>
+                                                    <GearLine gear={g} />
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

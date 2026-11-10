@@ -1110,31 +1110,38 @@ const DocumentationPage: React.FC = () => {
                                 </p>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
-                                        <strong>Adding an entry:</strong> Give it a name (required,
-                                        up to 64 characters) and optionally set any combination of
-                                        filters — slot, minimum stars, rarity, gear set, main stat,
-                                        and substats. All active filters use AND logic: a gear piece
-                                        must satisfy every filter to match. Leaving a filter unset
-                                        means it matches anything.
+                                        <strong>Adding an entry:</strong> Optionally give it a name
+                                        (up to 64 characters); left blank, it is named from the
+                                        filters, for example &quot;6★ Legendary Weapon · ATK% +
+                                        CR&quot;. Set any combination of filters: stars, rarity,
+                                        slot, gear set (with a text filter to find sets quickly),
+                                        main stat, and substats. Main stat options narrow to what
+                                        the selected slots can roll. All active filters use AND
+                                        logic: a gear piece must satisfy every filter to match.
+                                        Leaving a filter unset means it matches anything.
                                     </li>
                                     <li>
-                                        <strong>Editing and deleting:</strong> Each entry card has
-                                        inline edit and delete buttons.
+                                        <strong>Editing, copying and deleting:</strong> Each entry
+                                        row has edit, copy and delete buttons. Copy opens the form
+                                        prefilled with the entry; delete asks for confirmation. If
+                                        saving or deleting fails, you get an error message and
+                                        nothing is lost.
                                     </li>
                                     <li>
-                                        <strong>Search Inventory button:</strong> Searches your
-                                        current inventory against all wishlist entries. Results are
-                                        shown in tabs, one per entry. If no gear in your inventory
-                                        matches an entry, that tab shows &quot;No gear in your
-                                        inventory matches this entry yet&quot;.
+                                        <strong>Entry results:</strong> Each entry row shows how
+                                        many gear pieces in your inventory match it. Click a row to
+                                        see its matching gear below. Use &quot;Hide max
+                                        levelled&quot; and &quot;Hide equipped&quot; to narrow the
+                                        list; each card shows which ship the piece is equipped on.
                                     </li>
                                     <li>
                                         <strong>Import Summary integration:</strong> After importing
                                         game data, newly imported gear that matches any wishlist
                                         entry appears in a &quot;Wishlist Hits&quot; section inside
-                                        the Import Summary modal. This section is hidden on a
-                                        first-ever import, when there is no previous import to
-                                        compare against.
+                                        the Import Summary modal, next to Notable Gear. A piece
+                                        matching several entries is listed once with every entry
+                                        name. This section is hidden on a first-ever import, when
+                                        there is no previous import to compare against.
                                     </li>
                                 </ul>
                             </div>

@@ -4,7 +4,15 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Gear wishlist: entries show their match count; click one to see its gear.',
+    'Gear wishlist: entry names are optional and generated from the filters.',
+    'Gear wishlist: deleting an entry now asks for confirmation.',
+    'Gear wishlist: entries can be duplicated, and failed saves now show an error.',
+    'Gear wishlist: main stat options narrow to what the selected slots can roll.',
+    'Gear wishlist: gear sets can be filtered by name, results can hide equipped gear.',
+    'Import summary: Notable Gear now shows alongside Wishlist Hits; matching entries are combined.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

@@ -49,8 +49,8 @@ export interface ImportDiff {
     };
     engineeringStatsCount: number;
     wishlistHits?: {
-        entryId: string;
-        entryName: string;
         gear: GearPiece;
+        entryIds: string[]; // every entry the piece matched
+        entryNames: string[]; // parallel to entryIds
     }[];
 }

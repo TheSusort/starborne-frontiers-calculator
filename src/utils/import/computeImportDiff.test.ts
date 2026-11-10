@@ -38,8 +38,8 @@ describe('computeImportDiff wishlist hits', () => {
         const gear = makeGear();
         const diff = computeImportDiff([], [], [], [gear], null, [entry]);
         expect(diff.wishlistHits).toHaveLength(1);
-        expect(diff.wishlistHits![0].entryId).toBe('w1');
-        expect(diff.wishlistHits![0].entryName).toBe('Big Attack Weapon');
+        expect(diff.wishlistHits![0].entryIds).toEqual(['w1']);
+        expect(diff.wishlistHits![0].entryNames).toEqual(['Big Attack Weapon']);
         expect(diff.wishlistHits![0].gear.id).toBe('g1');
     });
 
@@ -49,7 +49,7 @@ describe('computeImportDiff wishlist hits', () => {
         expect(diff.wishlistHits).toEqual([]);
     });
 
-    it('matches one piece against multiple entries', () => {
+    it('lists a piece matching several entries once, with every entry name', () => {
         const gear = makeGear();
         const entry2: WishlistEntry = {
             id: 'w2',
@@ -57,7 +57,10 @@ describe('computeImportDiff wishlist hits', () => {
             filters: { slot: ['weapon'] },
         };
         const diff = computeImportDiff([], [], [], [gear], null, [entry, entry2]);
-        expect(diff.wishlistHits).toHaveLength(2);
+        expect(diff.wishlistHits).toHaveLength(1);
+        expect(diff.wishlistHits![0].gear.id).toBe('g1');
+        expect(diff.wishlistHits![0].entryIds).toEqual(['w1', 'w2']);
+        expect(diff.wishlistHits![0].entryNames).toEqual(['Big Attack Weapon', 'Any Weapon']);
     });
 
     it('does not match when piece fails entry filter', () => {
