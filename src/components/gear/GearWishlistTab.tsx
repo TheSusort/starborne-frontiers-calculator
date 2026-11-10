@@ -120,8 +120,9 @@ export const GearWishlistTab: React.FC<Props> = ({
     const namedGroups = groups.filter((g) => g.name !== null);
     const groupNames = namedGroups.map((g) => g.name!);
 
-    const selectedEntry =
-        entries.find((e) => e.id === selectedId) ?? groups[0]?.entries[0] ?? undefined;
+    const firstVisibleGroup =
+        groups.find((g) => g.name === null || !collapsed.has(g.name)) ?? groups[0];
+    const selectedEntry = entries.find((e) => e.id === selectedId) ?? firstVisibleGroup?.entries[0];
     const selectedRequest = requests.find((r) => r.entry.id === selectedEntry?.id);
 
     const handleSubmit = async (data: Omit<WishlistEntry, 'id'>) => {
@@ -177,29 +178,37 @@ export const GearWishlistTab: React.FC<Props> = ({
         return <Loader />;
     }
 
+    // Both layouts render the From ship modal as the second fragment child, so React keeps it
+    // mounted when its first save turns the empty state into the list.
+    const fromShipModal = fromShipOpen && (
+        <WishlistFromShipModal isOpen onClose={() => setFromShipOpen(false)} />
+    );
+
     if (entries.length === 0 && !form) {
         return (
-            <div className="card text-center py-12 flex flex-col items-center gap-4">
-                <StarOutlineIcon className="w-12 h-12 text-theme-text-secondary" />
-                <div>
-                    <h3 className="text-lg font-semibold text-white mb-2">Start Tracking Gear</h3>
-                    <p className="text-theme-text-secondary max-w-md mx-auto">
-                        Add entries describing gear you&apos;re farming. The app will highlight
-                        matches in the Import Summary when new gear arrives.
-                    </p>
+            <>
+                <div className="card text-center py-12 flex flex-col items-center gap-4">
+                    <StarOutlineIcon className="w-12 h-12 text-theme-text-secondary" />
+                    <div>
+                        <h3 className="text-lg font-semibold text-white mb-2">
+                            Start Tracking Gear
+                        </h3>
+                        <p className="text-theme-text-secondary max-w-md mx-auto">
+                            Add entries describing gear you&apos;re farming. The app will highlight
+                            matches in the Import Summary when new gear arrives.
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button onClick={() => setForm({ kind: 'new' })} variant="primary">
+                            Add Entry
+                        </Button>
+                        <Button onClick={() => setFromShipOpen(true)} variant="secondary">
+                            From ship
+                        </Button>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button onClick={() => setForm({ kind: 'new' })} variant="primary">
-                        Add Entry
-                    </Button>
-                    <Button onClick={() => setFromShipOpen(true)} variant="secondary">
-                        From ship
-                    </Button>
-                </div>
-                {fromShipOpen && (
-                    <WishlistFromShipModal isOpen onClose={() => setFromShipOpen(false)} />
-                )}
-            </div>
+                {fromShipModal}
+            </>
         );
     }
 
@@ -214,193 +223,93 @@ export const GearWishlistTab: React.FC<Props> = ({
               : undefined;
 
     return (
-        <div className="space-y-4">
-            <CollapsibleForm isVisible={form !== null}>
-                <div ref={formRef} className="card scroll-mt-24">
-                    <h2
-                        ref={formHeadingRef}
-                        tabIndex={-1}
-                        className="text-xl font-semibold text-white mb-4 focus:outline-none"
-                    >
-                        {form?.kind === 'edit' ? 'Edit Entry' : 'Add Entry'}
-                    </h2>
-                    <WishlistEntryForm
-                        key={
-                            form
-                                ? `${form.kind}-${
-                                      form.kind === 'new' || form.kind === 'draft'
-                                          ? ''
-                                          : form.entry.id
-                                  }`
-                                : 'closed'
-                        }
-                        initial={formInitial}
-                        submitLabel={form?.kind === 'edit' ? 'Save' : 'Add Entry'}
-                        notice={form?.kind === 'draft' ? ANALYSIS_DRAFT_NOTICE : undefined}
-                        groupOptions={groupNames}
-                        onSubmit={handleSubmit}
-                        onCancel={() => setForm(null)}
-                    />
-                </div>
-            </CollapsibleForm>
+        <>
+            <div className="space-y-4">
+                <CollapsibleForm isVisible={form !== null}>
+                    <div ref={formRef} className="card scroll-mt-24">
+                        <h2
+                            ref={formHeadingRef}
+                            tabIndex={-1}
+                            className="text-xl font-semibold text-white mb-4 focus:outline-none"
+                        >
+                            {form?.kind === 'edit' ? 'Edit Entry' : 'Add Entry'}
+                        </h2>
+                        <WishlistEntryForm
+                            key={
+                                form
+                                    ? `${form.kind}-${
+                                          form.kind === 'new' || form.kind === 'draft'
+                                              ? ''
+                                              : form.entry.id
+                                      }`
+                                    : 'closed'
+                            }
+                            initial={formInitial}
+                            submitLabel={form?.kind === 'edit' ? 'Save' : 'Add Entry'}
+                            notice={form?.kind === 'draft' ? ANALYSIS_DRAFT_NOTICE : undefined}
+                            groupOptions={groupNames}
+                            onSubmit={handleSubmit}
+                            onCancel={() => setForm(null)}
+                        />
+                    </div>
+                </CollapsibleForm>
 
-            {entries.length > 0 && (
-                <div className="space-y-4">
-                    {groups.map((group) => {
-                        const isCollapsed = group.name !== null && collapsed.has(group.name);
-                        const namedIndex =
-                            group.name === null ? -1 : groupNames.indexOf(group.name);
-                        const matchCount = group.entries.reduce(
-                            (sum, e) => sum + (requestById.get(e.id)?.matches.length ?? 0),
-                            0
-                        );
-                        const groupBestHit = describeGroupBestHit(
-                            group.entries.map((e) => scoreResults.get(e.id))
-                        );
-                        return (
-                            <section key={group.name ?? ''} className="space-y-2">
-                                {showGroupHeaders && (
-                                    <div className="flex items-center gap-2">
-                                        {group.name !== null ? (
-                                            <button
-                                                type="button"
-                                                className="flex-1 min-w-0 flex items-center gap-2 text-left"
-                                                aria-expanded={!isCollapsed}
-                                                onClick={() => toggleGroup(group.name!)}
-                                            >
-                                                {isCollapsed ? (
-                                                    <ChevronDownIcon />
-                                                ) : (
-                                                    <ChevronUpIcon />
-                                                )}
-                                                <GroupHeading
-                                                    name={group.name}
-                                                    entryCount={group.entries.length}
-                                                    matchCount={matchCount}
-                                                    bestHit={groupBestHit}
-                                                />
-                                            </button>
-                                        ) : (
-                                            <div className="flex-1 min-w-0">
-                                                <GroupHeading
-                                                    name="Ungrouped"
-                                                    entryCount={group.entries.length}
-                                                    matchCount={matchCount}
-                                                    bestHit={groupBestHit}
-                                                />
-                                            </div>
-                                        )}
-                                        {group.name !== null && namedGroups.length > 1 && (
-                                            <div className="flex gap-2 shrink-0">
-                                                <Button
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    disabled={namedIndex === 0}
-                                                    onClick={() =>
-                                                        void handleMoveGroup(group.name!, -1)
-                                                    }
-                                                    aria-label={`Move group ${group.name} up`}
+                {entries.length > 0 && (
+                    <div className="space-y-4">
+                        {groups.map((group) => {
+                            const isCollapsed = group.name !== null && collapsed.has(group.name);
+                            const namedIndex =
+                                group.name === null ? -1 : groupNames.indexOf(group.name);
+                            const matchCount = group.entries.reduce(
+                                (sum, e) => sum + (requestById.get(e.id)?.matches.length ?? 0),
+                                0
+                            );
+                            const groupBestHit = describeGroupBestHit(
+                                group.entries.map((e) => scoreResults.get(e.id))
+                            );
+                            return (
+                                <section key={group.name ?? ''} className="space-y-2">
+                                    {showGroupHeaders && (
+                                        <div className="flex items-center gap-2">
+                                            {group.name !== null ? (
+                                                <button
+                                                    type="button"
+                                                    className="flex-1 min-w-0 flex items-center gap-2 text-left"
+                                                    aria-expanded={!isCollapsed}
+                                                    onClick={() => toggleGroup(group.name!)}
                                                 >
-                                                    <ChevronUpIcon />
-                                                </Button>
-                                                <Button
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    disabled={namedIndex === namedGroups.length - 1}
-                                                    onClick={() =>
-                                                        void handleMoveGroup(group.name!, 1)
-                                                    }
-                                                    aria-label={`Move group ${group.name} down`}
-                                                >
-                                                    <ChevronDownIcon />
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                {!isCollapsed &&
-                                    group.entries.map((entry, indexInGroup) => {
-                                        const matches = requestById.get(entry.id)?.matches ?? [];
-                                        const isSelected = entry.id === selectedEntry?.id;
-                                        const count = matches.length;
-                                        const target = entry.target
-                                            ? describeWishlistTarget(entry.target, ships)
-                                            : undefined;
-                                        const bestHit = describeBestHit(scoreResults.get(entry.id));
-                                        return (
-                                            <div
-                                                key={entry.id}
-                                                role="button"
-                                                tabIndex={0}
-                                                aria-pressed={isSelected}
-                                                onClick={() => setSelectedId(entry.id)}
-                                                onKeyDown={(e) => {
-                                                    if (
-                                                        e.target === e.currentTarget &&
-                                                        (e.key === 'Enter' || e.key === ' ')
-                                                    ) {
-                                                        e.preventDefault();
-                                                        setSelectedId(entry.id);
-                                                    }
-                                                }}
-                                                className={`card flex items-start justify-between gap-4 cursor-pointer transition-colors ${
-                                                    isSelected
-                                                        ? 'border-primary'
-                                                        : 'hover:border-primary'
-                                                }`}
-                                            >
-                                                <div className="min-w-0">
-                                                    <p className="font-medium text-white truncate">
-                                                        {entry.name}
-                                                        <span className="ml-2 text-xs font-normal text-theme-text-secondary">
-                                                            {count} match{count !== 1 ? 'es' : ''}
-                                                        </span>
-                                                    </p>
-                                                    <WishlistFilterChips entry={entry} />
-                                                    {target && (
-                                                        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-theme-text-secondary">
-                                                            <Chip
-                                                                variant={
-                                                                    target.valid
-                                                                        ? 'accent'
-                                                                        : 'default'
-                                                                }
-                                                            >
-                                                                {target.label}
-                                                            </Chip>
-                                                            {target.valid && count > 0 && (
-                                                                <span>
-                                                                    {bestHit ??
-                                                                        (scoring
-                                                                            ? 'Scoring...'
-                                                                            : '')}
-                                                                </span>
-                                                            )}
-                                                        </p>
+                                                    {isCollapsed ? (
+                                                        <ChevronDownIcon />
+                                                    ) : (
+                                                        <ChevronUpIcon />
                                                     )}
+                                                    <GroupHeading
+                                                        name={group.name}
+                                                        entryCount={group.entries.length}
+                                                        matchCount={matchCount}
+                                                        bestHit={groupBestHit}
+                                                    />
+                                                </button>
+                                            ) : (
+                                                <div className="flex-1 min-w-0">
+                                                    <GroupHeading
+                                                        name="Ungrouped"
+                                                        entryCount={group.entries.length}
+                                                        matchCount={matchCount}
+                                                        bestHit={groupBestHit}
+                                                    />
                                                 </div>
+                                            )}
+                                            {group.name !== null && namedGroups.length > 1 && (
                                                 <div className="flex gap-2 shrink-0">
-                                                    {entry.target && onOpenInAnalysis && (
-                                                        <Button
-                                                            variant="secondary"
-                                                            size="sm"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                onOpenInAnalysis(entry);
-                                                            }}
-                                                        >
-                                                            Open in Upgrade Analysis
-                                                        </Button>
-                                                    )}
                                                     <Button
                                                         variant="secondary"
                                                         size="sm"
-                                                        disabled={indexInGroup === 0}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            void handleMove(entry.id, -1);
-                                                        }}
-                                                        aria-label="Move entry up"
+                                                        disabled={namedIndex === 0}
+                                                        onClick={() =>
+                                                            void handleMoveGroup(group.name!, -1)
+                                                        }
+                                                        aria-label={`Move group ${group.name} up`}
                                                     >
                                                         <ChevronUpIcon />
                                                     </Button>
@@ -408,95 +317,200 @@ export const GearWishlistTab: React.FC<Props> = ({
                                                         variant="secondary"
                                                         size="sm"
                                                         disabled={
-                                                            indexInGroup ===
-                                                            group.entries.length - 1
+                                                            namedIndex === namedGroups.length - 1
                                                         }
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            void handleMove(entry.id, 1);
-                                                        }}
-                                                        aria-label="Move entry down"
+                                                        onClick={() =>
+                                                            void handleMoveGroup(group.name!, 1)
+                                                        }
+                                                        aria-label={`Move group ${group.name} down`}
                                                     >
                                                         <ChevronDownIcon />
                                                     </Button>
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="sm"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setForm({ kind: 'copy', entry });
-                                                        }}
-                                                        aria-label="Duplicate entry"
-                                                    >
-                                                        <CopyIcon />
-                                                    </Button>
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="sm"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setForm({ kind: 'edit', entry });
-                                                        }}
-                                                        aria-label="Edit entry"
-                                                    >
-                                                        <EditIcon />
-                                                    </Button>
-                                                    <Button
-                                                        variant="danger"
-                                                        size="sm"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setPendingDelete(entry);
-                                                        }}
-                                                        aria-label="Delete entry"
-                                                    >
-                                                        <CloseIcon />
-                                                    </Button>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
-                            </section>
-                        );
-                    })}
-                </div>
-            )}
+                                            )}
+                                        </div>
+                                    )}
+                                    {!isCollapsed &&
+                                        group.entries.map((entry, indexInGroup) => {
+                                            const matches =
+                                                requestById.get(entry.id)?.matches ?? [];
+                                            const isSelected = entry.id === selectedEntry?.id;
+                                            const count = matches.length;
+                                            const target = entry.target
+                                                ? describeWishlistTarget(entry.target, ships)
+                                                : undefined;
+                                            const bestHit = describeBestHit(
+                                                scoreResults.get(entry.id)
+                                            );
+                                            return (
+                                                <div
+                                                    key={entry.id}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    aria-pressed={isSelected}
+                                                    onClick={() => setSelectedId(entry.id)}
+                                                    onKeyDown={(e) => {
+                                                        if (
+                                                            e.target === e.currentTarget &&
+                                                            (e.key === 'Enter' || e.key === ' ')
+                                                        ) {
+                                                            e.preventDefault();
+                                                            setSelectedId(entry.id);
+                                                        }
+                                                    }}
+                                                    className={`card flex items-start justify-between gap-4 cursor-pointer transition-colors ${
+                                                        isSelected
+                                                            ? 'border-primary'
+                                                            : 'hover:border-primary'
+                                                    }`}
+                                                >
+                                                    <div className="min-w-0">
+                                                        <p className="font-medium text-white truncate">
+                                                            {entry.name}
+                                                            <span className="ml-2 text-xs font-normal text-theme-text-secondary">
+                                                                {count} match
+                                                                {count !== 1 ? 'es' : ''}
+                                                            </span>
+                                                        </p>
+                                                        <WishlistFilterChips entry={entry} />
+                                                        {target && (
+                                                            <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-theme-text-secondary">
+                                                                <Chip
+                                                                    variant={
+                                                                        target.valid
+                                                                            ? 'accent'
+                                                                            : 'default'
+                                                                    }
+                                                                >
+                                                                    {target.label}
+                                                                </Chip>
+                                                                {target.valid && count > 0 && (
+                                                                    <span>
+                                                                        {bestHit ??
+                                                                            (scoring
+                                                                                ? 'Scoring...'
+                                                                                : '')}
+                                                                    </span>
+                                                                )}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-2 shrink-0">
+                                                        {entry.target && onOpenInAnalysis && (
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    onOpenInAnalysis(entry);
+                                                                }}
+                                                            >
+                                                                Open in Upgrade Analysis
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            disabled={indexInGroup === 0}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                void handleMove(entry.id, -1);
+                                                            }}
+                                                            aria-label="Move entry up"
+                                                        >
+                                                            <ChevronUpIcon />
+                                                        </Button>
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            disabled={
+                                                                indexInGroup ===
+                                                                group.entries.length - 1
+                                                            }
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                void handleMove(entry.id, 1);
+                                                            }}
+                                                            aria-label="Move entry down"
+                                                        >
+                                                            <ChevronDownIcon />
+                                                        </Button>
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setForm({ kind: 'copy', entry });
+                                                            }}
+                                                            aria-label="Duplicate entry"
+                                                        >
+                                                            <CopyIcon />
+                                                        </Button>
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setForm({ kind: 'edit', entry });
+                                                            }}
+                                                            aria-label="Edit entry"
+                                                        >
+                                                            <EditIcon />
+                                                        </Button>
+                                                        <Button
+                                                            variant="danger"
+                                                            size="sm"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setPendingDelete(entry);
+                                                            }}
+                                                            aria-label="Delete entry"
+                                                        >
+                                                            <CloseIcon />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                </section>
+                            );
+                        })}
+                    </div>
+                )}
 
-            {form === null && (
-                <div className="flex gap-2">
-                    <Button variant="primary" onClick={() => setForm({ kind: 'new' })}>
-                        Add Entry
-                    </Button>
-                    <Button variant="secondary" onClick={() => setFromShipOpen(true)}>
-                        From ship
-                    </Button>
-                </div>
-            )}
+                {form === null && (
+                    <div className="flex gap-2">
+                        <Button variant="primary" onClick={() => setForm({ kind: 'new' })}>
+                            Add Entry
+                        </Button>
+                        <Button variant="secondary" onClick={() => setFromShipOpen(true)}>
+                            From ship
+                        </Button>
+                    </div>
+                )}
 
-            {selectedEntry && selectedRequest && (
-                <WishlistSearchResults
-                    entry={selectedEntry}
-                    matches={selectedRequest.matches}
-                    scoreResult={scoreResults.get(selectedEntry.id)}
-                    scoring={
-                        scoring && !!selectedEntry.target && !scoreResults.has(selectedEntry.id)
-                    }
+                {selectedEntry && selectedRequest && (
+                    <WishlistSearchResults
+                        entry={selectedEntry}
+                        matches={selectedRequest.matches}
+                        scoreResult={scoreResults.get(selectedEntry.id)}
+                        scoring={
+                            scoring && !!selectedEntry.target && !scoreResults.has(selectedEntry.id)
+                        }
+                    />
+                )}
+
+                <ConfirmModal
+                    isOpen={pendingDelete !== null}
+                    onClose={() => setPendingDelete(null)}
+                    onConfirm={() => void handleConfirmDelete()}
+                    title="Delete wishlist entry"
+                    message={`Delete "${pendingDelete?.name ?? ''}"? This cannot be undone.`}
+                    confirmLabel="Delete"
                 />
-            )}
-
-            {fromShipOpen && (
-                <WishlistFromShipModal isOpen onClose={() => setFromShipOpen(false)} />
-            )}
-
-            <ConfirmModal
-                isOpen={pendingDelete !== null}
-                onClose={() => setPendingDelete(null)}
-                onConfirm={() => void handleConfirmDelete()}
-                title="Delete wishlist entry"
-                message={`Delete "${pendingDelete?.name ?? ''}"? This cannot be undone.`}
-                confirmLabel="Delete"
-            />
-        </div>
+            </div>
+            {fromShipModal}
+        </>
     );
 };
 
