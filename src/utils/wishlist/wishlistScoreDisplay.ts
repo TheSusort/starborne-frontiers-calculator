@@ -61,7 +61,7 @@ export function describeBestHit(result: WishlistScoreResult | undefined): string
 }
 
 /**
- * A hit that matched several targeted entries shows its strongest score: an upgrade beats a
+ * A hit that matched several targeted entries sorts by its strongest score: an upgrade beats a
  * non-upgrade, and between equals the earlier entry wins (scores of different target kinds
  * are not comparable).
  */

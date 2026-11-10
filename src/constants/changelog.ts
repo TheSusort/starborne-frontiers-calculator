@@ -8,14 +8,17 @@ export const UNRELEASED_CHANGES: string[] = [
     'Gear wishlist: entries show their match count; click one to see its gear.',
     'Gear wishlist: entry names are optional and generated from the filters.',
     'Gear wishlist: deleting an entry now asks for confirmation.',
-    'Gear wishlist: entries can be duplicated, and failed saves now show an error.',
+    'Gear wishlist: entries can now be duplicated with one click.',
+    'Gear wishlist: failed saves and deletes now show an error message.',
     'Gear wishlist: main stat options narrow to what the selected slots can roll.',
-    'Gear wishlist: gear sets can be filtered by name, results can hide equipped gear.',
+    'Gear wishlist: the gear set picker can now be filtered by name.',
+    'Gear wishlist: results can now hide gear already equipped on ships.',
     'Gear wishlist: entries can target a ship or role and rank their matches.',
     'Gear wishlist: Upgrade Analysis can save its settings as a wishlist entry.',
     'Gear wishlist: targeted entries open in Upgrade Analysis with one click.',
     'Import summary: wishlist hits for targeted entries show upgrade value, best first.',
-    'Import summary: Notable Gear now shows alongside Wishlist Hits; matching entries are combined.',
+    'Import summary: Notable Gear now shows alongside Wishlist Hits.',
+    'Import summary: a piece matching several wishlist entries now appears once.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

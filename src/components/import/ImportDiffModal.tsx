@@ -85,18 +85,16 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
 
     // Each hit shows its strongest score; hits sort upgrades first.
     const scoredHits = useMemo(() => {
-        const hits = (diff?.wishlistHits ?? []).map((hit) => ({
-            ...hit,
-            score: pickBestScore(
-                hit.entryIds.flatMap((id) => {
-                    const score = scoreResults
-                        .get(id)
-                        ?.scores.find((s) => s.pieceId === hit.gear.id);
-                    return score ? [score] : [];
-                })
-            ),
-        }));
-        return hits.sort((a, b) => compareHitScores(a.score, b.score));
+        const hits = (diff?.wishlistHits ?? []).map((hit) => {
+            const perEntry = hit.entryIds.map((id, i) => ({
+                entryId: id,
+                entryName: hit.entryNames[i],
+                score: scoreResults.get(id)?.scores.find((s) => s.pieceId === hit.gear.id),
+            }));
+            const scores = perEntry.flatMap(({ score }) => (score ? [score] : []));
+            return { ...hit, perEntry, sortScore: pickBestScore(scores) };
+        });
+        return hits.sort((a, b) => compareHitScores(a.sortScore, b.sortScore));
     }, [diff, scoreResults]);
 
     if (!diff) return null;
@@ -331,17 +329,25 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                         Wishlist Hits
                                     </div>
                                     <div className="space-y-2">
-                                        {scoredHits.map(({ gear: g, entryNames, score }) => (
+                                        {scoredHits.map(({ gear: g, perEntry, sortScore }) => (
                                             <div
                                                 key={g.id}
                                                 className={
-                                                    score && !score.isUpgrade ? 'opacity-50' : ''
+                                                    sortScore && !sortScore.isUpgrade
+                                                        ? 'opacity-50'
+                                                        : ''
                                                 }
                                             >
-                                                <div className="text-xs text-theme-text-secondary mb-0.5">
-                                                    {entryNames.join(', ')}
-                                                </div>
-                                                {score && <WishlistScoreBadge score={score} />}
+                                                {perEntry.map(({ entryId, entryName, score }) => (
+                                                    <div key={entryId} className="mb-0.5">
+                                                        <div className="text-xs text-theme-text-secondary">
+                                                            {entryName}
+                                                        </div>
+                                                        {score && (
+                                                            <WishlistScoreBadge score={score} />
+                                                        )}
+                                                    </div>
+                                                ))}
                                                 <GearLine gear={g} />
                                             </div>
                                         ))}
