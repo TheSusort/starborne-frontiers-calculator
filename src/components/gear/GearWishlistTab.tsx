@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { getGearSet } from '../../constants/gearSets';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { RARITIES } from '../../constants/rarities';
@@ -55,6 +55,12 @@ export const GearWishlistTab: React.FC<Props> = ({
     const [form, setForm] = useState<FormTarget | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [pendingDelete, setPendingDelete] = useState<WishlistEntry | null>(null);
+    const formRef = useRef<HTMLDivElement>(null);
+
+    // Every open (new, edit, copy, draft) sets a fresh `form` object, so this runs on each one.
+    useEffect(() => {
+        if (form) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, [form]);
 
     const gearInventory = useMemo(() => inventory.filter((p) => p.slot in GEAR_SLOTS), [inventory]);
 
@@ -144,7 +150,7 @@ export const GearWishlistTab: React.FC<Props> = ({
     return (
         <div className="space-y-4">
             <CollapsibleForm isVisible={form !== null}>
-                <div className="card">
+                <div ref={formRef} className="card scroll-mt-24">
                     <h2 className="text-xl font-semibold text-white mb-4">
                         {form?.kind === 'edit' ? 'Edit Entry' : 'Add Entry'}
                     </h2>

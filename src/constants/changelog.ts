@@ -8,6 +8,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Gear wishlist: entries show their match count; click one to see its gear.',
     'Gear wishlist: entry names are optional and generated from the filters.',
     'Gear wishlist: deleting an entry now asks you to confirm before it goes.',
+    'Gear wishlist: adding or editing an entry now scrolls up to the form.',
     'Gear wishlist: entries can now be duplicated with one click.',
     'Gear wishlist: entries can now be reordered with up and down buttons.',
     'Gear wishlist: failed saves and deletes now show an error message.',
