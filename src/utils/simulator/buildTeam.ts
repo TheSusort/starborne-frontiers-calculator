@@ -35,6 +35,12 @@ export function buildTeam(board: BoardState, deps: CombatStatsDeps): BattlePlace
         const placement = board[position];
         if (!placement) return [];
         const footprint = bossFootprint(placement.ship);
+        if (footprint && footprint[0] !== position) {
+            throw new Error(
+                `buildTeam: ${placement.ship.name} occupies ${footprint.join('+')} and must be ` +
+                    `placed at its anchor ${footprint[0]}, not ${position}`
+            );
+        }
         return [
             {
                 ship: placement.ship,

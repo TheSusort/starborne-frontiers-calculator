@@ -628,6 +628,12 @@ export function createActor(
     // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
     // stored on the actor — banked charges are the only mutable charge state.
     const { chargeCount = 0, startCharged = false, ...rest } = partial;
+    if (partial.footprint !== undefined && partial.footprint[0] !== partial.position) {
+        throw new Error(
+            `createActor: ${partial.id}'s footprint [${partial.footprint.join(', ')}] must start ` +
+                `at its anchor position ${partial.position ?? '(none)'}`
+        );
+    }
     return {
         ...rest,
         currentHp: partial.stats.hp,

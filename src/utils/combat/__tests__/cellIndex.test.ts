@@ -77,11 +77,14 @@ const UTILS_DIR = join(__dirname, '..', '..');
 const SCANNED_DIRS = ['combat', 'targeting'].map((d) => join(UTILS_DIR, d));
 
 /** An anchor-only `.position` reader: `file` (path under `src/utils`) and a `snippet` that
- *  appears on the reading line, with why the anchor cell alone is right there. */
+ *  appears on the reading line, with why the anchor cell alone is right there. `count` is how
+ *  many reader lines the entry classifies (default 1), so a new reader whose text duplicates a
+ *  classified one still fails. A reader is classified by the FIRST entry it matches. */
 interface AnchorOnlyReader {
     file: string;
     snippet: string;
     reason: string;
+    count?: number;
 }
 
 const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
@@ -90,6 +93,16 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         file: 'combat/cellIndex.ts',
         snippet: 'a.footprint ?? (a.position !== undefined ? [a.position] : [])',
         reason: '`cellsOf` itself: the single-hex fallback of the footprint.',
+    },
+    {
+        file: 'combat/state.ts',
+        snippet: 'partial.footprint[0] !== partial.position',
+        reason: '`createActor` guard: a footprint starts at its anchor.',
+    },
+    {
+        file: 'combat/state.ts',
+        snippet: "at its anchor position ${partial.position ?? '(none)'}",
+        reason: 'The guard’s error message.',
     },
     // --- presence / mode gates: "is this actor placed at all", not "which cells" ---
     {
@@ -136,6 +149,7 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         file: 'combat/engine.ts',
         snippet: 'tgt?.position != null',
         reason: 'Positional-turn discriminator; AoE purge expands from `tgtCell`.',
+        count: 3,
     },
     {
         file: 'combat/engine.ts',
@@ -146,6 +160,7 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         file: 'combat/engine.ts',
         snippet: 'isPositional(actor.position, ',
         reason: 'Mode gate on the actor’s own state.',
+        count: 2,
     },
     {
         file: 'combat/engine.ts',
@@ -156,6 +171,7 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         file: 'combat/engine.ts',
         snippet: 'resolvesPositionalVictim(actor.position, ',
         reason: 'Mode gate: is the caster placed and is any opposing unit targetable.',
+        count: 6,
     },
     // --- the CASTER's own cell: a multi-hex caster casts from its anchor ---
     {
@@ -223,6 +239,7 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         file: 'combat/engine.ts',
         snippet: 'position: actor?.position,',
         reason: 'Turn-order entry for queued intents.',
+        count: 2,
     },
     {
         file: 'combat/engine.ts',
@@ -246,6 +263,21 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
     },
     // --- plumbing: copies the anchor; the footprint is copied beside it ---
     {
+        file: 'combat/engine.ts',
+        snippet: 'footprint: input.footprint }',
+        reason: 'Static adjacency placement; carries the footprint.',
+    },
+    {
+        file: 'combat/engine.ts',
+        snippet: 'footprint: t.footprint }',
+        reason: 'Static adjacency placement; carries the footprint.',
+    },
+    {
+        file: 'combat/engine.ts',
+        snippet: 'footprint: e.footprint }',
+        reason: 'Static adjacency placement; carries the footprint.',
+    },
+    {
         file: 'combat/state.ts',
         snippet: 'position: partial.position,',
         reason: '`createActor` copy; `footprint` is copied beside it.',
@@ -264,21 +296,6 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         file: 'combat/engine.ts',
         snippet: 'position: t.position,',
         reason: 'Team actor construction; `footprint` is copied beside it.',
-    },
-    {
-        file: 'combat/engine.ts',
-        snippet: 'footprint: input.footprint }',
-        reason: 'Static adjacency placement; carries the footprint.',
-    },
-    {
-        file: 'combat/engine.ts',
-        snippet: 'footprint: t.footprint }',
-        reason: 'Static adjacency placement; carries the footprint.',
-    },
-    {
-        file: 'combat/engine.ts',
-        snippet: 'footprint: e.footprint }',
-        reason: 'Static adjacency placement; carries the footprint.',
     },
     {
         file: 'combat/normalizeRoster.ts',
@@ -370,12 +387,14 @@ describe('multi-hex tripwire: every `.position` reader is classified', () => {
         expect(unclassified).toEqual([]);
     });
 
-    it('every ANCHOR_ONLY_READERS entry still matches a reader', () => {
+    it('every ANCHOR_ONLY_READERS entry classifies exactly its `count` of readers', () => {
         const readers = allReaders();
-        const stale = ANCHOR_ONLY_READERS.filter(
-            (entry) => !readers.some((r) => classify(r, [entry]) === entry)
-        ).map((e) => `${e.file}: ${e.snippet}`);
-        expect(stale).toEqual([]);
+        const miscounted = ANCHOR_ONLY_READERS.flatMap((entry) => {
+            const n = readers.filter((r) => classify(r, ANCHOR_ONLY_READERS) === entry).length;
+            const want = entry.count ?? 1;
+            return n === want ? [] : [`${entry.file}: ${entry.snippet} (${n}, expected ${want})`];
+        });
+        expect(miscounted).toEqual([]);
     });
 
     it('NON-VACUITY: a new reader is reported as unclassified, a comment is not', () => {

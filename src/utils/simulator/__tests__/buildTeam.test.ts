@@ -71,4 +71,9 @@ describe('buildTeam — bounty boss footprint', () => {
         expect(team.find((p) => p.position === 'M1')?.footprint).toEqual(['M1', 'M2']);
         expect(team.find((p) => p.position === 'T3')).not.toHaveProperty('footprint');
     });
+
+    it('a boss placed anywhere but its anchor cell is rejected', () => {
+        const board: BoardState = { T3: { ship: bossShip('fenri', 32)! } };
+        expect(() => buildTeam(board, deps)).toThrow(/must be placed at its anchor M1, not T3/);
+    });
 });
