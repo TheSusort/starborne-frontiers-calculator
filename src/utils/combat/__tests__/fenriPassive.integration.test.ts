@@ -15,7 +15,7 @@
  *    a DoT or a bomb kill is not his kill.
  *  - Any enemy death (DoT and bomb included) heals him 10% and grants Attack Up II.
  *
- * Every case runs with Fenri on either side.
+ * Every case runs with Fenri as the player focus, as an enemy, and as a walked player team actor.
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
@@ -167,15 +167,16 @@ const seatInput = (
     seat: FenriSeat,
     fenri: BoardUnit,
     opponents: BoardUnit[],
-    rounds: number
-): { input: CombatEngineInput; fenriId: string } => {
+    rounds: number,
+    allies: BoardUnit[] = []
+): { input: CombatEngineInput; fenriId: string; id: (u: BoardUnit) => string } => {
     if (seat === 'player-ally') {
-        const focus: BoardUnit = { id: 'focus', kit: NO_KIT, position: 'T1', speed: 1 };
-        const { input, id } = boardInput('player', focus, [fenri], opponents, rounds);
-        return { input, fenriId: id(fenri) };
+        const focus: BoardUnit = { id: 'focus', kit: NO_KIT, position: 'B1', speed: 1 };
+        const { input, id } = boardInput('player', focus, [fenri, ...allies], opponents, rounds);
+        return { input, fenriId: id(fenri), id };
     }
-    const { input, id } = boardInput(seat, fenri, [], opponents, rounds);
-    return { input, fenriId: id(fenri) };
+    const { input, id } = boardInput(seat, fenri, allies, opponents, rounds);
+    return { input, fenriId: id(fenri), id };
 };
 
 describe.each<FenriSeat>(SEATS)('Fenri control immunity (Fenri seated %s)', (seat) => {
@@ -317,40 +318,68 @@ describe('Fenri control immunity — scheduled (picker) debuffs', () => {
 });
 
 describe.each<FenriSeat>(SEATS)('Fenri control immunity tripwire (Fenri seated %s)', (seat) => {
-    // Real control/speed kits, all charged and hacking-maxed, against Fenri. Whatever path a
-    // real kit's infliction takes, Fenri's debuff store must end the fight without any of it.
+    // Real control/speed kits, charged and hacking-maxed, against Fenri: a charged and an active
+    // cast (Xcellence, Morao, Bizon, Huanying), a passive-slot rider on the cast (Bayah), a
+    // start-of-round grant on the highest-attack enemy (Selenite) and an adjacent-enemies fan-out
+    // (Vindicator, aimed at a decoy beside Fenri). Whatever path each infliction takes, none
+    // reaches Fenri: no landing, no resist, no control, nothing left in his debuff store.
     const CONTROL_OR_SPEED = /^(Stasis|Disable|Provoke|Taunt|Concentrate Fire|Speed Down.*)$/;
-    const controllers = ['Xcellence', 'Morao', 'Bizon', 'Huanying'].map((ship, i): BoardUnit => ({
+    const controller = (ship: string): BoardUnit => ({
         id: ship.toLowerCase(),
         kit: realKit(ship),
-        position: (['M4', 'T4', 'B4', 'M3'] as const)[i],
-        speed: 300 - i,
+        position: 'M4',
+        speed: 300,
         attack: 1,
         hacking: 1e6,
         chargeCount: 1,
         startCharged: true,
         target: parseTarget('front'),
-    }));
-    const heldNames = (kit: ShipSkills): string[] => {
-        const { input, fenriId } = seatInput(seat, fenriUnit(kit), controllers, 1);
-        const { engine } = run(input, fenriId);
-        return engine
+    });
+    const outcome = (ship: string, kit: ShipSkills) => {
+        // The decoy stands in front of Fenri (M1) so Vindicator's fan-out reaches him.
+        const allies: BoardUnit[] =
+            ship === 'Vindicator'
+                ? [{ id: 'decoy', kit: NO_KIT, position: 'M2', speed: 1, hp: 1e12 }]
+                : [];
+        const { input, fenriId } = seatInput(
+            seat,
+            // Durable: Vindicator's Magnetized Shielding reflects Fenri's hits back at him.
+            fenriUnit(kit, { hp: 1e12 }),
+            [controller(ship)],
+            3,
+            allies
+        );
+        const log = run(input, fenriId);
+        const touching = log.events.filter(
+            (e) =>
+                (e.type === 'debuff-applied' || e.type === 'debuff-resisted') &&
+                e.targetId === fenriId &&
+                CONTROL_OR_SPEED.test(e.buffName)
+        ).length;
+        const controlled = log.events.filter(
+            (e) => e.type === 'control-applied' && e.targetId === fenriId
+        ).length;
+        const held = log.engine
             .timedAbilityStatuses('enemy', undefined, fenriId)
-            .map((s) => s.active.buffName)
+            .map((st) => st.active.buffName)
             .filter((n) => CONTROL_OR_SPEED.test(n));
+        return { touching, controlled, held };
     };
 
-    it('his debuff store holds no control or speed debuff', () => {
-        expect(heldNames(VULNERABLE_KIT).length).toBeGreaterThan(0);
-        expect(heldNames(FENRI_KIT)).toEqual([]);
-    });
+    it.each(['Xcellence', 'Morao', 'Bizon', 'Huanying', 'Bayah', 'Selenite', 'Vindicator'])(
+        "%s's control and speed debuffs never touch Fenri",
+        (ship) => {
+            expect(outcome(ship, VULNERABLE_KIT).touching).toBeGreaterThan(0);
+            expect(outcome(ship, FENRI_KIT)).toEqual({ touching: 0, controlled: 0, held: [] });
+        }
+    );
 });
 
 // ---------------------------------------------------------------------------------------------
 // Pressing Onslaught
 // ---------------------------------------------------------------------------------------------
 
-describe.each<Placement>(['player', 'enemy'])('Pressing Onslaught (Fenri on %s side)', (side) => {
+describe.each<FenriSeat>(SEATS)('Pressing Onslaught (Fenri seated %s)', (seat) => {
     const durable = (id: string, position: BoardUnit['position']): BoardUnit => ({
         id,
         kit: NO_KIT,
@@ -359,26 +388,38 @@ describe.each<Placement>(['player', 'enemy'])('Pressing Onslaught (Fenri on %s s
         hp: 1e12,
     });
 
-    const fenriHits = (log: FightLog) =>
-        log.events.filter(
-            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
-                e.type === 'ability-performed' &&
-                e.actorId === log.fenriId &&
-                e.abilityType === 'damage'
-        );
-
     it('direct damage grows by 10% per round, uncapped', () => {
-        const fenri = fenriUnit();
-        const { input, id } = boardInput(side, fenri, [], [durable('dummy', 'M4')], 12);
-        const hits = fenriHits(run(input, id(fenri)));
+        const dummy = durable('dummy', 'M4');
+        const { input, fenriId } = seatInput(seat, fenriUnit(), [dummy], 12);
+        const bus = createEventBus();
+        const hits: Extract<CombatEvent, { type: 'ability-performed' }>[] = [];
+        bus.on('ability-performed', (e: Extract<CombatEvent, { type: 'ability-performed' }>) => {
+            if (e.actorId === fenriId && e.abilityType === 'damage') hits.push(e);
+        });
+        runCombat({ ...input, bus });
         const byRound = (r: number) => hits.find((h) => h.round === r)!.damage!;
         expect(byRound(2) / byRound(1)).toBeCloseTo(1.2 / 1.1, 9);
         expect(byRound(3) / byRound(1)).toBeCloseTo(1.3 / 1.1, 9);
         expect(byRound(12) / byRound(1)).toBeCloseTo(2.2 / 1.1, 9);
     });
 
+    it('his White Phosphorus ticks do not grow with his stacks', () => {
+        // Doom Shot in round 1 lands one White Phosphorus III; it ticks while stacks pile up.
+        const dummy = durable('dummy', 'M4');
+        const fenri = fenriUnit(FENRI_KIT, { startCharged: true, hacking: 1e6 });
+        const { input, id } = seatInput(seat, fenri, [dummy], 5);
+        const ticks: number[] = [];
+        const bus = createEventBus();
+        bus.on('dot-ticked', (e: Extract<CombatEvent, { type: 'dot-ticked' }>) => {
+            if (e.targetId === id(dummy) && e.tier === 45) ticks.push(e.damage / e.stacks);
+        });
+        runCombat({ ...input, bus });
+        expect(ticks.length).toBeGreaterThan(1);
+        for (const t of ticks) expect(t).toBeCloseTo(ticks[0], 6);
+    });
+
     const stacksAfter = (rounds: number, fenri: BoardUnit, opponents: BoardUnit[]) => {
-        const { input, id } = boardInput(side, fenri, [], opponents, rounds);
+        const { input, id } = seatInput(seat, fenri, opponents, rounds);
         const log = run(input, id(fenri));
         return { log, id, stacks: stacksOf(log.engine, log.fenriId, PO) };
     };
@@ -415,7 +456,7 @@ describe.each<Placement>(['player', 'enemy'])('Pressing Onslaught (Fenri on %s s
         const victim: BoardUnit = { id: 'victim', kit: NO_KIT, position: 'M1', speed: 1, hp: 10 };
         const body = durable('body', 'M4');
         const fenri = fenriUnit();
-        const { input, id } = boardInput(side, fenri, [burner], [victim, body], 4);
+        const { input, id } = seatInput(seat, fenri, [victim, body], 4, [burner]);
         const fenriId = id(fenri);
         const bus = createEventBus();
         const events: CombatEvent[] = [];

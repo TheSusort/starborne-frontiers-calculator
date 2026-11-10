@@ -2335,8 +2335,9 @@ export function registerReactiveListeners(args: {
                     bus.on('ship-destroyed', (e) => {
                         // Self-scoped: THIS owner was destroyed (mirrors on-crit's own-id scoping).
                         // Killer-targeted reactions (Faust's PURGE, Martyrdom's DEBUFF, Paracelsus's
-                        // HP-scaled retaliation DAMAGE) fire only when killed by DIRECT damage
-                        // and route to the killer (counterTargetId = e.killerId). Salvation's
+                        // HP-scaled retaliation DAMAGE) fire only on a death stamped
+                        // `byDirectDamage` — a bomb burst included, unlike `isDirectDeath` — and
+                        // route to the killer (counterTargetId = e.killerId). Salvation's
                         // self-destruct HEAL (and any other on-destroyed reaction) fires on ANY
                         // death, unchanged.
                         if (e.actorId !== ownerId) return;

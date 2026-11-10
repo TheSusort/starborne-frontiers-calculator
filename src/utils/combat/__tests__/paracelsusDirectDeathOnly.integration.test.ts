@@ -1,8 +1,10 @@
 /**
  * Paracelsus: "Upon being destroyed by direct damage, this Unit deals damage equal to 50% of its
  * max HP and grants all allies Everliving Regeneration II for 4 turns." One condition heads the
- * whole sentence: a death to a damage-over-time tick fires neither half. Salvation's unqualified
- * "When this Unit is destroyed" still fires on any death.
+ * whole sentence: a death to a damage-over-time tick fires neither half. A Bomb burst death blocks
+ * the grant (`triggerRequiresDirectDeath`, `isDirectDeath`); the retaliation reads only
+ * `byDirectDamage`, which a burst carries. Salvation's unqualified "When this Unit is destroyed"
+ * still fires on any death.
  *
  * Real parsed passives (buildTraceShip, refit 4), mounted on both sides. The dying ship sits at M4
  * at 1 HP with an ally behind it at M3. A faster enemy either hits it (attack 1000) or carries no
@@ -118,7 +120,7 @@ const run = (ship: string, by: KilledBy, side: 'player' | 'enemy') => {
     return { death, grants: grants.length, retaliation, repairs };
 };
 
-describe("Paracelsus: 'Upon being destroyed by direct damage' gates both halves", () => {
+describe("Paracelsus: 'Upon being destroyed by direct damage'", () => {
     for (const side of ['player', 'enemy'] as const) {
         it(`${side}-side: killed by a direct hit → retaliation and Everliving Regeneration II`, () => {
             const r = run('Paracelsus', 'hit', side);
