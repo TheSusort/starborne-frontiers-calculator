@@ -56,11 +56,17 @@ export const GearWishlistTab: React.FC<Props> = ({
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [pendingDelete, setPendingDelete] = useState<WishlistEntry | null>(null);
     const formRef = useRef<HTMLDivElement>(null);
+    const formHeadingRef = useRef<HTMLHeadingElement>(null);
+    const waitingForEntries = loading && entries.length === 0;
 
     // Every open (new, edit, copy, draft) sets a fresh `form` object, so this runs on each one.
+    // A draft can arrive while the loader shows; the form mounts, and scrolls, once it clears.
+    // Focus follows the scroll so the next Tab starts in the form, not back in the list.
     useEffect(() => {
-        if (form) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, [form]);
+        if (!form || waitingForEntries) return;
+        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        formHeadingRef.current?.focus({ preventScroll: true });
+    }, [form, waitingForEntries]);
 
     const gearInventory = useMemo(() => inventory.filter((p) => p.slot in GEAR_SLOTS), [inventory]);
 
@@ -115,7 +121,7 @@ export const GearWishlistTab: React.FC<Props> = ({
         }
     };
 
-    if (loading && entries.length === 0) {
+    if (waitingForEntries) {
         return <Loader />;
     }
 
@@ -151,7 +157,11 @@ export const GearWishlistTab: React.FC<Props> = ({
         <div className="space-y-4">
             <CollapsibleForm isVisible={form !== null}>
                 <div ref={formRef} className="card scroll-mt-24">
-                    <h2 className="text-xl font-semibold text-white mb-4">
+                    <h2
+                        ref={formHeadingRef}
+                        tabIndex={-1}
+                        className="text-xl font-semibold text-white mb-4 focus:outline-none"
+                    >
                         {form?.kind === 'edit' ? 'Edit Entry' : 'Add Entry'}
                     </h2>
                     <WishlistEntryForm
