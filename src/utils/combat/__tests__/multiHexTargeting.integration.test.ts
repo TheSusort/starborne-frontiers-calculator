@@ -154,3 +154,17 @@ describe('multi-hex enemy — end-to-end targeting', () => {
         expect(entry.kind === 'attack' && entry.targets.map((t) => t.targetId)).toEqual([bossId]);
     });
 });
+
+describe('multi-hex unit — roster', () => {
+    it('carries the footprint on a two-hex entry and omits it on a one-cell entry', () => {
+        const result = simulateBattle({
+            playerTeam: [placement(makeShip('p1', 'Pattern-Base'), 'M1', 5000)],
+            enemyTeam: [placement(makeShip('boss', 'Pattern-Base'), 'M1', 0, ['M1', 'M2'])],
+            rounds: 1,
+        });
+        const boss = result.roster.find((r) => r.side === 'enemy')!;
+        const player = result.roster.find((r) => r.side === 'player')!;
+        expect(boss.footprint).toEqual(['M1', 'M2']);
+        expect('footprint' in player).toBe(false);
+    });
+});

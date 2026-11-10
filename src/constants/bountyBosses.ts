@@ -104,9 +104,7 @@ export function bossShip(id: BountyId, level: number): Ship | null {
 
 /** The cells a boss ship occupies; `undefined` for any ship whose id is not a boss id. */
 export function bossFootprint(ship: Ship): readonly Position[] | undefined {
-    const parsed = parseBossShipId(ship.id);
-    if (!parsed) return undefined;
-    return BOUNTY_BOSSES.find((boss) => boss.id === parsed.id)?.footprint;
+    return bossFootprintOfId(ship.id);
 }
 
 /** The cells a boss occupies, by ship id; `undefined` for any id that is not a boss id. */

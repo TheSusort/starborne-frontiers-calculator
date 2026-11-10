@@ -112,6 +112,7 @@ describe('grid mode', () => {
 describe('boss boards', () => {
     it('round-trips a boss at its anchor through the stored id', async () => {
         const { bossShip } = await import('../../../constants/bountyBosses');
+        const { resolveShipId } = await import('../../ship/resolveShipId');
         const boss = bossShip('fenri', 32)!;
         const setup = serializeSetup({
             ...args,
@@ -119,7 +120,13 @@ describe('boss boards', () => {
             enemyBoard: { M1: { ship: boss } },
         });
         expect(setup.enemyBoard.M1).toEqual({ shipId: 'boss:fenri:32' });
-        const restored = deserializeSetup(setup, (id) => (id === boss.id ? boss : null));
+        const restored = deserializeSetup(setup, (id) =>
+            resolveShipId(id, {
+                getShipById: () => undefined,
+                units: [],
+                getAscensionStats: () => null,
+            })
+        );
         expect(restored.enemyBoard.M1?.ship.id).toBe('boss:fenri:32');
         expect(restored.dropped).toEqual([]);
     });

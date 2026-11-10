@@ -156,7 +156,16 @@ export function useSimulatorRuns({
         // Captured once, up front, so the provenance recorded for this run and the result it
         // produces always describe the SAME boards — never a mix of a stale input and a fresh
         // snapshot (or vice versa) from two separate reads of live state.
-        const input = buildInput();
+        let input: BattleSimulationInput;
+        try {
+            input = buildInput();
+        } catch (err) {
+            setBattleResult(null);
+            setAggregate(null);
+            setProvenance(null);
+            setRunError(err instanceof Error ? err.message : 'Simulation failed');
+            return;
+        }
         const overrides = snapshotOverrides(playerBoard, enemyBoard);
         const runGridMode = gridMode;
 

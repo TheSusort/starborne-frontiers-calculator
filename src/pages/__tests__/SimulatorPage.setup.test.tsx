@@ -126,6 +126,29 @@ describe('SimulatorPage setup autosave', () => {
     });
 });
 
+describe('SimulatorPage boss setups', () => {
+    it('loads a stored boss on its anchor and drops one stored anywhere else', async () => {
+        const stored = (cell: string) =>
+            JSON.stringify({
+                version: 1,
+                name: '(autosave)',
+                playerBoard: { T1: { shipId: fakeShip.id } },
+                enemyBoard: { [cell]: { shipId: 'boss:fenri:32' } },
+                seed: 1,
+                runCount: 1,
+                savedAt: 1,
+            });
+        localStorage.setItem(SETUP_STORAGE_KEYS.autosave, stored('M1'));
+        const anchored = renderPage();
+        expect(screen.getByTestId('formation-Enemy Team (1)')).toHaveTextContent('boss:fenri:32');
+        anchored.unmount();
+
+        localStorage.setItem(SETUP_STORAGE_KEYS.autosave, stored('T3'));
+        renderPage();
+        expect(screen.getByTestId('formation-Enemy Team')).toHaveTextContent(/^$/);
+    });
+});
+
 describe('SimulatorPage named setups', () => {
     it('saves the current boards under a name and loads them back', async () => {
         renderPage();

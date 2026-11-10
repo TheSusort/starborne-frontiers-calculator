@@ -293,8 +293,8 @@ const SimulatorPage: React.FC = () => {
 
     /** The one place a stored setup becomes live state. */
     const applySetup = (result: DeserializedSetup) => {
-        setPlayerBoard(result.playerBoard);
-        setEnemyBoard(result.enemyBoard);
+        setPlayerBoard(withoutStrayBossCells(result.playerBoard));
+        setEnemyBoard(withoutStrayBossCells(result.enemyBoard));
         setPlayerSelected(undefined);
         setEnemySelected(undefined);
         setSeed(result.seed);
