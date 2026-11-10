@@ -7,7 +7,7 @@ import { ChangelogEntry } from '../types/changelog';
 export const UNRELEASED_CHANGES: string[] = [
     'Gear wishlist: entries show their match count; click one to see its gear.',
     'Gear wishlist: entry names are optional and generated from the filters.',
-    'Gear wishlist: deleting an entry now asks for confirmation.',
+    'Gear wishlist: deleting an entry now asks you to confirm before it goes.',
     'Gear wishlist: entries can now be duplicated with one click.',
     'Gear wishlist: entries can now be reordered with up and down buttons.',
     'Gear wishlist: failed saves and deletes now show an error message.',
@@ -19,7 +19,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Gear wishlist: Upgrade Analysis can save its settings as a wishlist entry.',
     'Gear wishlist: targeted entries open in Upgrade Analysis with one click.',
     'Import summary: wishlist hits for targeted entries show upgrade value, best first.',
-    'Import summary: Notable Gear now shows alongside Wishlist Hits.',
+    'Import summary: Notable Gear and Wishlist Hits now both show after an import.',
     'Import summary: a piece matching several wishlist entries now appears once.',
 ];
 

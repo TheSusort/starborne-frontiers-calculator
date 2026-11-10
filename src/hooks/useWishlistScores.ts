@@ -98,30 +98,39 @@ export function useWishlistScores(requests: WishlistScoreRequest[]): {
 
         setScoring(true);
         void (async () => {
-            for (const { entry, matches } of todo) {
-                const result = await scoreWishlistMatches({
-                    entry,
-                    matches,
-                    gearInventory,
-                    ships,
-                    getGearPiece,
-                    getEngineeringStatsForShipType,
-                    yieldToEventLoop,
-                    shouldAbort: () => cancelled,
-                });
-                if (cancelled) return;
-                cache.current.set(entry.id, {
-                    entry,
-                    matches,
-                    ships,
-                    inventory,
-                    engineering: engineeringStats,
-                    result,
-                });
-                fresh.set(entry.id, result);
-                setResults(new Map(fresh));
+            try {
+                for (const { entry, matches } of todo) {
+                    let result: WishlistScoreResult;
+                    try {
+                        result = await scoreWishlistMatches({
+                            entry,
+                            matches,
+                            gearInventory,
+                            ships,
+                            getGearPiece,
+                            getEngineeringStatsForShipType,
+                            yieldToEventLoop,
+                            shouldAbort: () => cancelled,
+                        });
+                    } catch (error) {
+                        console.error(`Wishlist scoring failed for entry ${entry.id}:`, error);
+                        continue;
+                    }
+                    if (cancelled) return;
+                    cache.current.set(entry.id, {
+                        entry,
+                        matches,
+                        ships,
+                        inventory,
+                        engineering: engineeringStats,
+                        result,
+                    });
+                    fresh.set(entry.id, result);
+                    setResults(new Map(fresh));
+                }
+            } finally {
+                if (!cancelled) setScoring(false);
             }
-            if (!cancelled) setScoring(false);
         })();
 
         return () => {

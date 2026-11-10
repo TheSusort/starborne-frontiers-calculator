@@ -30,6 +30,13 @@ interface Props {
     onOpenInAnalysis?: (entry: WishlistEntry) => void;
 }
 
+/** Upgrade Analysis stat filters also match the main stat and either stat type; an entry's
+ * substat filter does not, so a saved analysis can match fewer pieces. */
+const ANALYSIS_DRAFT_NOTICE =
+    'Prefilled from Upgrade Analysis. Upgrade Analysis also counts a stat when it is the main stat, ' +
+    'and counts flat and % alike. This entry only checks substats, with the types selected below, ' +
+    'so it may match fewer pieces. Adjust the filters if needed.';
+
 type FormTarget =
     | { kind: 'new' }
     | { kind: 'edit'; entry: WishlistEntry }
@@ -153,6 +160,7 @@ export const GearWishlistTab: React.FC<Props> = ({
                         }
                         initial={formInitial}
                         submitLabel={form?.kind === 'edit' ? 'Save' : 'Add Entry'}
+                        notice={form?.kind === 'draft' ? ANALYSIS_DRAFT_NOTICE : undefined}
                         onSubmit={handleSubmit}
                         onCancel={() => setForm(null)}
                     />

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { WishlistEntry, WishlistTarget } from '../../types/wishlist';
-import { Input, Button, Select, RoleSelector } from '../ui';
+import { Callout, Input, Button, Select, RoleSelector } from '../ui';
 import { ShipSelector } from '../ship/ShipSelector';
 import { useShips } from '../../contexts/ShipsContext';
 import type { ShipTypeName } from '../../constants/shipTypes';
@@ -23,6 +23,8 @@ interface Props {
     /** May reject: the caller decides whether the form stays open. */
     onSubmit: (entry: Omit<WishlistEntry, 'id'>) => void | Promise<void>;
     onCancel?: () => void;
+    /** Shown above the form, e.g. how a prefill from Upgrade Analysis differs from it. */
+    notice?: string;
 }
 
 const ALL_STARS = ['1', '2', '3', '4', '5', '6'];
@@ -107,7 +109,9 @@ export const WishlistEntryForm: React.FC<Props> = ({
     submitLabel = initial ? 'Save' : 'Add Entry',
     onSubmit,
     onCancel,
+    notice,
 }) => {
+    const [submitting, setSubmitting] = useState(false);
     const [name, setName] = useState(initial?.name ?? '');
     const [slots, setSlots] = useState<GearSlotName[]>(initial?.filters.slot ?? []);
     const [stars, setStars] = useState<string[]>(initial?.filters.stars?.map(String) ?? []);
@@ -140,8 +144,11 @@ export const WishlistEntryForm: React.FC<Props> = ({
         initial?.filters.subStatsMin ?? initial?.filters.subStats?.length ?? 1
     );
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const targetIncomplete = (targetKind === 'role' && !role) || (targetKind === 'ship' && !shipId);
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (submitting || targetIncomplete) return;
         const filters: WishlistEntry['filters'] = {
             ...(slots.length > 0 ? { slot: slots } : {}),
             ...(stars.length > 0 ? { stars: stars.map(Number) } : {}),
@@ -164,11 +171,16 @@ export const WishlistEntryForm: React.FC<Props> = ({
                 : targetKind === 'ship' && shipId
                   ? { kind: 'ship', shipId }
                   : undefined;
-        void onSubmit({
-            name: trimmed || describeWishlistEntry(filters),
-            filters,
-            ...(target ? { target } : {}),
-        });
+        setSubmitting(true);
+        try {
+            await onSubmit({
+                name: trimmed || describeWishlistEntry(filters),
+                filters,
+                ...(target ? { target } : {}),
+            });
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const allowedMainStats = getAllowedMainStatNames(slots);
@@ -186,7 +198,12 @@ export const WishlistEntryForm: React.FC<Props> = ({
     );
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+            {notice && (
+                <Callout variant="tip" title="Note">
+                    {notice}
+                </Callout>
+            )}
             <Input
                 label="Name"
                 value={name}
@@ -219,6 +236,11 @@ export const WishlistEntryForm: React.FC<Props> = ({
                         selected={ships.find((ship) => ship.id === shipId) ?? null}
                         onSelect={(ship) => setShipId(ship.id)}
                     />
+                )}
+                {targetIncomplete && (
+                    <p className="text-xs text-theme-text-secondary">
+                        Pick a {targetKind === 'role' ? 'role' : 'ship'}, or set the target to None.
+                    </p>
                 )}
             </div>
 
@@ -314,7 +336,7 @@ export const WishlistEntryForm: React.FC<Props> = ({
             </div>
 
             <div className="flex gap-2">
-                <Button type="submit" variant="primary">
+                <Button type="submit" variant="primary" disabled={submitting || targetIncomplete}>
                     {submitLabel}
                 </Button>
                 {onCancel && (

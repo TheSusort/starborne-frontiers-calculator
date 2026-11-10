@@ -83,9 +83,11 @@ export async function scoreWishlistMatches(
     if (target.kind === 'ship') {
         const ship = input.ships.find((s) => s.id === target.shipId);
         if (!ship) return unscored('ship-missing');
+        if (matches.length === 0) return { status: 'scored', scores: [] };
         return { status: 'scored', scores: await scoreForShip(input, ship, matches) };
     }
     if (!isShipTypeName(target.role)) return unscored('role-unknown');
+    if (matches.length === 0) return { status: 'scored', scores: [] };
     return { status: 'scored', scores: await scoreForRole(input, target.role, matches) };
 }
 
