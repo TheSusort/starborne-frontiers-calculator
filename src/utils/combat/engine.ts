@@ -1087,6 +1087,7 @@ export function buildEnemyPlayerActorRuntime(
         stasisBreakExemptWhen: e.stasisBreakExemptWhen,
         chargeLossImmune: e.chargeLossImmune,
         alwaysCrits: e.shipSkills?.alwaysCrits,
+        controlImmune: e.shipSkills?.controlImmune,
         affinity: e.affinity,
         preFight: e.preFight,
     });
@@ -2511,6 +2512,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         stasisBreakExemptWhen: input.stasisBreakExemptWhen,
         chargeLossImmune: input.chargeLossImmune,
         alwaysCrits: input.shipSkills.alwaysCrits,
+        controlImmune: input.shipSkills.controlImmune,
         affinity: input.affinity,
         preFight: input.preFight,
     });
@@ -2633,6 +2635,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             stasisBreakExemptWhen: t.stasisBreakExemptWhen,
             chargeLossImmune: t.chargeLossImmune,
             alwaysCrits: t.walk?.shipSkills.alwaysCrits,
+            controlImmune: t.walk?.shipSkills.controlImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
@@ -7525,6 +7528,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     actingActorId,
                     killerId: cause?.killerId,
                     byDirectDamage: cause?.byDirectDamage,
+                    byDetonation: (cause?.bombPortion ?? 0) > 0,
                 });
                 if (outcome === 'destroyed') {
                     // Bomb-splash-on-death: a ship that dies with un-detonated bombs splashes a

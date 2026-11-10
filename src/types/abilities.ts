@@ -1348,7 +1348,8 @@ export interface Ability {
      *  (Stalwart). Absent → any hit. */
     triggerPrimaryTargetOnly?: boolean;
     /** on-destroyed and on-enemy-destroyed: fire only when the death is from DIRECT damage,
-     *  never a damage-over-time tick — "Upon being destroyed by direct damage, …
+     *  never a damage-over-time tick nor a bomb burst or splash (`isDirectDeath`, triggers.ts)
+     *  — "Upon being destroyed by direct damage, …
      *  grants all allies Everliving Regeneration II" (Paracelsus, the owner's own death);
      *  "on kill, the Boss clears Pressing Onslaught" (Fenri, the enemy it kills). Absent → the
      *  listener's per-type rule. */

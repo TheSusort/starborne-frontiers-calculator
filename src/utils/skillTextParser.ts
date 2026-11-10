@@ -25,6 +25,7 @@ import { FACTION_NAMES, factionSpellings, type FactionName } from '../constants/
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 import { EXPOSED } from './combat/exposedStatus';
+import { CONTROL_EFFECT_STATUSES } from './combat/controlImmunity';
 
 /**
  * Represents a parsed segment of skill text
@@ -753,8 +754,6 @@ const ENEMY_AFFECTED_BONUS_RE =
 // other category name stays unparsed, since no status carries it.
 const STATUS_CATEGORY_RE = /\ban?\s+<unit-skill>[^<]+<\/unit-skill>\s+effects?\b/i;
 const CONTROL_EFFECT_CATEGORY_RE = /\ban?\s+<unit-skill>\s*control\s*<\/unit-skill>\s+effects?\b/i;
-// The statuses "a control effect" covers (user ruling 2026-10-02).
-const CONTROL_EFFECT_STATUSES = ['Stasis', 'Disable', 'Provoke', 'Taunt', 'Concentrate Fire'];
 // "an additional N% damage to enemies affected by <Effect>[ or <Effect>]" — the same enemy-state
 // bonus with the effects named AFTER the amount (Rikra). Matched on RAW text so the <unit-skill>
 // tags delimit the names; the list ends at the first non-tag word.

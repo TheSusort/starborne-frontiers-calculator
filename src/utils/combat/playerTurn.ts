@@ -144,6 +144,7 @@ import {
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
 import { scaledStatusCount } from './statusCountScaling';
 import { isStasis } from './stasisBuffs';
+import { immuneToEnemyStatus } from './controlImmunity';
 export { scaledStatusCount };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
@@ -3263,6 +3264,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!decision.landed) scheduledResistViaRoll.set(buff.buffName, decision.viaRoll);
         return decision.landed;
     });
+    statusEngine.setSkipsTimedEnemyApplication(
+        (buff) => hasVictim && immuneToEnemyStatus(enemy, buff.buffName, buff.parsedEffects)
+    );
 
     // Per-round buff totals from the status engine. This actor notifies the
     // engine of its REAL fired slot this round (action-fed: scheduled timed
@@ -4232,6 +4236,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 !conditionsMet(
                     status.conditions,
                     statusGateOverlay(recipientGateCtx(resolvedVictim), resolvedVictim.id, status)
+                )
+            ) {
+                anyGateRejected = true;
+                continue;
+            }
+            // A control-immune recipient is never attempted (`isControlOrSpeedDebuff`). It counts
+            // as turned away, so the clause's paired control announces nothing on it either.
+            if (
+                immuneToEnemyStatus(
+                    resolvedVictim,
+                    status.payload.buffName,
+                    status.payload.parsedEffects
                 )
             ) {
                 anyGateRejected = true;
@@ -5469,8 +5485,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // status landed on, handled above; with none it controlled nobody. Only the single-target
         // 'enemy' scope names the bound target here.
         if (ctrl.target !== 'enemy') continue;
-        // Standalone control with no named status: only Block-Debuff immunity gates it.
-        if (targetImmuneToDebuffs) continue;
+        // Standalone control with no named status: Block-Debuff immunity and control immunity
+        // gate it.
+        if (targetImmuneToDebuffs || enemy.controlImmune) continue;
         // Paired named status resisted on the scheduled path → suppress the success event.
         if (resistedEnemyDebuffNames.has(pairedName)) continue;
         emitControl(effect, enemy.id);

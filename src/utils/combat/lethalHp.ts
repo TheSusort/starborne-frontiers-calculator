@@ -23,6 +23,8 @@ export interface LethalHpOpts {
     actingActorId: string | undefined;
     killerId?: string;
     byDirectDamage?: boolean;
+    /** See the `ship-destroyed` event's `byDetonation`. */
+    byDetonation?: boolean;
 }
 
 /**
@@ -98,6 +100,13 @@ export function resolveLethalHp(
     // caller's corpse-re-hit handling relies on a second lethal resolution being a no-op. The
     // healing result reads the destroyed round back off the heal target's runtime
     // `destroyedRound` field at the result site — no side-specific scalar write is needed here.
-    recordDestroyed(victim, opts.round, opts.bus, opts.killerId, opts.byDirectDamage);
+    recordDestroyed(
+        victim,
+        opts.round,
+        opts.bus,
+        opts.killerId,
+        opts.byDirectDamage,
+        opts.byDetonation
+    );
     return 'destroyed';
 }

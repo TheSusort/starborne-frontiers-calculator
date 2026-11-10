@@ -597,6 +597,9 @@ export interface CombatActor {
     /** When true, enemy-sourced charge removal is a no-op against this actor
      *  ("immune to charge loss effects"). Derived from ship skill text. */
     chargeLossImmune: boolean;
+    /** Control and speed debuffs are never attempted against this actor (ShipSkills.controlImmune;
+     *  the rule lives at `isControlOrSpeedDebuff`, controlImmunity.ts). Absent → false. */
+    controlImmune?: boolean;
     /** Every attack of this actor crits at a 100% rate, whatever its affinity matchup or crit
      *  debuffs (ShipSkills.alwaysCrits). Absent → the ordinary capped crit rate. */
     alwaysCrits?: boolean;
@@ -621,6 +624,7 @@ export function createActor(
         stasisBreakExemptWhen?: Condition[];
         affinity?: AffinityName;
         chargeLossImmune?: boolean;
+        controlImmune?: boolean;
         alwaysCrits?: boolean;
         preFight?: PreFightCombatModifiers;
     }
@@ -670,11 +674,19 @@ export function recordDestroyed(
     round: number,
     bus: CombatEventBus,
     killerId?: string,
-    byDirectDamage?: boolean
+    byDirectDamage?: boolean,
+    byDetonation?: boolean
 ): void {
     if (actor.destroyedRound !== undefined) return;
     actor.destroyedRound = round;
-    bus.emit({ type: 'ship-destroyed', actorId: actor.id, round, killerId, byDirectDamage });
+    bus.emit({
+        type: 'ship-destroyed',
+        actorId: actor.id,
+        round,
+        killerId,
+        byDirectDamage,
+        ...(byDetonation ? { byDetonation: true } : {}),
+    });
 }
 
 /** Safety cap on the engine round loop's `selectNextBySpeed` pool drain — converts a runaway

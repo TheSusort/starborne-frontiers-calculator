@@ -335,6 +335,11 @@ export interface StatusEngine {
      *  + that actor's affinity), so a scheduled timed enemy upsert fired during `sourceFired`
      *  draws against the correct per-turn chance — not the attacker's setup-time scalar. */
     setLandsTimedEnemyApplication(fn: (buff: SelectedGameBuff) => boolean): void;
+    /** Swap the TIMED-enemy skip hook used by `sourceFired`: an application it answers true for
+     *  is never attempted — no landing roll, no resist, no landing (a control-immune turn target;
+     *  see `isControlOrSpeedDebuff`). The engine resets it per turn with the landing hook.
+     *  Default: skips nothing. */
+    setSkipsTimedEnemyApplication(fn: (buff: SelectedGameBuff) => boolean): void;
     /** Observer run IMMEDIATELY BEFORE an enemy-side timed application reaches the family contest,
      *  with the target's store id and the incoming buff name. It exists so the engine can settle
      *  business the game settles at hit time but this engine defers — a pending Stasis break, whose
@@ -965,6 +970,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const setLandsTimedEnemyApplication = (fn: (buff: SelectedGameBuff) => boolean): void => {
         landsTimedEnemyApplication = fn;
     };
+    let skipsTimedEnemyApplication: (buff: SelectedGameBuff) => boolean = () => false;
+    const setSkipsTimedEnemyApplication = (fn: (buff: SelectedGameBuff) => boolean): void => {
+        skipsTimedEnemyApplication = fn;
+    };
     // Unset by default: a statusEngine built without the combat engine (unit fixtures, DPS
     // helpers) suppresses nothing.
     let isTurnBlockedReader: (actorId: string) => boolean = () => false;
@@ -1413,6 +1422,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // Turns each actor has begun this round (cleared by beginRound) — what tells a granter's
     // later turn from its first, which beginRound already banked.
     const turnsBegunThisRound = new Map<string, number>();
+    /** Per-round accumulating statuses gained once at the START of each round and never on an
+     *  extra action, unlike the every-turn rule `beginTurn` applies (R58). Pressing Onslaught:
+     *  owner ruling #519. */
+    const ROUND_START_ONLY_ACCUMULATORS: ReadonlySet<string> = new Set(['Pressing Onslaught']);
     const beginTurn = (actorId: string): void => {
         currentTurnActorId = actorId;
         const begun = (turnsBegunThisRound.get(actorId) ?? 0) + 1;
@@ -1422,6 +1435,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const tick = ++accumTickSeq;
         for (const [ownerId, map] of accumSelfMaps) {
             for (const state of map.values()) {
+                if (ROUND_START_ONLY_ACCUMULATORS.has(state.buffName)) continue;
                 bankSelfShares(ownerId, state, perRoundShares(state, actorId), tick);
             }
         }
@@ -1617,6 +1631,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             // target id either. A persistent-stacking name never has a TIMED-store entry to be
             // outclassed by (it lives in the separate persistent map), so this is a no-op for it.
             if (isOutclassedByExistingFamily('enemy', buff.buffName)) continue;
+            if (skipsTimedEnemyApplication(buff)) continue;
             if (!landsTimedEnemyApplication(buff)) {
                 resistedEnemy.push(buff.buffName);
                 continue;
@@ -2818,6 +2833,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         dotDurationExtensionFor: (ownerId: string) => input.dotDurationExtensionFor?.(ownerId) ?? 0,
         sourceFired,
         setLandsTimedEnemyApplication,
+        setSkipsTimedEnemyApplication,
         setTurnBlockedReader,
         setDestroyedReader,
         setBeforeTimedEnemyApplication,
