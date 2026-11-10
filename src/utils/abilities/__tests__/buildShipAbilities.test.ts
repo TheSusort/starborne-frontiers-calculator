@@ -5971,6 +5971,28 @@ describe('Fenri charged (Doom Shot): HP thresholds read at cast', () => {
         expect(all.some((a) => a.trigger === 'on-hp-threshold-crossed')).toBe(false);
     });
 
+    it('"the damage increases by X%" without an HP clause yields no modifier', () => {
+        const chargedOf = (text: string) =>
+            slot(
+                buildShipAbilities(
+                    ship({
+                        activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+                        chargeSkillText: text,
+                        chargeSkillCharge: 3,
+                    })
+                ).slots,
+                'charged'
+            )!.abilities;
+        const ungated = chargedOf(
+            'This Unit deals <unit-damage>400% damage</unit-damage>. The damage increases by 50% against marked targets.'
+        );
+        expect(ungated.some((a) => a.type === 'modifier')).toBe(false);
+        const gated = chargedOf(
+            "This Unit deals <unit-damage>400% damage</unit-damage>. When this Unit's HP drops below 66%, the damage increases by 50%."
+        );
+        expect(gated.filter((a) => a.type === 'modifier')).toHaveLength(1);
+    });
+
     it('a White Phosphorus inflict is a dot, like an Inferno inflict, never a named debuff', () => {
         const active = slot(
             buildShipAbilities(

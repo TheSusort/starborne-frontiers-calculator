@@ -110,7 +110,6 @@ import { immuneToEnemyStatus } from './controlImmunity';
  *  and re-exported here for the machinery's callers. `start-of-round` maps onto
  *  the `round-started` event (one per round, before any turn — see the
  *  AbilityTrigger doc note). */
-
 export { LIVE_TRIGGERS };
 
 /** A kill by DIRECT damage: neither a DoT tick (`byDirectDamage: false`) nor a bomb burst or

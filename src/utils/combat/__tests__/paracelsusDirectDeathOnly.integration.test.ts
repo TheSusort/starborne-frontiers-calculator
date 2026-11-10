@@ -3,8 +3,7 @@
  * max HP and grants all allies Everliving Regeneration II for 4 turns." One condition heads the
  * whole sentence: a death to a damage-over-time tick fires neither half. A Bomb burst is direct
  * damage here: it fires both (only Fenri's on-kill clause treats a bomb as not direct, #519).
- * Salvation's unqualified
- * "When this Unit is destroyed" still fires on any death.
+ * Salvation's unqualified "When this Unit is destroyed" still fires on any death.
  *
  * Real parsed passives (buildTraceShip, refit 4), mounted on both sides. The dying ship sits at M4
  * at 1 HP with an ally behind it at M3. A faster enemy either hits it (attack 1000) or carries no

@@ -24,9 +24,8 @@ const dataSpeedByName: ReadonlyMap<string, number | undefined> = new Map(
  * effects lower speed — read from the application's own `effects` when given, else from the
  * game's buff data.
  *
- * Every enemy-status landing site asks this BEFORE its landing roll and skips the application
- * entirely on a `CombatActor.controlImmune` target: no roll, no resist, no landing, no reaction
- * — the same shape as the #590 outclass skip.
+ * A landing site skips the application entirely on a `CombatActor.controlImmune` target, before
+ * any landing roll: no roll, no resist, no landing, no reaction — beside the #590 outclass skip.
  */
 export function isControlOrSpeedDebuff(buffName: string, effects?: ParsedBuffEffects): boolean {
     if (CONTROL_SET.has(buffName)) return true;

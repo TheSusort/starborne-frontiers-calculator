@@ -103,6 +103,15 @@ describe.each<Placement>(['player', 'enemy'])(
             expect(below / above).toBeCloseTo((1 + 0.5 + 0.1) / (1 + 0.1), 9);
         });
 
+        it.each([
+            [0.66, false],
+            [0.6599, true],
+        ])('at %s HP the +50% bonus applies: %s', (hp, bonus) => {
+            const { doomShot } = fight(side, hp);
+            const expected = 4 * ATTACK * (1 + 0.1 + (bonus ? 0.5 : 0)) * DEFENCE_FACTOR;
+            expect(doomShot.damage).toBeCloseTo(expected, 6);
+        });
+
         it('below 66% HP: the active skill is not boosted', () => {
             expect(fight(side, 0.6).nextActive.damage).toBeCloseTo(
                 fight(side, 0.7).nextActive.damage!,

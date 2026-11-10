@@ -829,23 +829,23 @@ function parseModifiers(text: string): ParsedModifier[] {
     const increaseM = DAMAGE_INCREASES_BY_RE.exec(plain);
     if (increaseM) {
         const hpGateM = SELF_HP_DROPS_BELOW_RE.exec(sentenceContaining(plain, increaseM.index));
-        out.push({
-            channel: 'outgoingDamage',
-            value: parseFloat(increaseM[1]),
-            isMultiplicative: true,
-            target: 'self',
-            conditions: hpGateM
-                ? [
-                      {
-                          subject: 'hp-threshold',
-                          derivable: true,
-                          hpComparator: 'below',
-                          hpPercent: parseFloat(hpGateM[1]),
-                          hpSubject: 'self',
-                      },
-                  ]
-                : [],
-        });
+        if (hpGateM) {
+            out.push({
+                channel: 'outgoingDamage',
+                value: parseFloat(increaseM[1]),
+                isMultiplicative: true,
+                target: 'self',
+                conditions: [
+                    {
+                        subject: 'hp-threshold',
+                        derivable: true,
+                        hpComparator: 'below',
+                        hpPercent: parseFloat(hpGateM[1]),
+                        hpSubject: 'self',
+                    },
+                ],
+            });
+        }
     }
 
     return out;

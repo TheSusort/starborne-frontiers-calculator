@@ -73,13 +73,15 @@ describe('Fenri bounty encounter, end to end', () => {
         }
     });
 
-    // Without the stacking, each round's hit on the same victim is the same number.
+    // Without the stacking, each round's active hit on the same victim is the same number. Only
+    // his active casts that did not crit are compared; charged casts and crits scale differently.
     it('Fenri hits the front ship harder each round while nobody dies', () => {
-        const frontHits = fenriAttacks.map(({ entry }) => entry.targets[0].amount!);
-        expect(frontHits).toHaveLength(10);
+        const frontHits = fenriAttacks
+            .filter(({ entry }) => entry.slot === 'active' && !entry.targets[0].didCrit)
+            .map(({ entry }) => entry.targets[0].amount!);
+        expect(frontHits.length).toBeGreaterThanOrEqual(2);
         for (let i = 1; i < frontHits.length; i++) {
-            if (i % 3 === 0) continue; // the charged skill rounds scale differently
-            expect(frontHits[i]).toBeGreaterThan(frontHits[0]);
+            expect(frontHits[i]).toBeGreaterThan(frontHits[i - 1]);
         }
     });
 

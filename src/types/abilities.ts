@@ -1616,9 +1616,8 @@ export interface ShipSkills {
      *  Threaded onto CombatActor.chargeLossImmune by the engine adapter; enemy-sourced
      *  charge removal is a no-op against actors with this flag set. */
     chargeLossImmune?: boolean;
-    /** True when the ship's passive text declares immunity to control debuffs (Fenri). Control
-     *  covers Provoke, Taunt, Stasis, Concentrate Fire, Disable and every speed debuff (owner
-     *  ruling 2026-11-10, #519). */
+    /** True when the ship's passive text declares immunity to control debuffs (Fenri). What
+     *  counts as control is `isControlOrSpeedDebuff` (utils/combat/controlImmunity.ts, #519). */
     controlImmune?: boolean;
     /** True when the ship's refit-active text says "This Unit's attacks always critically hit"
      *  (Tormenter, Asphodel R2+). Read by the engine onto CombatActor.alwaysCrits: every attack
