@@ -18,9 +18,9 @@ import { buildCellIndex, cellsOf, hitCellOf } from './cellIndex';
 import type { RedirectBasis } from './protectionTransfer';
 
 /**
- * One footprint cell that landed on a living opposing actor.
- * `roleScale` is the per-cell damage multiplier: origin cells deal full damage
- * (1.0), covered/splash cells deal half (0.5).
+ * One living opposing unit a footprint landed on — one entry per unit, however many of its cells
+ * the footprint covers. `roleScale` is the damage multiplier: full (1.0) when any of its cells is
+ * the origin, half (0.5) when it is only covered.
  */
 export interface FootprintHit {
     victim: CombatActor;

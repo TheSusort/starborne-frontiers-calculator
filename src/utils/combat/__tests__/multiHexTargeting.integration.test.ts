@@ -11,7 +11,9 @@ import { simulateBattle, type BattlePlacement } from '../../calculators/battleSi
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
 
-const makeShip = (id: string, activePattern: string): Ship => ({
+const DAMAGE_ONLY = 'This Unit deals <unit-damage>100% damage</unit-damage>.';
+
+const makeShip = (id: string, activePattern: string, activeSkillText = DAMAGE_ONLY): Ship => ({
     id,
     name: id,
     rarity: 'legendary',
@@ -31,7 +33,7 @@ const makeShip = (id: string, activePattern: string): Ship => ({
     implants: {},
     refits: [],
     affinity: 'antimatter',
-    activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+    activeSkillText,
     chargeSkillCharge: 0,
     activeTarget: 'front',
     activePattern,
@@ -51,7 +53,7 @@ const placement = (
         crit: 0,
         critDamage: 0,
         defensePenetration: 0,
-        hacking: 0,
+        hacking: 10_000,
         defence: 0,
         hp: 1_000_000_000,
         speed: 100,
@@ -96,6 +98,55 @@ describe('multi-hex enemy — end-to-end targeting', () => {
         )!.actorId;
         const r1 = result.combatLog.find((r) => r.round === 1)!;
         const enemyEntries = r1.turns
+            .flatMap((t) => t.entries)
+            .filter((e) => e.kind === 'attack' && e.actorId.startsWith('e:'));
+        expect(enemyEntries).toHaveLength(1);
+        const [entry] = enemyEntries;
+        expect(entry.kind === 'attack' && entry.targets.map((t) => t.targetId)).toEqual([bossId]);
+    });
+
+    it('the cast’s AoE recipients expand from the same hex: a debuff lands on the boss alone', () => {
+        const result = simulateBattle({
+            playerTeam: [
+                placement(
+                    makeShip(
+                        'p1',
+                        'Pattern-Line-Range-2',
+                        'This Unit deals <unit-damage>100% damage</unit-damage> and inflicts <unit-skill>Defense Down I</unit-skill> for 2 turns.'
+                    ),
+                    'M1',
+                    5000
+                ),
+            ],
+            enemyTeam: [
+                placement(makeShip('boss', 'Pattern-Base'), 'M3', 0, ['M3', 'M4']),
+                placement(makeShip('back', 'Pattern-Base'), 'M1', 0),
+            ],
+            rounds: 1,
+        });
+
+        const debuffTargets = result.combatLog[0].turns
+            .flatMap((t) => t.entries)
+            .filter((e) => e.kind === 'debuff')
+            .flatMap((e) => e.targets.map((t) => t.targetId));
+        expect(debuffTargets).toEqual(['e:boss:0']);
+    });
+
+    it('a two-hex TEAM actor (not the focus) is struck once, at its front hex', () => {
+        const result = simulateBattle({
+            playerTeam: [
+                placement(makeShip('focus', 'Pattern-Base'), 'T1', 0),
+                placement(makeShip('boss', 'Pattern-Base'), 'M3', 0, ['M3', 'M4']),
+                placement(makeShip('back', 'Pattern-Base'), 'M1', 0),
+            ],
+            enemyTeam: [placement(makeShip('e1', 'Pattern-Line-Range-2'), 'M1', 5000)],
+            rounds: 1,
+        });
+
+        const bossId = result.roster.find(
+            (r) => r.side === 'player' && r.position === 'M3'
+        )!.actorId;
+        const enemyEntries = result.combatLog[0].turns
             .flatMap((t) => t.entries)
             .filter((e) => e.kind === 'attack' && e.actorId.startsWith('e:'));
         expect(enemyEntries).toHaveLength(1);
