@@ -3,7 +3,7 @@ import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, Skill } from '../../../types/abilities';
 import { bossShip } from '../../../constants/bountyBosses';
-import { canonicaliseSkillSubject } from '../../skillTextParser';
+import { canonicaliseSkillSubject, parseSkillEffects } from '../../skillTextParser';
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -5869,5 +5869,53 @@ describe('"clears" is a removal verb, like "removes"', () => {
         );
         expect(grantsOnslaught).toBe(false);
         expect(passive.filter((a) => a.type === 'remove-self-buff')).toHaveLength(1);
+    });
+});
+
+describe('"on kill" is the only kill phrasing that requires a direct-damage death', () => {
+    it('an "upon destroying an enemy" removal is owner-scoped but not direct-death gated (Butcher)', () => {
+        const passive = slot(
+            buildShipAbilities(
+                ship({
+                    refits: [],
+                    firstPassiveSkillText:
+                        'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.',
+                })
+            ).slots,
+            'passive'
+        )!.abilities;
+        const removal = passive.find((a) => a.type === 'remove-self-buff')!;
+        expect(removal.triggerKillerScope).toBe('owner');
+        expect(removal.triggerRequiresDirectDeath).toBeUndefined();
+    });
+});
+
+describe('leading "Every turn, this Unit gains <X>" accrual guards', () => {
+    const onslaught = (passiveText: string) =>
+        parseSkillEffects(passiveText, 'passive1').find(
+            (e) => e.buffName === 'Pressing Onslaught'
+        )!;
+
+    it('a mid-sentence "… and every turn, this Unit gains <X>" does not accrue', () => {
+        const effect = onslaught(
+            'At the start of combat and every turn, this Unit gains <unit-skill>Pressing Onslaught</unit-skill>.'
+        );
+        expect(effect.stacks).toBeUndefined();
+        expect(effect.stackTrigger).toBeUndefined();
+    });
+
+    it('a sentence-opening grant with a duration does not accrue', () => {
+        const effect = onslaught(
+            'Every turn, this Unit gains <unit-skill>Pressing Onslaught</unit-skill> for 2 turns.'
+        );
+        expect(effect.duration).toBe(2);
+        expect(effect.stacks).toBeUndefined();
+        expect(effect.stackTrigger).toBeUndefined();
+    });
+
+    it('the sentence-opening durationless grant accrues one stack per round', () => {
+        expect(
+            onslaught('Every turn, this Unit gains <unit-skill>Pressing Onslaught</unit-skill>.')
+        ).toMatchObject({ stacks: 1, duration: 'recurring', stackTrigger: 'per-round' });
     });
 });

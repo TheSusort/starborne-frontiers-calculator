@@ -1609,10 +1609,11 @@ const ENEMY_BUFFED_RE = /\bwhen\s+an?\s+enemy\s+gains\s+an?\s+buff\b/i;
 // to on-enemy-destroyed: "when an enemy dies", "whenever any enemy unit dies", "upon destroying
 // an enemy", "when this Unit destroys an enemy", "when an enemy is destroyed", "on kill". The
 // "destroys" alternate is anchored on the "this Unit" subject so a rule sentence such as
-// Enforcer's "If an attack destroys an enemy, …" mints no trigger. A bare "destroyed" is NOT an enemy death: it is also the self-death ("when
-// this Unit is destroyed", "destroyed by direct damage") and ally-death ("when an ally is
-// destroyed") vocabulary. Separate from ENEMY_DEATH_PHRASING_RE (the ally-charge bail-out and
-// extra-action trigger), which keeps its own enemy-death list.
+// Enforcer's "If an attack destroys an enemy, …" mints no trigger. A bare "destroyed" is NOT an
+// enemy death: it is also the self-death ("when this Unit is destroyed", "destroyed by direct
+// damage") and ally-death ("when an ally is destroyed") vocabulary. Separate from
+// ENEMY_DEATH_PHRASING_RE (the ally-charge bail-out and extra-action trigger), which keeps its
+// own enemy-death list.
 const KILL_TRIGGER_RE =
     /when\s+an\s+enemy\s+dies|\bwhenever\s+(?:any|an)\s+enemy(?:\s+unit)?\s+dies\b|\bon\s+kill\b|\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\bwhen\s+an\s+enemy\s+is\s+destroyed\b/i;
 // The kill phrasings that make the OWNER the killer — "upon destroying an enemy", "When this
@@ -6088,7 +6089,7 @@ export function canonicaliseSkillSubject(text: string): string {
 
 /** `ship` with `canonicaliseStatusNames` and `canonicaliseSkillSubject` applied to every skill
  *  text; the same object when no text changes. */
-export function withCanonicalStatusNames(ship: Ship): Ship {
+export function withCanonicalSkillText(ship: Ship): Ship {
     let out: Ship | undefined;
     for (const field of SHIP_SKILL_TEXT_FIELDS) {
         const text = ship[field];

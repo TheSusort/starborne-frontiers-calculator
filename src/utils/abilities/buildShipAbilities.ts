@@ -135,7 +135,7 @@ import {
     detectPurgeStripsShield,
     parseHealNoCrit,
     parseSkillEffects,
-    withCanonicalStatusNames,
+    withCanonicalSkillText,
     classifyEnemyEffect,
     statusEffectCondition,
     parsePreCombatStatGrants,
@@ -3585,8 +3585,9 @@ function applyPurgeRepairPin(shipName: string, bySlot: Map<SkillSlot, Positioned
 
 export function buildShipAbilities(rawShip: Ship): ShipSkills {
     counter = 0;
-    // Every pass below reads status names off the text by position (canonicaliseStatusNames).
-    const ship = withCanonicalStatusNames(rawShip);
+    // Every pass below reads the canonical text: engine status names (positional passes read
+    // them off the text) and "This Unit" for a boss's "The Boss" subject.
+    const ship = withCanonicalSkillText(rawShip);
 
     // DoTs are derived at the ship level (active/charge only — no passive DoTs).
     const { activeDoTs, chargedDoTs } = buildDoTAutoFill(ship);
