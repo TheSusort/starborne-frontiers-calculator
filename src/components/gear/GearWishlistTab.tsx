@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { getGearSet } from '../../constants/gearSets';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
+import { RARITIES } from '../../constants/rarities';
 import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
 import { useNotification } from '../../hooks/useNotification';
 import { GearPiece } from '../../types/gear';
@@ -285,7 +286,7 @@ function FilterChips({ entry }: { entry: WishlistEntry }) {
     const { filters } = entry;
     if (filters.slot?.length) chips.push(...filters.slot.map((s) => GEAR_SLOTS[s]?.label ?? s));
     if (filters.stars?.length) chips.push(...filters.stars.map((n) => `${n}★`));
-    if (filters.rarity?.length) chips.push(...filters.rarity);
+    if (filters.rarity?.length) chips.push(...filters.rarity.map((r) => RARITIES[r]?.label ?? r));
     if (filters.setBonus?.length)
         chips.push(...filters.setBonus.map((s) => getGearSet(s)?.name ?? s));
     if (filters.mainStat?.length) {

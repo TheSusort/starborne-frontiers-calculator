@@ -209,7 +209,6 @@ export const WishlistEntryForm: React.FC<Props> = ({
                         { value: 'role', label: 'Role' },
                         { value: 'ship', label: 'Ship' },
                     ]}
-                    noDefaultSelection
                     helpLabel="A target ranks matches by upgrade value: for a role, against every piece you own in the slot; for a ship, against what it wears now."
                 />
                 {targetKind === 'role' && (
