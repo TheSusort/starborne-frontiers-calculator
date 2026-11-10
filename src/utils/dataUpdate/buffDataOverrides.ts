@@ -33,3 +33,27 @@ export const MANUAL_TYPE_OVERRIDES: Record<string, 'buff' | 'debuff' | 'effect'>
     'Inc. DoT Damage Up II': 'debuff',
     'Inc. DoT Damage Up III': 'debuff',
 };
+
+/**
+ * Statuses the upstream fetch never produces, appended by `npm run fetch-buffs` when absent so a
+ * regen cannot drop them. Each must also be present in `src/constants/buffs.ts`
+ * (`buffDataOverrides.test.ts`).
+ */
+export const MANUAL_BUFF_ADDITIONS: Array<{
+    name: string;
+    description: string;
+    type: 'buff' | 'debuff' | 'effect';
+}> = [
+    { name: 'Pressing Onslaught', description: '+10% Outgoing Direct Damage', type: 'buff' },
+    ...(
+        [
+            ['I', 15],
+            ['II', 30],
+            ['III', 45],
+        ] as const
+    ).map(([numeral, pct]) => ({
+        name: `White Phosphorus ${numeral}`,
+        description: `Deals Damage equal to ${pct}% of this units's attack, ignores defense and shield. Cannot be cleansed.`,
+        type: 'debuff' as const,
+    })),
+];

@@ -1,3 +1,4 @@
+import { dotFlagsOf } from '../dotFlags';
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
@@ -1959,6 +1960,7 @@ function applyNewDoTs(args: {
                 sourceId: args.sourceId,
                 appliedSeq,
                 appliedAttack: args.effectiveAttack,
+                ...dotFlagsOf(dot),
             });
             args.emitDotApplied('inferno', dot.stacks, dot.tier, appliedSeq, procs);
         } else if (dot.type === 'bomb') {

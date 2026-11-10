@@ -934,6 +934,10 @@ export type AbilityConfig =
           tier: number;
           stacks: number;
           duration: number;
+          /** Named DoT family riding `dotType` (White Phosphorus on `'inferno'`), stamped on the
+           *  applied stack with `unremovable`. */
+          family?: string;
+          unremovable?: boolean;
           /** The landing verb the DoT's source text states — the Burner gear set's "Applies
            *  Inferno 1" sets `'apply'`; absent → an inflict. It decides two things, exactly as a
            *  debuff's `application` does: how a REACTIVE DoT lands (`'apply'` = the affinity check

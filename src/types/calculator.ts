@@ -106,6 +106,10 @@ export interface DoTApplicationEntry {
     stacks: number; // stacks applied per use
     duration: number; // rounds before expiry (corrosion/inferno), or countdown for bombs
     autoFilled?: boolean;
+    /** Named DoT family riding `type` (White Phosphorus on `'inferno'`); lands on the applied stack. */
+    family?: string;
+    /** The applied stack survives any cleanse and the Cheat-Death DoT wipe. */
+    unremovable?: boolean;
     /** Ship-kit W5: enemy-adjacency splash scope for this DoT. Absent → single primary
      *  target (default). 'target-and-adjacent-enemies' → primary + its board-neighbours;
      *  'adjacent-enemies' → neighbours only. Consumed by the DoT fan-out in playerTurn. */

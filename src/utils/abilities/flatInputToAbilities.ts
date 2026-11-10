@@ -5,6 +5,7 @@ import {
     SecondaryDamage,
     ConditionalDamage,
 } from '../../types/calculator';
+import { dotFlagsOf } from '../dotFlags';
 import { Ability, Condition, ShipSkills, Skill } from '../../types/abilities';
 import type { DPSSimulationInput } from '../calculators/dpsSimulator';
 
@@ -67,6 +68,7 @@ function dotAbility(id: string, entry: DoTApplicationEntry): Ability {
             tier: entry.tier,
             stacks: entry.stacks,
             duration: entry.duration,
+            ...dotFlagsOf(entry),
         },
         autoFilled: true,
     };

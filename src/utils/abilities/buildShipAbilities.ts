@@ -161,6 +161,7 @@ import {
     buildSkillBuffAutoFill,
     DOT_TIER_MAP,
 } from '../calculators/skillBuffAutoFill';
+import { dotFlagsOf } from '../dotFlags';
 import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
 import { TOXIC_OVERFLOW, TOXIC_OVERFLOW_DURATION } from '../../constants/toxicOverflow';
 import { FACTION_NAMES, factionSpellings, type FactionName } from '../../constants/factions';
@@ -3441,6 +3442,7 @@ function dotAbility(entry: DoTApplicationEntry): Ability {
             tier: entry.tier,
             stacks: entry.stacks,
             duration: entry.duration,
+            ...dotFlagsOf(entry),
         },
         autoFilled: true,
     };

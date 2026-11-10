@@ -1,3 +1,4 @@
+import { dotFlagsOf } from '../dotFlags';
 import {
     Ability,
     AbilityTarget,
@@ -6291,6 +6292,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     sourceId: intent.ownerId,
                     appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                     ...(appliedAttack !== undefined ? { appliedAttack } : {}),
+                    ...dotFlagsOf(cfg),
                 });
             } else if (cfg.dotType === 'bomb') {
                 // A bomb SNAPSHOTS the owner's effective attack at application, as an Inferno
