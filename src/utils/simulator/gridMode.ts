@@ -34,12 +34,33 @@ export interface FittedBoard<T> {
  * near cells one in its own row, then the first in `cells`), taking the outside placements in
  * `ALL_POSITIONS` order. Once `cells` is full the rest are dropped. A board already inside
  * `cells` comes back as the same object.
+ *
+ * `footprintOf` names the cells a multi-hex unit occupies (its anchor is the board key). Such a
+ * unit stays only when every one of those cells is in `cells`; otherwise it is dropped, never
+ * moved, since its footprint is anchored.
  */
 export function fitBoardToCells<T>(
     board: Partial<Record<Position, T>>,
-    cells: readonly Position[]
+    cells: readonly Position[],
+    footprintOf?: (value: T) => readonly Position[] | undefined
 ): FittedBoard<T> {
     const allowed = new Set(cells);
+    if (footprintOf) {
+        let anchored = board;
+        let droppedUnits = 0;
+        for (const p of ALL_POSITIONS) {
+            const value = board[p];
+            const footprint = value === undefined ? undefined : footprintOf(value);
+            if (!footprint || footprint.every((cell) => allowed.has(cell))) continue;
+            if (anchored === board) anchored = { ...board };
+            delete anchored[p];
+            droppedUnits++;
+        }
+        if (anchored !== board) {
+            const fitted = fitBoardToCells(anchored, cells);
+            return { ...fitted, dropped: fitted.dropped + droppedUnits };
+        }
+    }
     const outside = ALL_POSITIONS.filter((p) => board[p] !== undefined && !allowed.has(p));
     if (outside.length === 0) return { board, moved: 0, dropped: 0 };
     const next: Partial<Record<Position, T>> = {};

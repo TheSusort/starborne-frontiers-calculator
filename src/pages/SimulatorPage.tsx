@@ -20,6 +20,13 @@ import RunComparison from '../components/simulator/RunComparison';
 import StatSweepPanel from '../components/simulator/StatSweepPanel';
 import { Button } from '../components/ui/Button';
 import SquadLeaderPicker from '../components/simulator/SquadLeaderPicker';
+import BossEncounterPicker from '../components/simulator/BossEncounterPicker';
+import { bossFootprintOfId } from '../constants/bountyBosses';
+import {
+    loadedBossShipId,
+    placementFootprint,
+    withoutStrayBossCells,
+} from '../utils/simulator/bossBoard';
 import { SquadLeaderSelection } from '../utils/combat/preFight';
 import {
     SQUAD_LEADER_STORAGE_KEYS,
@@ -196,7 +203,9 @@ const SimulatorPage: React.FC = () => {
         });
     };
 
+    // A loaded boss fills the side's board: there are no adds, so no cell opens the ship picker.
     const handleSelectPosition = (side: Side, position: Position) => {
+        if (loadedBossShipId(side === 'player' ? playerBoard : enemyBoard)) return;
         boardSetters[side].setSelected(position);
     };
 
@@ -221,7 +230,7 @@ const SimulatorPage: React.FC = () => {
     // Leaves battleResult as-is, matching add/remove — the user re-runs after setting teams.
     const handleLoadEncounter = (side: Side, board: BoardState) => {
         const { setBoard, setSelected } = boardSetters[side];
-        setBoard(board);
+        setBoard(withoutStrayBossCells(board));
         setSelected(undefined);
     };
 
@@ -243,6 +252,7 @@ const SimulatorPage: React.FC = () => {
         (from === 'player' ? setEnemyBoard : setPlayerBoard)(copy);
     };
 
+    const enemyHasBoss = loadedBossShipId(enemyBoard) !== undefined;
     const playerCount = Object.keys(playerBoard).length;
     const enemyCount = Object.keys(enemyBoard).length;
 
@@ -367,8 +377,8 @@ const SimulatorPage: React.FC = () => {
     useEffect(() => {
         if (gridMode !== 'small') return;
         const cells = gridCells(gridMode);
-        const player = fitBoardToCells(playerBoard, cells);
-        const enemy = fitBoardToCells(enemyBoard, cells);
+        const player = fitBoardToCells(playerBoard, cells, placementFootprint);
+        const enemy = fitBoardToCells(enemyBoard, cells, placementFootprint);
         if (player.board === playerBoard && enemy.board === enemyBoard) return;
         if (player.board !== playerBoard) setPlayerBoard(player.board);
         if (enemy.board !== enemyBoard) setEnemyBoard(enemy.board);
@@ -481,6 +491,7 @@ const SimulatorPage: React.FC = () => {
                                 onCloseSelector={() => setPlayerSelected(undefined)}
                                 resolveShip={(pos) => playerBoard[pos]?.ship ?? null}
                                 cells={gridCells(gridMode)}
+                                footprintOf={bossFootprintOfId}
                                 onLoadEncounter={(board) => handleLoadEncounter('player', board)}
                                 onCopyToOtherSide={() => handleCopyBoard('player')}
                                 copyLabel="Copy to enemy"
@@ -506,18 +517,31 @@ const SimulatorPage: React.FC = () => {
                                 resolveShip={(pos) => enemyBoard[pos]?.ship ?? null}
                                 cells={gridCells(gridMode)}
                                 onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
-                                onCopyToOtherSide={() => handleCopyBoard('enemy')}
+                                onCopyToOtherSide={
+                                    enemyHasBoss ? undefined : () => handleCopyBoard('enemy')
+                                }
+                                footprintOf={bossFootprintOfId}
+                                headerSlot={
+                                    <BossEncounterPicker
+                                        board={enemyBoard}
+                                        onChange={(board) => handleLoadEncounter('enemy', board)}
+                                        disabled={gridMode === 'small'}
+                                        helpLabel="Fight a bounty boss instead of a team. Needs the normal board."
+                                    />
+                                }
                                 copyLabel="Copy to your team"
                                 mirrored
                                 onEditStats={(pos) => setEditing({ side: 'enemy', position: pos })}
                                 hasOverrides={(pos) => hasAnyOverride(enemyBoard[pos]?.overrides)}
                             />
-                            <SquadLeaderPicker
-                                side="enemy"
-                                selection={enemySquadLeader}
-                                onChange={(sel) => handleSquadLeaderChange('enemy', sel)}
-                                board={enemyBoard}
-                            />
+                            {!enemyHasBoss && (
+                                <SquadLeaderPicker
+                                    side="enemy"
+                                    selection={enemySquadLeader}
+                                    onChange={(sel) => handleSquadLeaderChange('enemy', sel)}
+                                    board={enemyBoard}
+                                />
+                            )}
                         </div>
                     </div>
 

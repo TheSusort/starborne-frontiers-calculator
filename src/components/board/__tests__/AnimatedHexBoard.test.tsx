@@ -80,3 +80,25 @@ describe('AnimatedHexBoard', () => {
         expect(getByRole('group', { name: 'Your board' })).toBeTruthy();
     });
 });
+
+describe('AnimatedHexBoard multi-hex units', () => {
+    it('draws a covered cell as part of the unit and selects the anchor from it', () => {
+        const picked: string[] = [];
+        const { container } = render(
+            <AnimatedHexBoard
+                cells={ALL_POSITIONS}
+                ships={{ M1: ship({ name: 'Boss' }) }}
+                secondaryCells={{ M2: 'M1' }}
+                tone="enemy"
+                label="Board"
+                onSelectCell={(cell) => picked.push(cell)}
+            />
+        );
+        const m2 = container.querySelector('[data-cell="M2"]') as HTMLElement;
+        expect(m2).toHaveTextContent('Boss');
+        within(m2)
+            .getByRole('button', { name: /^Boss at M1/ })
+            .click();
+        expect(picked).toEqual(['M1']);
+    });
+});

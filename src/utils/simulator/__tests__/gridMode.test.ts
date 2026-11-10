@@ -63,3 +63,21 @@ describe('fitNotice', () => {
         );
     });
 });
+
+describe('fitBoardToCells with multi-hex units', () => {
+    const footprintOf = (v: string) => (v === 'boss' ? (['M1', 'M2'] as Position[]) : undefined);
+
+    it('drops a two-hex unit unless every footprint cell is on the grid', () => {
+        const board: Board = { M1: 'boss', T2: 'a' };
+        const fitted = fitBoardToCells(board, SMALL_GRID_POSITIONS, footprintOf);
+        expect(fitted.board).toEqual({ T2: 'a' });
+        expect(fitted.dropped).toBe(1);
+        expect(fitted.moved).toBe(0);
+    });
+
+    it('keeps a two-hex unit whose cells are all on the grid', () => {
+        const board: Board = { M1: 'boss' };
+        const fitted = fitBoardToCells(board, ALL_POSITIONS, footprintOf);
+        expect(fitted.board).toBe(board);
+    });
+});
