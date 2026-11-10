@@ -13,7 +13,8 @@ export interface ShipIdResolverDeps {
  *
  * A reference id (`template:<templateId>:<variant>`) names a unit nobody owns, so it is rebuilt
  * from the unit catalogue; looking one up among owned ships finds nothing and silently drops the
- * cell. A boss id (`boss:<bountyId>:<level>`) is rebuilt from the bounty boss data. Anything else is an owned ship's id.
+ * cell. A boss id (`boss:<bountyId>:<level>`) is rebuilt from the bounty boss data. Anything
+ * else is an owned ship's id.
  *
  * `null` means the id no longer resolves — a deleted ship, a re-imported roster, or a different
  * profile. Callers report that; it is not an error.

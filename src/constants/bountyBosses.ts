@@ -25,7 +25,7 @@ export interface BountyBoss {
 export const BOUNTY_BOSSES: readonly BountyBoss[] = [
     {
         id: 'fenri',
-        name: 'Fenri',
+        name: 'Fenri Khaliriz',
         affinity: 'antimatter',
         type: 'ATTACKER',
         footprint: ['M1', 'M2'],
