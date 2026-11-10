@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { WishlistEntry, WishlistTarget } from '../../types/wishlist';
 import { Callout, Input, Button, Select, RoleSelector } from '../ui';
 import { ShipSelector } from '../ship/ShipSelector';
@@ -8,7 +8,6 @@ import { GEAR_SLOT_ORDER, type GearSlotName } from '../../constants/gearTypes';
 import { RARITIES, type RarityName } from '../../constants/rarities';
 import { GEAR_SETS, getGearSet, type GearSetName } from '../../constants/gearSets';
 import { STATS } from '../../constants/stats';
-import IMPLANTS from '../../constants/implants';
 import { StatName, StatType } from '../../types/stats';
 import { filterMainStatKeys, getAllowedMainStatNames } from '../../utils/wishlist/allowedMainStats';
 import {
@@ -25,20 +24,19 @@ interface Props {
     onCancel?: () => void;
     /** Shown above the form, e.g. how a prefill from Upgrade Analysis differs from it. */
     notice?: string;
+    /** Existing group names, suggested by the Group input. */
+    groupOptions?: string[];
 }
 
 const ALL_STARS = ['1', '2', '3', '4', '5', '6'];
 const ALL_RARITIES = Object.keys(RARITIES) as RarityName[];
 
-const implantKeys = new Set(Object.keys(IMPLANTS));
 const GEAR_SET_ENTRIES = (
     Object.entries(GEAR_SETS) as [
         keyof typeof GEAR_SETS,
         (typeof GEAR_SETS)[keyof typeof GEAR_SETS],
     ][]
-)
-    .filter(([key]) => !implantKeys.has(key))
-    .sort(([, a], [, b]) => a.name.localeCompare(b.name));
+).sort(([, a], [, b]) => a.name.localeCompare(b.name));
 
 const STAT_TYPE_OPTIONS: { key: string; label: string; name: StatName; type: StatType }[] =
     Object.entries(STATS).flatMap(([statName, def]) =>
@@ -110,9 +108,12 @@ export const WishlistEntryForm: React.FC<Props> = ({
     onSubmit,
     onCancel,
     notice,
+    groupOptions = [],
 }) => {
     const [submitting, setSubmitting] = useState(false);
     const [name, setName] = useState(initial?.name ?? '');
+    const [group, setGroup] = useState(initial?.group ?? '');
+    const groupListId = useId();
     const [slots, setSlots] = useState<GearSlotName[]>(initial?.filters.slot ?? []);
     const [stars, setStars] = useState<string[]>(initial?.filters.stars?.map(String) ?? []);
     const [rarities, setRarities] = useState<RarityName[]>(initial?.filters.rarity ?? []);
@@ -165,6 +166,7 @@ export const WishlistEntryForm: React.FC<Props> = ({
                 : {}),
         };
         const trimmed = name.trim().slice(0, WISHLIST_NAME_MAX_LENGTH);
+        const groupName = group.trim().slice(0, WISHLIST_NAME_MAX_LENGTH);
         const target: WishlistTarget | undefined =
             targetKind === 'role' && role
                 ? { kind: 'role', role }
@@ -177,6 +179,7 @@ export const WishlistEntryForm: React.FC<Props> = ({
                 name: trimmed || describeWishlistEntry(filters),
                 filters,
                 ...(target ? { target } : {}),
+                ...(groupName ? { group: groupName } : {}),
             });
         } finally {
             setSubmitting(false);
@@ -211,6 +214,19 @@ export const WishlistEntryForm: React.FC<Props> = ({
                 maxLength={WISHLIST_NAME_MAX_LENGTH}
                 placeholder="Optional. Leave blank to name it from the filters"
             />
+            <Input
+                label="Group"
+                value={group}
+                onChange={(e) => setGroup(e.target.value)}
+                maxLength={WISHLIST_NAME_MAX_LENGTH}
+                list={groupListId}
+                placeholder="Optional. Entries with the same group are listed together"
+            />
+            <datalist id={groupListId}>
+                {groupOptions.map((option) => (
+                    <option key={option} value={option} />
+                ))}
+            </datalist>
 
             <div className="space-y-2">
                 <Select

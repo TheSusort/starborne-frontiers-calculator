@@ -1137,6 +1137,29 @@ const DocumentationPage: React.FC = () => {
                                         a row to change the order of your entries.
                                     </li>
                                     <li>
+                                        <strong>Groups:</strong> Type a name in an entry&apos;s
+                                        &quot;Group&quot; field (existing groups are suggested) to
+                                        list it under that group. Each group header shows how many
+                                        entries and matches it holds and its best upgrade for a
+                                        ship. Click a header to collapse the group; this is
+                                        remembered in your browser. The arrows on a header move the
+                                        whole group, and an entry&apos;s arrows move it within its
+                                        group. Entries without a group are listed last under
+                                        &quot;Ungrouped&quot;.
+                                    </li>
+                                    <li>
+                                        <strong>From ship:</strong> Click &quot;From ship&quot; and
+                                        pick a ship to get two entries built from its saved autogear
+                                        settings: one for weapon, hull and generator, and one for
+                                        sensor, software and thrusters with the main stats it wants.
+                                        Both look for the stats and gear sets its scoring uses, and
+                                        you choose how many of those substats a piece needs. A ship
+                                        without saved settings uses its role&apos;s defaults. The
+                                        entries go into a group named after the ship and target it.
+                                        Doing this again for the same ship replaces the entries made
+                                        this way; entries you added to the group yourself are kept.
+                                    </li>
+                                    <li>
                                         <strong>Targets:</strong> An entry can target a role or a
                                         specific ship. Matches are then scored the way Upgrade
                                         Analysis scores gear (role formula, 40 simulated upgrades
