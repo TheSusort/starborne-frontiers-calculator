@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { WishlistEntry } from '../../types/wishlist';
-import { Input, Button } from '../ui';
+import { WishlistEntry, WishlistTarget } from '../../types/wishlist';
+import { Input, Button, Select, RoleSelector } from '../ui';
+import { ShipSelector } from '../ship/ShipSelector';
+import { useShips } from '../../contexts/ShipsContext';
+import type { ShipTypeName } from '../../constants/shipTypes';
 import { GEAR_SLOT_ORDER, type GearSlotName } from '../../constants/gearTypes';
 import { RARITIES, type RarityName } from '../../constants/rarities';
 import { GEAR_SETS, getGearSet, type GearSetName } from '../../constants/gearSets';
@@ -120,6 +123,18 @@ export const WishlistEntryForm: React.FC<Props> = ({
             ({ name, type }) => `${name}:${type ?? STATS[name].allowedTypes[0]}`
         ) ?? []
     );
+    const { ships } = useShips();
+    const [targetKind, setTargetKind] = useState<'none' | 'role' | 'ship'>(
+        initial?.target?.kind ?? 'none'
+    );
+    // A stored target is kept as it is until the user edits it, even when its ship is gone or
+    // its role is unknown to this build.
+    const [role, setRole] = useState<ShipTypeName | ''>(
+        initial?.target?.kind === 'role' ? initial.target.role : ''
+    );
+    const [shipId, setShipId] = useState<string>(
+        initial?.target?.kind === 'ship' ? initial.target.shipId : ''
+    );
     const [setFilter, setSetFilter] = useState('');
     const [subStatsMin, setSubStatsMin] = useState<number>(
         initial?.filters.subStatsMin ?? initial?.filters.subStats?.length ?? 1
@@ -143,7 +158,17 @@ export const WishlistEntryForm: React.FC<Props> = ({
                 : {}),
         };
         const trimmed = name.trim().slice(0, WISHLIST_NAME_MAX_LENGTH);
-        void onSubmit({ name: trimmed || describeWishlistEntry(filters), filters });
+        const target: WishlistTarget | undefined =
+            targetKind === 'role' && role
+                ? { kind: 'role', role }
+                : targetKind === 'ship' && shipId
+                  ? { kind: 'ship', shipId }
+                  : undefined;
+        void onSubmit({
+            name: trimmed || describeWishlistEntry(filters),
+            filters,
+            ...(target ? { target } : {}),
+        });
     };
 
     const allowedMainStats = getAllowedMainStatNames(slots);
@@ -169,6 +194,34 @@ export const WishlistEntryForm: React.FC<Props> = ({
                 maxLength={WISHLIST_NAME_MAX_LENGTH}
                 placeholder="Optional. Leave blank to name it from the filters"
             />
+
+            <div className="space-y-2">
+                <Select
+                    label="Target (optional)"
+                    value={targetKind}
+                    onChange={(value) => {
+                        if (value === 'none' || value === 'role' || value === 'ship') {
+                            setTargetKind(value);
+                        }
+                    }}
+                    options={[
+                        { value: 'none', label: 'None' },
+                        { value: 'role', label: 'Role' },
+                        { value: 'ship', label: 'Ship' },
+                    ]}
+                    noDefaultSelection
+                    helpLabel="A target ranks matches by upgrade value: for a role, against every piece you own in the slot; for a ship, against what it wears now."
+                />
+                {targetKind === 'role' && (
+                    <RoleSelector value={role} onChange={setRole} label="Role" />
+                )}
+                {targetKind === 'ship' && (
+                    <ShipSelector
+                        selected={ships.find((ship) => ship.id === shipId) ?? null}
+                        onSelect={(ship) => setShipId(ship.id)}
+                    />
+                )}
+            </div>
 
             <ChipPicker
                 label="Stars (any of)"

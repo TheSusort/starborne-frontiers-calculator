@@ -11,6 +11,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Gear wishlist: entries can be duplicated, and failed saves now show an error.',
     'Gear wishlist: main stat options narrow to what the selected slots can roll.',
     'Gear wishlist: gear sets can be filtered by name, results can hide equipped gear.',
+    'Gear wishlist: entries can target a ship or role and rank their matches.',
+    'Gear wishlist: Upgrade Analysis can save its settings as a wishlist entry.',
+    'Gear wishlist: targeted entries open in Upgrade Analysis with one click.',
+    'Import summary: wishlist hits for targeted entries show upgrade value, best first.',
     'Import summary: Notable Gear now shows alongside Wishlist Hits; matching entries are combined.',
 ];
 

@@ -24,6 +24,8 @@ import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { GEAR_ANALYSIS_TUTORIAL } from '../../constants/tutorialSteps';
 import { buildCoverageMatrix } from '../../utils/gear/roleSlotCoverage';
 import { usePersistedCoverageSampleSize } from '../../hooks/usePersistedCoverageSampleSize';
+import type { WishlistEntry } from '../../types/wishlist';
+import { analysisConfigToWishlistDraft } from '../../utils/wishlist/analysisEntryMapping';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { GearCoverageGrid } from './GearCoverageGrid';
 
@@ -35,6 +37,10 @@ interface Props {
     initialShipId?: string;
     initialRole?: ShipTypeName;
     initialStats?: StatName[];
+    initialStatFilterMode?: 'AND' | 'OR';
+    initialGearSets?: GearSetName[];
+    /** Offered in the config panel when a ship or role is selected. */
+    onSaveAsWishlist?: (draft: Omit<WishlistEntry, 'id'>) => void;
 }
 
 const winnerColors = ['text-yellow-500', 'text-theme-text-secondary', 'text-amber-600'];
@@ -58,6 +64,9 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
     initialShipId,
     initialRole,
     initialStats,
+    initialStatFilterMode,
+    initialGearSets,
+    onSaveAsWishlist,
 }) => {
     useTutorialTrigger(mode === 'analysis' ? GEAR_ANALYSIS_TUTORIAL.id : '');
     const { simulateUpgrades, clearUpgrades } = useGearUpgrades();
@@ -75,9 +84,9 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
     const [selectedRole, setSelectedRole] = useState<ShipTypeName | 'all'>(initialRole ?? 'all');
     const [selectedStats, setSelectedStats] = useState<StatName[]>(initialStats ?? []);
     const [statFilterMode, setStatFilterMode] = useState<'AND' | 'OR'>(
-        initialStats?.length ? 'OR' : 'AND'
+        initialStatFilterMode ?? (initialStats?.length ? 'OR' : 'AND')
     );
-    const [selectedGearSets, setSelectedGearSets] = useState<string[]>([]);
+    const [selectedGearSets, setSelectedGearSets] = useState<string[]>(initialGearSets ?? []);
     const [selectedShipId, setSelectedShipId] = useState<string | 'none'>(initialShipId ?? 'none');
     const hasAutoStarted = useRef(false);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -380,7 +389,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
     // Removed automatic analysis - now requires manual button click
 
     useEffect(() => {
-        if (!initialStats?.length || hasAutoStarted.current) return;
+        if (!(initialStats?.length || initialGearSets?.length) || hasAutoStarted.current) return;
         hasAutoStarted.current = true;
         void handleAnalyze();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -415,6 +424,28 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
         maxLevel !== 16 ||
         selectedStats.length > 0 ||
         selectedGearSets.length > 0;
+
+    const wishlistDraft = useMemo(
+        () =>
+            analysisConfigToWishlistDraft({
+                shipId: selectedShipId === 'none' ? undefined : selectedShipId,
+                role: selectedRole === 'all' ? undefined : selectedRole,
+                stats: selectedStats,
+                statFilterMode,
+                gearSets: selectedGearSets.filter(
+                    (name): name is GearSetName => getGearSet(name) !== undefined
+                ),
+                minRarity: selectedRarity,
+            }),
+        [
+            selectedShipId,
+            selectedRole,
+            selectedStats,
+            statFilterMode,
+            selectedGearSets,
+            selectedRarity,
+        ]
+    );
 
     const handleClearFilters = () => {
         setSelectedShipId('none');
@@ -814,6 +845,21 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                                 </div>
                             </div>
                         </div>
+
+                        {onSaveAsWishlist && wishlistDraft && (
+                            <div className="pt-4">
+                                <Button
+                                    variant="secondary"
+                                    fullWidth
+                                    onClick={() => {
+                                        setIsConfigOpen(false);
+                                        onSaveAsWishlist(wishlistDraft);
+                                    }}
+                                >
+                                    Save as wishlist entry
+                                </Button>
+                            </div>
+                        )}
 
                         {hasActiveFilters && (
                             <div className="pt-4">

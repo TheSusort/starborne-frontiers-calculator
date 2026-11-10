@@ -4,18 +4,28 @@ import { GearPiece } from '../../types/gear';
 import { Pagination, Checkbox } from '../ui';
 import { RARITY_ORDER } from '../../constants/rarities';
 import { useShips } from '../../contexts/ShipsContext';
-import { matchesWishlistEntry } from '../../utils/wishlist/matchWishlistEntry';
+import type { WishlistScoreResult } from '../../utils/wishlist/scoreWishlistMatches';
+import { compareByUpgradeValue } from '../../utils/wishlist/wishlistScoreDisplay';
 import { GearPieceDisplay } from './GearPieceDisplay';
+import { WishlistScoreBadge } from './WishlistScoreBadge';
 
 const ITEMS_PER_PAGE = 12;
 
 interface Props {
     entry: WishlistEntry;
-    /** Gear pieces only (no implants). */
-    gearInventory: GearPiece[];
+    /** Every gear piece the entry matches. */
+    matches: GearPiece[];
+    /** Absent while an entry with a target is still being scored, and for untargeted entries. */
+    scoreResult?: WishlistScoreResult;
+    scoring?: boolean;
 }
 
-export const WishlistSearchResults: React.FC<Props> = ({ entry, gearInventory }) => {
+export const WishlistSearchResults: React.FC<Props> = ({
+    entry,
+    matches: allMatches,
+    scoreResult,
+    scoring = false,
+}) => {
     const { gearToShipMap } = useShips();
     const [currentPage, setCurrentPage] = useState(1);
     const [hideMaxLevel, setHideMaxLevel] = useState(false);
@@ -25,22 +35,28 @@ export const WishlistSearchResults: React.FC<Props> = ({ entry, gearInventory })
         setCurrentPage(1);
     }, [entry.id, hideMaxLevel, hideEquipped]);
 
+    const scoreById = useMemo(
+        () => new Map((scoreResult?.scores ?? []).map((score) => [score.pieceId, score])),
+        [scoreResult]
+    );
+
+    // Scored matches lead, best first; the rest keep the rarity / stars / level order.
     const matches = useMemo(
         () =>
-            gearInventory
+            allMatches
                 .filter(
                     (g) =>
-                        matchesWishlistEntry(g, entry) &&
                         (!hideMaxLevel || g.level < 16) &&
                         (!hideEquipped || !gearToShipMap.has(g.id))
                 )
                 .sort(
                     (a, b) =>
+                        compareByUpgradeValue(scoreById.get(a.id), scoreById.get(b.id)) ||
                         RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity) ||
                         b.stars - a.stars ||
                         b.level - a.level
                 ),
-        [entry, gearInventory, hideMaxLevel, hideEquipped, gearToShipMap]
+        [allMatches, hideMaxLevel, hideEquipped, gearToShipMap, scoreById]
     );
 
     const totalPages = Math.ceil(matches.length / ITEMS_PER_PAGE);
@@ -74,10 +90,31 @@ export const WishlistSearchResults: React.FC<Props> = ({ entry, gearInventory })
                     <p className="text-sm text-theme-text-secondary mt-4">
                         {matches.length} match{matches.length !== 1 ? 'es' : ''}
                     </p>
+                    {scoring && (
+                        <p className="text-xs text-theme-text-secondary mt-1">
+                            Scoring upgrade value...
+                        </p>
+                    )}
+                    {scoreResult && scoreResult.status !== 'scored' && (
+                        <p className="text-xs text-theme-text-secondary mt-1">
+                            {scoreResult.status === 'ship-missing'
+                                ? 'The target ship is no longer in your fleet, so these matches are not scored.'
+                                : 'The target role is not recognised, so these matches are not scored.'}
+                        </p>
+                    )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-                        {visibleMatches.map((gear) => (
-                            <GearPieceDisplay key={gear.id} gear={gear} mode="compact" />
-                        ))}
+                        {visibleMatches.map((gear) => {
+                            const score = scoreById.get(gear.id);
+                            return (
+                                <div
+                                    key={gear.id}
+                                    className={`space-y-2 ${score && !score.isUpgrade ? 'opacity-50' : ''}`}
+                                >
+                                    {score && <WishlistScoreBadge score={score} />}
+                                    <GearPieceDisplay gear={gear} mode="compact" />
+                                </div>
+                            );
+                        })}
                     </div>
                     <Pagination
                         currentPage={currentPage}

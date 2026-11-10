@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { getGearSet } from '../../constants/gearSets';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
@@ -10,7 +10,10 @@ import {
     WISHLIST_NAME_MAX_LENGTH,
     wishlistStatLabel,
 } from '../../utils/wishlist/describeWishlistEntry';
-import { Button, CloseIcon, ConfirmModal, CopyIcon, EditIcon, StarOutlineIcon } from '../ui';
+import { useShips } from '../../contexts/ShipsContext';
+import { useWishlistScores, type WishlistScoreRequest } from '../../hooks/useWishlistScores';
+import { describeBestHit, describeWishlistTarget } from '../../utils/wishlist/wishlistScoreDisplay';
+import { Button, Chip, CloseIcon, ConfirmModal, CopyIcon, EditIcon, StarOutlineIcon } from '../ui';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { Loader } from '../ui/Loader';
 import { WishlistEntryForm } from './WishlistEntryForm';
@@ -18,14 +21,25 @@ import { WishlistSearchResults } from './WishlistSearchResults';
 
 interface Props {
     inventory: GearPiece[];
+    /** An entry to start the add form with, e.g. built from an Upgrade Analysis config. */
+    draft?: Omit<WishlistEntry, 'id'> | null;
+    onDraftHandled?: () => void;
+    /** Opens Upgrade Analysis for a targeted entry. */
+    onOpenInAnalysis?: (entry: WishlistEntry) => void;
 }
 
 type FormTarget =
     | { kind: 'new' }
     | { kind: 'edit'; entry: WishlistEntry }
-    | { kind: 'copy'; entry: WishlistEntry };
+    | { kind: 'copy'; entry: WishlistEntry }
+    | { kind: 'draft'; entry: Omit<WishlistEntry, 'id'> };
 
-export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
+export const GearWishlistTab: React.FC<Props> = ({
+    inventory,
+    draft,
+    onDraftHandled,
+    onOpenInAnalysis,
+}) => {
     const { entries, loading, addEntry, updateEntry, deleteEntry } = useGearWishlistContext();
     const { addNotification } = useNotification();
     const [form, setForm] = useState<FormTarget | null>(null);
@@ -34,18 +48,26 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
 
     const gearInventory = useMemo(() => inventory.filter((p) => p.slot in GEAR_SLOTS), [inventory]);
 
-    const matchCounts = useMemo(() => {
-        const counts = new Map<string, number>();
-        for (const entry of entries) {
-            counts.set(
-                entry.id,
-                gearInventory.filter((g) => matchesWishlistEntry(g, entry)).length
-            );
-        }
-        return counts;
-    }, [entries, gearInventory]);
+    const { ships } = useShips();
+
+    useEffect(() => {
+        if (!draft) return;
+        setForm({ kind: 'draft', entry: draft });
+        onDraftHandled?.();
+    }, [draft, onDraftHandled]);
+
+    const requests = useMemo<WishlistScoreRequest[]>(
+        () =>
+            entries.map((entry) => ({
+                entry,
+                matches: gearInventory.filter((g) => matchesWishlistEntry(g, entry)),
+            })),
+        [entries, gearInventory]
+    );
+    const { results: scoreResults, scoring } = useWishlistScores(requests);
 
     const selectedEntry = entries.find((e) => e.id === selectedId) ?? entries[0];
+    const selectedRequest = requests.find((r) => r.entry.id === selectedEntry?.id);
 
     const handleSubmit = async (data: Omit<WishlistEntry, 'id'>) => {
         try {
@@ -92,7 +114,7 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
     }
 
     const formInitial =
-        form?.kind === 'edit'
+        form?.kind === 'edit' || form?.kind === 'draft'
             ? form.entry
             : form?.kind === 'copy'
               ? {
@@ -111,7 +133,11 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
                     <WishlistEntryForm
                         key={
                             form
-                                ? `${form.kind}-${form.kind === 'new' ? '' : form.entry.id}`
+                                ? `${form.kind}-${
+                                      form.kind === 'new' || form.kind === 'draft'
+                                          ? ''
+                                          : form.entry.id
+                                  }`
                                 : 'closed'
                         }
                         initial={formInitial}
@@ -124,9 +150,13 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
 
             {entries.length > 0 && (
                 <div className="space-y-2">
-                    {entries.map((entry) => {
+                    {requests.map(({ entry, matches }) => {
                         const isSelected = entry.id === selectedEntry?.id;
-                        const count = matchCounts.get(entry.id) ?? 0;
+                        const count = matches.length;
+                        const target = entry.target
+                            ? describeWishlistTarget(entry.target, ships)
+                            : undefined;
+                        const bestHit = describeBestHit(scoreResults.get(entry.id));
                         return (
                             <div
                                 key={entry.id}
@@ -155,8 +185,32 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
                                         </span>
                                     </p>
                                     <FilterChips entry={entry} />
+                                    {target && (
+                                        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-theme-text-secondary">
+                                            <Chip variant={target.valid ? 'accent' : 'default'}>
+                                                {target.label}
+                                            </Chip>
+                                            {target.valid && count > 0 && (
+                                                <span>
+                                                    {bestHit ?? (scoring ? 'Scoring...' : '')}
+                                                </span>
+                                            )}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="flex gap-2 shrink-0">
+                                    {entry.target && onOpenInAnalysis && (
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onOpenInAnalysis(entry);
+                                            }}
+                                        >
+                                            Open in Upgrade Analysis
+                                        </Button>
+                                    )}
                                     <Button
                                         variant="secondary"
                                         size="sm"
@@ -203,8 +257,15 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
                 </Button>
             )}
 
-            {selectedEntry && (
-                <WishlistSearchResults entry={selectedEntry} gearInventory={gearInventory} />
+            {selectedEntry && selectedRequest && (
+                <WishlistSearchResults
+                    entry={selectedEntry}
+                    matches={selectedRequest.matches}
+                    scoreResult={scoreResults.get(selectedEntry.id)}
+                    scoring={
+                        scoring && !!selectedEntry.target && !scoreResults.has(selectedEntry.id)
+                    }
+                />
             )}
 
             <ConfirmModal

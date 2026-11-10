@@ -13,6 +13,10 @@ import { useNotification } from '../../hooks/useNotification';
 import { SHIP_TYPE_NAMES, ALL_STAT_NAMES } from '../../constants';
 import { ShipTypeName, isShipTypeName } from '../../constants/shipTypes';
 import { StatName } from '../../types/stats';
+import { GearSetName, getGearSet } from '../../constants/gearSets';
+import { WishlistEntry } from '../../types/wishlist';
+import { useShips } from '../../contexts/ShipsContext';
+import { wishlistEntryToAnalysisLink } from '../../utils/wishlist/analysisEntryMapping';
 import { Tabs } from '../../components/ui/layout/Tabs';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
@@ -38,6 +42,10 @@ export const GearPage: React.FC = () => {
     const [initialSubTab, setInitialSubTab] = useState<'candidates' | 'ship' | null>(null);
     const [initialRole, setInitialRole] = useState<ShipTypeName | null>(null);
     const [initialStats, setInitialStats] = useState<StatName[] | undefined>(undefined);
+    const [initialStatMode, setInitialStatMode] = useState<'AND' | 'OR' | undefined>(undefined);
+    const [initialSets, setInitialSets] = useState<GearSetName[] | undefined>(undefined);
+    const [wishlistDraft, setWishlistDraft] = useState<Omit<WishlistEntry, 'id'> | null>(null);
+    const { ships } = useShips();
     const tabs = [
         { id: 'inventory', label: 'Inventory', dataTutorial: 'gear-tab-inventory' },
         { id: 'analysis', label: 'Upgrade Analysis', dataTutorial: 'gear-tab-analysis' },
@@ -53,6 +61,7 @@ export const GearPage: React.FC = () => {
         const shipId = searchParams.get('shipId');
         const role = searchParams.get('role');
         const stats = searchParams.get('stats');
+        const sets = searchParams.get('sets');
 
         if (tab && tabs.some((t) => t.id === tab)) {
             setActiveTab(tab);
@@ -79,8 +88,17 @@ export const GearPage: React.FC = () => {
             }
         }
 
+        if (sets) {
+            const validSets = sets
+                .split(',')
+                .filter((s): s is GearSetName => getGearSet(s) !== undefined);
+            if (validSets.length > 0) {
+                setInitialSets(validSets);
+            }
+        }
+
         // Clear URL params after reading
-        if (tab || subTab || shipId || role || stats) {
+        if (tab || subTab || shipId || role || stats || sets) {
             window.history.replaceState({}, '', window.location.pathname);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,6 +111,26 @@ export const GearPage: React.FC = () => {
             return () => clearTimeout(timer);
         }
     }, [loading, inventory.length, startGroup, hasCompletedGroup]);
+
+    // Same destination as the `tab=analysis&shipId=&role=&stats=&sets=` deep link, without a reload.
+    const handleOpenInAnalysis = (entry: WishlistEntry) => {
+        const { target } = entry;
+        const shipType =
+            target?.kind === 'ship' ? ships.find((s) => s.id === target.shipId)?.type : undefined;
+        const link = wishlistEntryToAnalysisLink(entry, shipType);
+        if (!link) return;
+        setInitialShipId(link.shipId ?? null);
+        setInitialRole(link.role ?? null);
+        setInitialStats(link.stats);
+        setInitialStatMode(link.statFilterMode);
+        setInitialSets(link.sets);
+        setActiveTab('analysis');
+    };
+
+    const handleSaveAsWishlist = (draft: Omit<WishlistEntry, 'id'>) => {
+        setWishlistDraft(draft);
+        setActiveTab('wishlist');
+    };
 
     const handleRemovePiece = async (id: string) => {
         const piece = inventory.find((p) => p.id === id);
@@ -218,6 +256,9 @@ export const GearPage: React.FC = () => {
                         initialShipId={initialShipId ?? undefined}
                         initialRole={initialRole ?? undefined}
                         initialStats={initialStats}
+                        initialStatFilterMode={initialStatMode}
+                        initialGearSets={initialSets}
+                        onSaveAsWishlist={handleSaveAsWishlist}
                     />
                 )}
                 {activeTab === 'calibration' && (
@@ -238,7 +279,14 @@ export const GearPage: React.FC = () => {
                         onEdit={handleEditPiece}
                     />
                 )}
-                {activeTab === 'wishlist' && <GearWishlistTab inventory={inventory} />}
+                {activeTab === 'wishlist' && (
+                    <GearWishlistTab
+                        inventory={inventory}
+                        draft={wishlistDraft}
+                        onDraftHandled={() => setWishlistDraft(null)}
+                        onOpenInAnalysis={handleOpenInAnalysis}
+                    />
+                )}
 
                 <ConfirmModal
                     isOpen={showDeleteConfirm}

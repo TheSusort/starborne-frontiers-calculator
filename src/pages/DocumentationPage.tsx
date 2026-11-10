@@ -1135,13 +1135,38 @@ const DocumentationPage: React.FC = () => {
                                         list; each card shows which ship the piece is equipped on.
                                     </li>
                                     <li>
+                                        <strong>Targets:</strong> An entry can target a role or a
+                                        specific ship. Matches are then scored the way Upgrade
+                                        Analysis scores gear (role formula, 40 simulated upgrades
+                                        per piece). For a ship, each match is compared with the
+                                        piece it wears in that slot, set bonuses included, now and
+                                        once both are levelled to 16; an empty slot makes every
+                                        match an upgrade. For a role, each match is ranked against
+                                        every piece you own in that slot, and the top 3 count as
+                                        upgrades. Results are sorted best first with a badge on each
+                                        card, and non-upgrades are dimmed. If the ship is gone from
+                                        your fleet, matches are listed without scores. Simulated
+                                        upgrades are random, so ranks can shift by one or two
+                                        between views.
+                                    </li>
+                                    <li>
+                                        <strong>Linking with Upgrade Analysis:</strong> Choose
+                                        &quot;Save as wishlist entry&quot; in the Upgrade Config
+                                        panel to turn the selected ship or role, stats, gear sets
+                                        and rarity into an entry (hidden when no ship or role is
+                                        set). Targeted entries have an &quot;Open in Upgrade
+                                        Analysis&quot; button that applies the same settings.
+                                    </li>
+                                    <li>
                                         <strong>Import Summary integration:</strong> After importing
                                         game data, newly imported gear that matches any wishlist
                                         entry appears in a &quot;Wishlist Hits&quot; section inside
                                         the Import Summary modal, next to Notable Gear. A piece
                                         matching several entries is listed once with every entry
-                                        name. This section is hidden on a first-ever import, when
-                                        there is no previous import to compare against.
+                                        name. Hits for targeted entries carry the same badges and
+                                        are listed upgrades first, with non-upgrades dimmed. This
+                                        section is hidden on a first-ever import, when there is no
+                                        previous import to compare against.
                                     </li>
                                 </ul>
                             </div>

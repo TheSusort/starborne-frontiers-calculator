@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal } from '../ui/layout/Modal';
 import { ImportDiff } from '../../types/importDiff';
 import { Ship } from '../../types/ship';
@@ -9,6 +9,10 @@ import { getGearSet } from '../../constants/gearSets';
 import { getImplantData } from '../../constants/implants';
 import { STATS } from '../../constants/stats';
 import { hasChanges } from '../../utils/import/computeImportDiff';
+import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
+import { useWishlistScores, type WishlistScoreRequest } from '../../hooks/useWishlistScores';
+import { compareHitScores, pickBestScore } from '../../utils/wishlist/wishlistScoreDisplay';
+import { WishlistScoreBadge } from '../gear/WishlistScoreBadge';
 
 interface Props {
     diff: ImportDiff | null;
@@ -66,6 +70,35 @@ function ImplantLine({ implant }: { implant: GearPiece }) {
 }
 
 export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose }) => {
+    const { entries } = useGearWishlistContext();
+
+    // One request per targeted entry that has a hit; the scorer ranks against the whole inventory.
+    const requests = useMemo<WishlistScoreRequest[]>(() => {
+        const hits = diff?.wishlistHits ?? [];
+        return entries.flatMap((entry) => {
+            if (!entry.target) return [];
+            const matches = hits.filter((h) => h.entryIds.includes(entry.id)).map((h) => h.gear);
+            return matches.length > 0 ? [{ entry, matches }] : [];
+        });
+    }, [diff, entries]);
+    const { results: scoreResults } = useWishlistScores(requests);
+
+    // Each hit shows its strongest score; hits sort upgrades first.
+    const scoredHits = useMemo(() => {
+        const hits = (diff?.wishlistHits ?? []).map((hit) => ({
+            ...hit,
+            score: pickBestScore(
+                hit.entryIds.flatMap((id) => {
+                    const score = scoreResults
+                        .get(id)
+                        ?.scores.find((s) => s.pieceId === hit.gear.id);
+                    return score ? [score] : [];
+                })
+            ),
+        }));
+        return hits.sort((a, b) => compareHitScores(a.score, b.score));
+    }, [diff, scoreResults]);
+
     if (!diff) return null;
 
     const { ships, gear, implants } = diff;
@@ -298,16 +331,20 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                         Wishlist Hits
                                     </div>
                                     <div className="space-y-2">
-                                        {(diff.wishlistHits ?? []).map(
-                                            ({ gear: g, entryNames }) => (
-                                                <div key={g.id}>
-                                                    <div className="text-xs text-theme-text-secondary mb-0.5">
-                                                        {entryNames.join(', ')}
-                                                    </div>
-                                                    <GearLine gear={g} />
+                                        {scoredHits.map(({ gear: g, entryNames, score }) => (
+                                            <div
+                                                key={g.id}
+                                                className={
+                                                    score && !score.isUpgrade ? 'opacity-50' : ''
+                                                }
+                                            >
+                                                <div className="text-xs text-theme-text-secondary mb-0.5">
+                                                    {entryNames.join(', ')}
                                                 </div>
-                                            )
-                                        )}
+                                                {score && <WishlistScoreBadge score={score} />}
+                                                <GearLine gear={g} />
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             )}
