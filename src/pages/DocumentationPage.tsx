@@ -1133,7 +1133,8 @@ const DocumentationPage: React.FC = () => {
                                         see its matching gear below. Use &quot;Hide max
                                         levelled&quot;, &quot;Hide all levelled&quot; and &quot;Hide
                                         equipped&quot; to narrow the list; each card shows which
-                                        ship the piece is equipped on.
+                                        ship the piece is equipped on. Use the up and down arrows on
+                                        a row to change the order of your entries.
                                     </li>
                                     <li>
                                         <strong>Targets:</strong> An entry can target a role or a

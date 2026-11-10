@@ -5,6 +5,7 @@ import { supabase } from '../config/supabase';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from '../contexts/ActiveProfileProvider';
 import { StorageKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
+import { moveWishlistEntry } from '../utils/wishlist/moveWishlistEntry';
 import { useStorage } from './useStorage';
 
 export const useGearWishlist = () => {
@@ -121,5 +122,21 @@ export const useGearWishlist = () => {
         [entries, setEntries, upsertToSupabase]
     );
 
-    return { entries, loading, addEntry, updateEntry, deleteEntry };
+    const moveEntry = useCallback(
+        async (id: string, offset: -1 | 1) => {
+            const previous = entries;
+            const updatedEntries = moveWishlistEntry(entries, id, offset);
+            if (updatedEntries === previous) return;
+            void setEntries(updatedEntries);
+            try {
+                await upsertToSupabase(updatedEntries);
+            } catch (error) {
+                void setEntries(previous); // rollback
+                throw error;
+            }
+        },
+        [entries, setEntries, upsertToSupabase]
+    );
+
+    return { entries, loading, addEntry, updateEntry, deleteEntry, moveEntry };
 };

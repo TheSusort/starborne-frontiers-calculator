@@ -15,6 +15,7 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useWishlistScores, type WishlistScoreRequest } from '../../hooks/useWishlistScores';
 import { describeBestHit, describeWishlistTarget } from '../../utils/wishlist/wishlistScoreDisplay';
 import { Button, Chip, CloseIcon, ConfirmModal, CopyIcon, EditIcon, StarOutlineIcon } from '../ui';
+import { ChevronDownIcon, ChevronUpIcon } from '../ui/icons/ChevronIcons';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { Loader } from '../ui/Loader';
 import { WishlistEntryForm } from './WishlistEntryForm';
@@ -41,7 +42,8 @@ export const GearWishlistTab: React.FC<Props> = ({
     onDraftHandled,
     onOpenInAnalysis,
 }) => {
-    const { entries, loading, addEntry, updateEntry, deleteEntry } = useGearWishlistContext();
+    const { entries, loading, addEntry, updateEntry, deleteEntry, moveEntry } =
+        useGearWishlistContext();
     const { addNotification } = useNotification();
     const [form, setForm] = useState<FormTarget | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -80,6 +82,14 @@ export const GearWishlistTab: React.FC<Props> = ({
             setForm(null);
         } catch {
             addNotification('error', 'Could not save the wishlist entry. Please try again.');
+        }
+    };
+
+    const handleMove = async (id: string, offset: -1 | 1) => {
+        try {
+            await moveEntry(id, offset);
+        } catch {
+            addNotification('error', 'Could not reorder the wishlist entries. Please try again.');
         }
     };
 
@@ -151,7 +161,7 @@ export const GearWishlistTab: React.FC<Props> = ({
 
             {entries.length > 0 && (
                 <div className="space-y-2">
-                    {requests.map(({ entry, matches }) => {
+                    {requests.map(({ entry, matches }, index) => {
                         const isSelected = entry.id === selectedEntry?.id;
                         const count = matches.length;
                         const target = entry.target
@@ -212,6 +222,30 @@ export const GearWishlistTab: React.FC<Props> = ({
                                             Open in Upgrade Analysis
                                         </Button>
                                     )}
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        disabled={index === 0}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            void handleMove(entry.id, -1);
+                                        }}
+                                        aria-label="Move entry up"
+                                    >
+                                        <ChevronUpIcon />
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        disabled={index === requests.length - 1}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            void handleMove(entry.id, 1);
+                                        }}
+                                        aria-label="Move entry down"
+                                    >
+                                        <ChevronDownIcon />
+                                    </Button>
                                     <Button
                                         variant="secondary"
                                         size="sm"

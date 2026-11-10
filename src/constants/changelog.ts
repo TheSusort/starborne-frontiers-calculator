@@ -9,6 +9,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Gear wishlist: entry names are optional and generated from the filters.',
     'Gear wishlist: deleting an entry now asks for confirmation.',
     'Gear wishlist: entries can now be duplicated with one click.',
+    'Gear wishlist: entries can now be reordered with up and down buttons.',
     'Gear wishlist: failed saves and deletes now show an error message.',
     'Gear wishlist: main stat options narrow to what the selected slots can roll.',
     'Gear wishlist: the gear set picker can now be filtered by name.',
