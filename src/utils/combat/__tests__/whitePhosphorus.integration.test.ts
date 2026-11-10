@@ -80,6 +80,26 @@ describe('White Phosphorus kit parsing', () => {
     });
 });
 
+describe('reactive White Phosphorus', () => {
+    it('an on-enemy-cleansed White Phosphorus keeps its family and unremovable flag', () => {
+        const kit = textKit('Reactor', {
+            passives: [
+                'When an enemy <unit-skill>cleanses a debuff</unit-skill>, this Unit inflicts <unit-skill>White Phosphorus III</unit-skill> for 2 turns',
+            ],
+        });
+        const reactive = kit.slots
+            .flatMap((s) => s.abilities)
+            .filter((a) => a.type === 'dot' && a.trigger === 'on-enemy-cleansed');
+        expect(reactive).toHaveLength(1);
+        expect(reactive[0].config).toMatchObject({
+            dotType: 'inferno',
+            tier: 45,
+            family: 'White Phosphorus',
+            unremovable: true,
+        });
+    });
+});
+
 describe.each<Placement>(['player', 'enemy'])('White Phosphorus on the %s side', (placement) => {
     it('ticks as an Inferno at 45% of the applied attack, ignoring defence', () => {
         const victim = unit('victim', { speed: 1, defence: 50000, hp: 5e9 });
@@ -118,20 +138,24 @@ describe.each<Placement>(['player', 'enemy'])('White Phosphorus on the %s side',
         expect(lastRound(45).length).toBeGreaterThan(0);
     });
 
-    it('a detonate-Inferno effect detonates it', () => {
+    it('a detonate-Inferno effect detonates and consumes it', () => {
         const detonator = unit('detonator', {
             kit: textKit('Incinerator', { active: DETONATE_TEXT }),
             speed: 200,
         });
         const victim = unit('victim', { speed: 1, hp: 5e9 });
-        const { detonations, victimId } = run(
-            placement,
-            [whitePhosphorusApplier, detonator],
-            victim,
-            1
+        const withDetonator = run(placement, [whitePhosphorusOneShot, detonator], victim, 3);
+        const without = run(placement, [whitePhosphorusOneShot], victim, 3);
+        const detonated = withDetonator.detonations.filter(
+            (d) => d.targetId === withDetonator.victimId
         );
-        const onVictim = detonations.filter((d) => d.targetId === victimId);
-        expect(onVictim.length).toBeGreaterThan(0);
-        expect(onVictim[0].damage).toBeGreaterThan(0);
+        // White Phosphorus is the only DoT on the victim, so the detonation is its.
+        expect(detonated.length).toBeGreaterThan(0);
+        expect(detonated[0].damage).toBeGreaterThan(0);
+        const laterTicks = (r: ReturnType<typeof run>) =>
+            r.ticks.filter((t) => t.targetId === r.victimId && t.round >= 2);
+        // Undetonated it keeps ticking; the detonation spends the stack.
+        expect(laterTicks(without).length).toBeGreaterThan(0);
+        expect(laterTicks(withDetonator)).toHaveLength(0);
     });
 });
