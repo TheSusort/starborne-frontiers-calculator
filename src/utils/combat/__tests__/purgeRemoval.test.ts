@@ -66,6 +66,16 @@ describe('statusEngine.purge (newest-first self-buff removal)', () => {
         expect(names).not.toContain('Attack Up');
     });
 
+    it('Pressing Onslaught (unremovable except by its holder) survives purge(all)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, mkTimedBuff('Pressing Onslaught'), 'e1');
+
+        expect(eng.purge('e1', 'all')).toBe(0);
+        const names = eng.timedAbilityStatuses('self', 'e1').map((s) => s.payload.buffName);
+        expect(names).toContain('Pressing Onslaught');
+    });
+
     it('(d) unknown actor id returns 0 and does not throw', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);

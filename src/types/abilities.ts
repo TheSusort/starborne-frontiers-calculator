@@ -1345,9 +1345,11 @@ export interface Ability {
      *  this Unit is directly damaged as a primary target, … gains Legion Discipline II"
      *  (Stalwart). Absent → any hit. */
     triggerPrimaryTargetOnly?: boolean;
-    /** on-destroyed only: fire only when the owner died to DIRECT damage, never to a
-     *  damage-over-time tick — "Upon being destroyed by direct damage, … grants all allies
-     *  Everliving Regeneration II" (Paracelsus). Absent → the listener's per-type rule. */
+    /** on-destroyed and on-enemy-destroyed: fire only when the death is from DIRECT damage,
+     *  never a damage-over-time tick — "Upon being destroyed by direct damage, …
+     *  grants all allies Everliving Regeneration II" (Paracelsus, the owner's own death);
+     *  "on kill, the Boss clears Pressing Onslaught" (Fenri, the enemy it kills). Absent → the
+     *  listener's per-type rule. */
     triggerRequiresDirectDeath?: boolean;
     /** Landing-verb filter for the debuff-inflicted trigger family (on-debuff-inflicted,
      *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-enemy-debuff-inflicted,
@@ -1609,6 +1611,10 @@ export interface ShipSkills {
      *  Threaded onto CombatActor.chargeLossImmune by the engine adapter; enemy-sourced
      *  charge removal is a no-op against actors with this flag set. */
     chargeLossImmune?: boolean;
+    /** True when the ship's passive text declares immunity to control debuffs (Fenri). Control
+     *  covers Provoke, Taunt, Stasis, Concentrate Fire, Disable and every speed debuff (owner
+     *  ruling 2026-11-10, #519). */
+    controlImmune?: boolean;
     /** True when the ship's refit-active text says "This Unit's attacks always critically hit"
      *  (Tormenter, Asphodel R2+). Read by the engine onto CombatActor.alwaysCrits: every attack
      *  then rolls at a 100% crit rate, which no affinity disadvantage or Crit Rate Down lowers

@@ -44,7 +44,11 @@ export const MANUAL_BUFF_ADDITIONS: Array<{
     description: string;
     type: 'buff' | 'debuff' | 'effect';
 }> = [
-    { name: 'Pressing Onslaught', description: '+10% Outgoing Direct Damage', type: 'buff' },
+    {
+        name: 'Pressing Onslaught',
+        description: '+10% Outgoing Direct Damage, Stackable',
+        type: 'buff',
+    },
     ...(
         [
             ['I', 15],

@@ -48,4 +48,7 @@ export const UNREMOVABLE_STATUSES: ReadonlySet<string> = new Set<string>([
     'Damage to Dot',
     // Confirmed in-game "Unremovable" BUFF from the game UI (2026-06-19).
     'Protection',
+    // "Unremovable except by the unit affected by it" (#519): only its holder's own
+    // remove-self-buff clears it.
+    'Pressing Onslaught',
 ]);

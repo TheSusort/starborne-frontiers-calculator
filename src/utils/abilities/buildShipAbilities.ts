@@ -72,6 +72,7 @@ import {
     detectCritRepairTrigger,
     detectEnemyDebuffedTrigger,
     killSentenceScope,
+    killSentenceRequiresDirectDeath,
     detectStasisAppliedTrigger,
     detectCheatDeathActivatedTrigger,
     detectDestroyedTrigger,
@@ -110,6 +111,7 @@ import {
     parseForceAffinityAdvantage,
     parseStasisBreakExemption,
     parseChargeLossImmune,
+    parseControlImmune,
     parseAlwaysCrits,
     detectIgnoresForcedTargeting,
     detectIgnoresStealth,
@@ -937,11 +939,10 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
-    // Voron: "This Unit takes N% less damage from Damage over Time effects" — a flat
-    // reduction against the unit's OWN incoming DoT ticks. scope:'dot' + condition:'always'
-    // are both existing type-valid values (Tormenter uses the same pair via hpScaling).
+    // "This Unit takes N% less damage from Damage over Time effects" (Voron) / "… from DoTs"
+    // (Fenri) — a flat reduction against the unit's OWN incoming DoT ticks.
     const voronM =
-        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+damage\s+over\s+time\s+effects/i.exec(
+        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+(?:damage\s+over\s+time\s+effects|dots?\b)/i.exec(
             plain
         );
     if (voronM) {
@@ -1101,6 +1102,9 @@ function markBoardWide(positioned: PositionedAbility[], text: string): void {
  * `killSentenceScope`). The ability's own sentence decides. An ability anchored outside any kill
  * sentence (no anchor, or an anchor the kill clause does not share) reads the row instead:
  * owner-scoped only when every kill sentence in it names this Unit as the killer.
+ *
+ * Also stamps `triggerRequiresDirectDeath` on a reaction whose own sentence says "on kill"
+ * (`killSentenceRequiresDirectDeath`).
  */
 function markKillerScope(positioned: PositionedAbility[], text: string): void {
     const onKill = positioned.filter((p) => p.ability.trigger === 'on-enemy-destroyed');
@@ -1118,6 +1122,12 @@ function markKillerScope(positioned: PositionedAbility[], text: string): void {
                 : undefined;
         if ((own ?? (rowIsOwner ? 'owner' : 'any')) === 'owner')
             p.ability.triggerKillerScope = 'owner';
+        if (
+            p.pos >= 0 &&
+            p.pos < masked.length &&
+            killSentenceRequiresDirectDeath(sentenceContaining(masked, p.pos))
+        )
+            p.ability.triggerRequiresDirectDeath = true;
     }
 }
 
@@ -3146,7 +3156,9 @@ function abilitiesFromText(
     // the buff is cleared from ALL self stores (scope: 'all'). The removal fires unconditionally:
     // removeSelfBuffByName is a safe no-op if the buff was never present.
     for (const rem of parseSelfBuffRemovals(text)) {
-        const removePos = findBuffNamePos(text, rem.buffName);
+        // Anchored on the removal clause, not the buff's first mention: the anchor's sentence
+        // decides the kill gates (`markKillerScope`).
+        const removePos = rem.namePos;
         out.push({
             ability: {
                 id: nextId(),
@@ -4327,6 +4339,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     const stasisBreakExemptWhen = stasisExemptions.find((x) => x.conditions.length > 0)?.conditions;
 
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
+    const controlImmune = getShipSkillRows(ship).some((row) => parseControlImmune(row.text));
     const alwaysCrits = getShipSkillRows(ship).some((row) => parseAlwaysCrits(row.text));
 
     // Ship-kit correctness backlog: check ALL skill rows for the "ignores Taunt and Provoke"
@@ -4343,6 +4356,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}),
         ...(!doesntBreakStasis && stasisBreakExemptWhen ? { stasisBreakExemptWhen } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
+        ...(controlImmune ? { controlImmune: true } : {}),
         ...(alwaysCrits ? { alwaysCrits: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),
         ...(ignoresStealth ? { ignoresStealth: true } : {}),

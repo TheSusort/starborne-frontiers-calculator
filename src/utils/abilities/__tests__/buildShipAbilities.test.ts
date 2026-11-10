@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, Skill } from '../../../types/abilities';
+import { bossShip } from '../../../constants/bountyBosses';
+import { canonicaliseSkillSubject } from '../../skillTextParser';
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -5735,5 +5737,137 @@ describe('game 3.23 catalogue texts', () => {
             abilities.find((a) => a.config.type === 'buff' && a.config.buffName === name);
         expect(byName('Attack Up II')!.trigger).toBe('on-cast');
         expect(byName('Defense Up II')!.trigger).toBe('on-enemy-destroyed');
+    });
+});
+
+describe('bounty boss subject: "The Boss" reads as "This Unit"', () => {
+    it('rewrites the subject and its possessive, preserving sentence-initial case', () => {
+        expect(
+            canonicaliseSkillSubject(
+                "The Boss deals damage. When the Boss's HP drops, the Boss’s shield and the boss gain."
+            )
+        ).toBe(
+            "This Unit deals damage. When this Unit's HP drops, this Unit’s shield and this Unit gain."
+        );
+    });
+
+    it('leaves text without the subject untouched', () => {
+        const text = 'This Unit deals <unit-damage>100% damage</unit-damage>. Bossy enemies.';
+        expect(canonicaliseSkillSubject(text)).toBe(text);
+    });
+
+    it('applies at the whole-ship entry, so a leading "Every turn" grant parses as accumulating', () => {
+        // The accrual rule keys on "this Unit gains"; without the rewrite the boss clause is missed.
+        const passive = slot(
+            buildShipAbilities(
+                ship({
+                    refits: [],
+                    firstPassiveSkillText:
+                        'Every turn, The Boss gains <unit-skill>Pressing Onslaught</unit-skill>.',
+                })
+            ).slots,
+            'passive'
+        )!;
+        expect(passive.abilities[0].config).toMatchObject({
+            stackTrigger: 'per-round',
+            duration: 'recurring',
+        });
+    });
+});
+
+describe('Fenri passive (bounty boss)', () => {
+    const skills = buildShipAbilities(bossShip('fenri', 32)!);
+    const passive = slot(skills.slots, 'passive')!.abilities;
+    const buffsNamed = (name: string) =>
+        passive.filter((a) => a.config.type === 'buff' && a.config.buffName === name);
+
+    it('takes 50% less damage from DoTs', () => {
+        const reductions = passive.filter((a) => a.type === 'incoming-reduction');
+        expect(reductions).toHaveLength(1);
+        expect(reductions[0].config).toMatchObject({ scope: 'dot', condition: 'always', pct: 50 });
+    });
+
+    it('gains one accumulating, uncapped stack of Pressing Onslaught every round', () => {
+        const grants = buffsNamed('Pressing Onslaught');
+        expect(grants).toHaveLength(1);
+        expect(grants[0].trigger).toBe('on-cast');
+        expect(grants[0].config).toMatchObject({
+            stacks: 1,
+            isStackable: true,
+            stackTrigger: 'per-round',
+            duration: 'recurring',
+        });
+        expect(grants[0].config.type === 'buff' && grants[0].config.maxStacks).toBeUndefined();
+    });
+
+    it('repairs 10% max HP and gains Attack Up II for 2 turns on any enemy death', () => {
+        const heals = passive.filter((a) => a.type === 'heal');
+        expect(heals).toHaveLength(1);
+        expect(heals[0].trigger).toBe('on-enemy-destroyed');
+        expect(heals[0].config).toMatchObject({ pct: 10, basis: 'hp' });
+        expect(heals[0].triggerKillerScope).toBeUndefined();
+        expect(heals[0].triggerRequiresDirectDeath).toBeUndefined();
+
+        const attackUp = buffsNamed('Attack Up II');
+        expect(attackUp).toHaveLength(1);
+        expect(attackUp[0].trigger).toBe('on-enemy-destroyed');
+        expect(attackUp[0].config).toMatchObject({ duration: 2 });
+        expect(attackUp[0].triggerKillerScope).toBeUndefined();
+        expect(attackUp[0].triggerRequiresDirectDeath).toBeUndefined();
+    });
+
+    it('clears Pressing Onslaught only on its own direct-damage kill', () => {
+        const removals = passive.filter((a) => a.type === 'remove-self-buff');
+        expect(removals).toHaveLength(1);
+        expect(removals[0]).toMatchObject({
+            trigger: 'on-enemy-destroyed',
+            triggerKillerScope: 'owner',
+            triggerRequiresDirectDeath: true,
+            config: { buffName: 'Pressing Onslaught', scope: 'all' },
+        });
+    });
+
+    it('is immune to control and charge loss', () => {
+        expect(skills.controlImmune).toBe(true);
+        expect(skills.chargeLossImmune).toBe(true);
+    });
+
+    it('emits nothing else on the passive', () => {
+        expect(passive.map((a) => a.type).sort()).toEqual(
+            ['buff', 'buff', 'heal', 'incoming-reduction', 'remove-self-buff'].sort()
+        );
+        expect(passive.some((a) => a.trigger === 'on-cast' && a.type === 'heal')).toBe(false);
+    });
+});
+
+describe('immunity flags', () => {
+    it('a ship without immunity text carries neither flag', () => {
+        const skills = buildShipAbilities(
+            ship({
+                firstPassiveSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            })
+        );
+        expect(skills.controlImmune).toBeUndefined();
+        expect(skills.chargeLossImmune).toBeUndefined();
+    });
+});
+
+describe('"clears" is a removal verb, like "removes"', () => {
+    it('a status cleared in the same clause as an earlier grant is not granted', () => {
+        const passive = slot(
+            buildShipAbilities(
+                ship({
+                    refits: [],
+                    firstPassiveSkillText:
+                        'Upon destroying an enemy, this Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns and clears <unit-skill>Pressing Onslaught</unit-skill>.',
+                })
+            ).slots,
+            'passive'
+        )!.abilities;
+        const grantsOnslaught = passive.some(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Pressing Onslaught'
+        );
+        expect(grantsOnslaught).toBe(false);
+        expect(passive.filter((a) => a.type === 'remove-self-buff')).toHaveLength(1);
     });
 });

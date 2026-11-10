@@ -897,7 +897,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Pressing Onslaught',
-        description: '+10% Outgoing Direct Damage',
+        description: '+10% Outgoing Direct Damage, Stackable',
         type: 'buff',
     },
     {
