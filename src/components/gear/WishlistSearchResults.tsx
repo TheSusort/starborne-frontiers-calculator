@@ -1,54 +1,65 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WishlistEntry } from '../../types/wishlist';
 import { GearPiece } from '../../types/gear';
-import { Tabs } from '../ui/layout/Tabs';
 import { Pagination, Checkbox } from '../ui';
-import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { RARITY_ORDER } from '../../constants/rarities';
-import { matchesWishlistEntry } from '../../utils/wishlist/matchWishlistEntry';
+import { useShips } from '../../contexts/ShipsContext';
+import type { WishlistScoreResult } from '../../utils/wishlist/scoreWishlistMatches';
+import { compareByUpgradeValue } from '../../utils/wishlist/wishlistScoreDisplay';
 import { GearPieceDisplay } from './GearPieceDisplay';
+import { WishlistScoreBadge } from './WishlistScoreBadge';
 
 const ITEMS_PER_PAGE = 12;
 
-const GEAR_SLOT_SET = new Set(Object.keys(GEAR_SLOTS));
-
 interface Props {
-    entries: WishlistEntry[];
-    inventory: GearPiece[];
+    entry: WishlistEntry;
+    /** Every gear piece the entry matches. */
+    matches: GearPiece[];
+    /** Absent while an entry with a target is still being scored, and for untargeted entries. */
+    scoreResult?: WishlistScoreResult;
+    scoring?: boolean;
 }
 
-export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) => {
-    const [activeTab, setActiveTab] = useState(entries[0]?.id ?? '');
+export const WishlistSearchResults: React.FC<Props> = ({
+    entry,
+    matches: allMatches,
+    scoreResult,
+    scoring = false,
+}) => {
+    const { gearToShipMap } = useShips();
     const [currentPage, setCurrentPage] = useState(1);
     const [hideMaxLevel, setHideMaxLevel] = useState(false);
-
-    useEffect(() => {
-        if (entries.length === 0) return;
-        if (!entries.some((e) => e.id === activeTab)) {
-            setActiveTab(entries[0].id);
-        }
-    }, [entries, activeTab]);
+    const [hideAnyLevelled, setHideAnyLevelled] = useState(false);
+    const [hideEquipped, setHideEquipped] = useState(false);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [activeTab]);
+    }, [entry.id, hideMaxLevel, hideAnyLevelled, hideEquipped]);
 
-    const gearOnly = useMemo(() => inventory.filter((p) => GEAR_SLOT_SET.has(p.slot)), [inventory]);
+    const scoreById = useMemo(
+        () => new Map((scoreResult?.scores ?? []).map((score) => [score.pieceId, score])),
+        [scoreResult]
+    );
 
-    const tabs = useMemo(() => entries.map((e) => ({ id: e.id, label: e.name })), [entries]);
-
-    const matches = useMemo(() => {
-        const entry = entries.find((e) => e.id === activeTab);
-        if (!entry) return [];
-        return gearOnly
-            .filter((g) => matchesWishlistEntry(g, entry) && (!hideMaxLevel || g.level < 16))
-            .sort(
-                (a, b) =>
-                    RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity) ||
-                    b.stars - a.stars ||
-                    b.level - a.level
-            );
-    }, [entries, activeTab, gearOnly, hideMaxLevel]);
+    // Scored matches lead, best first; the rest keep the rarity / stars / level order.
+    const matches = useMemo(
+        () =>
+            allMatches
+                .filter(
+                    (g) =>
+                        (!hideMaxLevel || g.level < 16) &&
+                        (!hideAnyLevelled || g.level === 0) &&
+                        (!hideEquipped || !gearToShipMap.has(g.id))
+                )
+                .sort(
+                    (a, b) =>
+                        compareByUpgradeValue(scoreById.get(a.id), scoreById.get(b.id)) ||
+                        RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity) ||
+                        b.stars - a.stars ||
+                        b.level - a.level
+                ),
+        [allMatches, hideMaxLevel, hideAnyLevelled, hideEquipped, gearToShipMap, scoreById]
+    );
 
     const totalPages = Math.ceil(matches.length / ITEMS_PER_PAGE);
     const visibleMatches = useMemo(() => {
@@ -56,17 +67,28 @@ export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) =
         return matches.slice(start, start + ITEMS_PER_PAGE);
     }, [matches, currentPage]);
 
-    if (entries.length === 0) return null;
-
     return (
-        <div className="mt-4">
-            <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-            <Checkbox
-                label="Hide max levelled (Lv.16)"
-                checked={hideMaxLevel}
-                onChange={setHideMaxLevel}
-                className="mb-4"
-            />
+        <div>
+            <div className="flex flex-wrap gap-x-6">
+                <Checkbox
+                    label="Hide max levelled (Lv.16)"
+                    checked={hideMaxLevel}
+                    onChange={setHideMaxLevel}
+                    className="mb-4"
+                />
+                <Checkbox
+                    label="Hide all levelled (Lv.1+)"
+                    checked={hideAnyLevelled}
+                    onChange={setHideAnyLevelled}
+                    className="mb-4"
+                />
+                <Checkbox
+                    label="Hide equipped"
+                    checked={hideEquipped}
+                    onChange={setHideEquipped}
+                    className="mb-4"
+                />
+            </div>
             {matches.length === 0 ? (
                 <p className="text-theme-text-secondary text-sm mt-4">
                     No gear in your inventory matches this entry yet.
@@ -76,10 +98,31 @@ export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) =
                     <p className="text-sm text-theme-text-secondary mt-4">
                         {matches.length} match{matches.length !== 1 ? 'es' : ''}
                     </p>
+                    {scoring && (
+                        <p className="text-xs text-theme-text-secondary mt-1">
+                            Scoring upgrade value...
+                        </p>
+                    )}
+                    {scoreResult && scoreResult.status !== 'scored' && (
+                        <p className="text-xs text-theme-text-secondary mt-1">
+                            {scoreResult.status === 'ship-missing'
+                                ? 'The target ship is no longer in your fleet, so these matches are not scored.'
+                                : 'The target role is not recognised, so these matches are not scored.'}
+                        </p>
+                    )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-                        {visibleMatches.map((gear) => (
-                            <GearPieceDisplay key={gear.id} gear={gear} mode="compact" />
-                        ))}
+                        {visibleMatches.map((gear) => {
+                            const score = scoreById.get(gear.id);
+                            return (
+                                <div
+                                    key={gear.id}
+                                    className={`space-y-2 ${score && !score.isUpgrade ? 'opacity-50' : ''}`}
+                                >
+                                    {score && <WishlistScoreBadge score={score} />}
+                                    <GearPieceDisplay gear={gear} mode="compact" />
+                                </div>
+                            );
+                        })}
                     </div>
                     <Pagination
                         currentPage={currentPage}

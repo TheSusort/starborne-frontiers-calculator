@@ -1,11 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { getGearSet } from '../../constants/gearSets';
-import { STATS } from '../../constants/stats';
-import { StatName, StatType } from '../../types/stats';
+import { GEAR_SLOTS } from '../../constants/gearTypes';
+import { RARITIES } from '../../constants/rarities';
 import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
+import { useNotification } from '../../hooks/useNotification';
 import { GearPiece } from '../../types/gear';
 import { WishlistEntry } from '../../types/wishlist';
-import { Button, CloseIcon, EditIcon, StarOutlineIcon } from '../ui';
+import { matchesWishlistEntry } from '../../utils/wishlist/matchWishlistEntry';
+import {
+    WISHLIST_NAME_MAX_LENGTH,
+    wishlistStatLabel,
+} from '../../utils/wishlist/describeWishlistEntry';
+import { useShips } from '../../contexts/ShipsContext';
+import { useWishlistScores, type WishlistScoreRequest } from '../../hooks/useWishlistScores';
+import { describeBestHit, describeWishlistTarget } from '../../utils/wishlist/wishlistScoreDisplay';
+import { Button, Chip, CloseIcon, ConfirmModal, CopyIcon, EditIcon, StarOutlineIcon } from '../ui';
+import { ChevronDownIcon, ChevronUpIcon } from '../ui/icons/ChevronIcons';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { Loader } from '../ui/Loader';
 import { WishlistEntryForm } from './WishlistEntryForm';
@@ -13,44 +23,97 @@ import { WishlistSearchResults } from './WishlistSearchResults';
 
 interface Props {
     inventory: GearPiece[];
+    /** An entry to start the add form with, e.g. built from an Upgrade Analysis config. */
+    draft?: Omit<WishlistEntry, 'id'> | null;
+    onDraftHandled?: () => void;
+    /** Opens Upgrade Analysis for a targeted entry. */
+    onOpenInAnalysis?: (entry: WishlistEntry) => void;
 }
 
-export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
-    const { entries, loading, addEntry, updateEntry, deleteEntry } = useGearWishlistContext();
-    const [editingEntry, setEditingEntry] = useState<WishlistEntry | null>(null);
-    const [showForm, setShowForm] = useState(false);
-    const [showSearch, setShowSearch] = useState(false);
+/** Upgrade Analysis stat filters also match the main stat and either stat type; an entry's
+ * substat filter does not, so a saved analysis can match fewer pieces. */
+const ANALYSIS_DRAFT_NOTICE =
+    'Prefilled from Upgrade Analysis. Upgrade Analysis also counts a stat when it is the main stat, ' +
+    'and counts flat and % alike. This entry only checks substats, with the types selected below, ' +
+    'so it may match fewer pieces. Adjust the filters if needed.';
+
+type FormTarget =
+    | { kind: 'new' }
+    | { kind: 'edit'; entry: WishlistEntry }
+    | { kind: 'copy'; entry: WishlistEntry }
+    | { kind: 'draft'; entry: Omit<WishlistEntry, 'id'> };
+
+export const GearWishlistTab: React.FC<Props> = ({
+    inventory,
+    draft,
+    onDraftHandled,
+    onOpenInAnalysis,
+}) => {
+    const { entries, loading, addEntry, updateEntry, deleteEntry, moveEntry } =
+        useGearWishlistContext();
+    const { addNotification } = useNotification();
+    const [form, setForm] = useState<FormTarget | null>(null);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [pendingDelete, setPendingDelete] = useState<WishlistEntry | null>(null);
+
+    const gearInventory = useMemo(() => inventory.filter((p) => p.slot in GEAR_SLOTS), [inventory]);
+
+    const { ships } = useShips();
 
     useEffect(() => {
-        if (entries.length === 0) setShowSearch(false);
-    }, [entries.length]);
+        if (!draft) return;
+        setForm({ kind: 'draft', entry: draft });
+        onDraftHandled?.();
+    }, [draft, onDraftHandled]);
+
+    const requests = useMemo<WishlistScoreRequest[]>(
+        () =>
+            entries.map((entry) => ({
+                entry,
+                matches: gearInventory.filter((g) => matchesWishlistEntry(g, entry)),
+            })),
+        [entries, gearInventory]
+    );
+    const { results: scoreResults, scoring } = useWishlistScores(requests);
+
+    const selectedEntry = entries.find((e) => e.id === selectedId) ?? entries[0];
+    const selectedRequest = requests.find((r) => r.entry.id === selectedEntry?.id);
 
     const handleSubmit = async (data: Omit<WishlistEntry, 'id'>) => {
-        if (editingEntry) {
-            await updateEntry({ ...data, id: editingEntry.id });
-            setEditingEntry(null);
-        } else {
-            await addEntry(data);
+        try {
+            if (form?.kind === 'edit') {
+                await updateEntry({ ...data, id: form.entry.id });
+            } else {
+                await addEntry(data);
+            }
+            setForm(null);
+        } catch {
+            addNotification('error', 'Could not save the wishlist entry. Please try again.');
         }
-        setShowForm(false);
     };
 
-    const handleEdit = (entry: WishlistEntry) => {
-        setEditingEntry(entry);
-        setShowForm(true);
-        setShowSearch(false);
+    const handleMove = async (id: string, offset: -1 | 1) => {
+        try {
+            await moveEntry(id, offset);
+        } catch {
+            addNotification('error', 'Could not reorder the wishlist entries. Please try again.');
+        }
     };
 
-    const handleCancelForm = () => {
-        setEditingEntry(null);
-        setShowForm(false);
+    const handleConfirmDelete = async () => {
+        if (!pendingDelete) return;
+        try {
+            await deleteEntry(pendingDelete.id);
+        } catch {
+            addNotification('error', 'Could not delete the wishlist entry. Please try again.');
+        }
     };
 
     if (loading && entries.length === 0) {
         return <Loader />;
     }
 
-    if (entries.length === 0 && !showForm) {
+    if (entries.length === 0 && !form) {
         return (
             <div className="card text-center py-12 flex flex-col items-center gap-4">
                 <StarOutlineIcon className="w-12 h-12 text-theme-text-secondary" />
@@ -61,108 +124,220 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
                         matches in the Import Summary when new gear arrives.
                     </p>
                 </div>
-                <Button onClick={() => setShowForm(true)} variant="primary">
+                <Button onClick={() => setForm({ kind: 'new' })} variant="primary">
                     Add Entry
                 </Button>
             </div>
         );
     }
 
+    const formInitial =
+        form?.kind === 'edit' || form?.kind === 'draft'
+            ? form.entry
+            : form?.kind === 'copy'
+              ? {
+                    ...form.entry,
+                    name: `${form.entry.name} (copy)`.slice(0, WISHLIST_NAME_MAX_LENGTH),
+                }
+              : undefined;
+
     return (
         <div className="space-y-4">
-            <CollapsibleForm isVisible={showForm}>
+            <CollapsibleForm isVisible={form !== null}>
                 <div className="card">
                     <h2 className="text-xl font-semibold text-white mb-4">
-                        {editingEntry ? 'Edit Entry' : 'Add Entry'}
+                        {form?.kind === 'edit' ? 'Edit Entry' : 'Add Entry'}
                     </h2>
                     <WishlistEntryForm
-                        key={editingEntry?.id ?? 'new'}
-                        initial={editingEntry ?? undefined}
-                        onSubmit={(data) => void handleSubmit(data)}
-                        onCancel={handleCancelForm}
+                        key={
+                            form
+                                ? `${form.kind}-${
+                                      form.kind === 'new' || form.kind === 'draft'
+                                          ? ''
+                                          : form.entry.id
+                                  }`
+                                : 'closed'
+                        }
+                        initial={formInitial}
+                        submitLabel={form?.kind === 'edit' ? 'Save' : 'Add Entry'}
+                        notice={form?.kind === 'draft' ? ANALYSIS_DRAFT_NOTICE : undefined}
+                        onSubmit={handleSubmit}
+                        onCancel={() => setForm(null)}
                     />
                 </div>
             </CollapsibleForm>
 
             {entries.length > 0 && (
                 <div className="space-y-2">
-                    {entries.map((entry) => (
-                        <div key={entry.id} className="card flex items-start justify-between gap-4">
-                            <div className="min-w-0">
-                                <p className="font-medium text-white truncate">{entry.name}</p>
-                                <FilterChips entry={entry} />
+                    {requests.map(({ entry, matches }, index) => {
+                        const isSelected = entry.id === selectedEntry?.id;
+                        const count = matches.length;
+                        const target = entry.target
+                            ? describeWishlistTarget(entry.target, ships)
+                            : undefined;
+                        const bestHit = describeBestHit(scoreResults.get(entry.id));
+                        return (
+                            <div
+                                key={entry.id}
+                                role="button"
+                                tabIndex={0}
+                                aria-pressed={isSelected}
+                                onClick={() => setSelectedId(entry.id)}
+                                onKeyDown={(e) => {
+                                    if (
+                                        e.target === e.currentTarget &&
+                                        (e.key === 'Enter' || e.key === ' ')
+                                    ) {
+                                        e.preventDefault();
+                                        setSelectedId(entry.id);
+                                    }
+                                }}
+                                className={`card flex items-start justify-between gap-4 cursor-pointer transition-colors ${
+                                    isSelected ? 'border-primary' : 'hover:border-primary'
+                                }`}
+                            >
+                                <div className="min-w-0">
+                                    <p className="font-medium text-white truncate">
+                                        {entry.name}
+                                        <span className="ml-2 text-xs font-normal text-theme-text-secondary">
+                                            {count} match{count !== 1 ? 'es' : ''}
+                                        </span>
+                                    </p>
+                                    <FilterChips entry={entry} />
+                                    {target && (
+                                        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-theme-text-secondary">
+                                            <Chip variant={target.valid ? 'accent' : 'default'}>
+                                                {target.label}
+                                            </Chip>
+                                            {target.valid && count > 0 && (
+                                                <span>
+                                                    {bestHit ?? (scoring ? 'Scoring...' : '')}
+                                                </span>
+                                            )}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    {entry.target && onOpenInAnalysis && (
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onOpenInAnalysis(entry);
+                                            }}
+                                        >
+                                            Open in Upgrade Analysis
+                                        </Button>
+                                    )}
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        disabled={index === 0}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            void handleMove(entry.id, -1);
+                                        }}
+                                        aria-label="Move entry up"
+                                    >
+                                        <ChevronUpIcon />
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        disabled={index === requests.length - 1}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            void handleMove(entry.id, 1);
+                                        }}
+                                        aria-label="Move entry down"
+                                    >
+                                        <ChevronDownIcon />
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setForm({ kind: 'copy', entry });
+                                        }}
+                                        aria-label="Duplicate entry"
+                                    >
+                                        <CopyIcon />
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setForm({ kind: 'edit', entry });
+                                        }}
+                                        aria-label="Edit entry"
+                                    >
+                                        <EditIcon />
+                                    </Button>
+                                    <Button
+                                        variant="danger"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPendingDelete(entry);
+                                        }}
+                                        aria-label="Delete entry"
+                                    >
+                                        <CloseIcon />
+                                    </Button>
+                                </div>
                             </div>
-                            <div className="flex gap-2 shrink-0">
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => handleEdit(entry)}
-                                    aria-label="Edit entry"
-                                >
-                                    <EditIcon />
-                                </Button>
-                                <Button
-                                    variant="danger"
-                                    size="sm"
-                                    onClick={() => void deleteEntry(entry.id)}
-                                    aria-label="Delete entry"
-                                >
-                                    <CloseIcon />
-                                </Button>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
-            <div className="flex gap-2 flex-wrap">
-                {!showForm && (
-                    <Button
-                        variant="primary"
-                        onClick={() => {
-                            setEditingEntry(null);
-                            setShowForm(true);
-                        }}
-                    >
-                        Add Entry
-                    </Button>
-                )}
-                <Button
-                    variant="secondary"
-                    onClick={() => setShowSearch((v) => !v)}
-                    disabled={entries.length === 0}
-                >
-                    {showSearch ? 'Hide Results' : 'Search Inventory'}
+            {form === null && (
+                <Button variant="primary" onClick={() => setForm({ kind: 'new' })}>
+                    Add Entry
                 </Button>
-            </div>
+            )}
 
-            {showSearch && <WishlistSearchResults entries={entries} inventory={inventory} />}
+            {selectedEntry && selectedRequest && (
+                <WishlistSearchResults
+                    entry={selectedEntry}
+                    matches={selectedRequest.matches}
+                    scoreResult={scoreResults.get(selectedEntry.id)}
+                    scoring={
+                        scoring && !!selectedEntry.target && !scoreResults.has(selectedEntry.id)
+                    }
+                />
+            )}
+
+            <ConfirmModal
+                isOpen={pendingDelete !== null}
+                onClose={() => setPendingDelete(null)}
+                onConfirm={() => void handleConfirmDelete()}
+                title="Delete wishlist entry"
+                message={`Delete "${pendingDelete?.name ?? ''}"? This cannot be undone.`}
+                confirmLabel="Delete"
+            />
         </div>
     );
 };
 
-function statLabel({ name, type }: { name: StatName; type?: StatType }): string {
-    const def = STATS[name];
-    if (!def) return name;
-    if (type && def.allowedTypes.length > 1) {
-        return type === 'percentage' ? `${def.shortLabel}%` : def.shortLabel;
-    }
-    return def.shortLabel;
-}
-
 function FilterChips({ entry }: { entry: WishlistEntry }) {
     const chips: string[] = [];
     const { filters } = entry;
-    if (filters.slot?.length) chips.push(...filters.slot);
+    if (filters.slot?.length) chips.push(...filters.slot.map((s) => GEAR_SLOTS[s]?.label ?? s));
     if (filters.stars?.length) chips.push(...filters.stars.map((n) => `${n}★`));
-    if (filters.rarity?.length) chips.push(...filters.rarity);
+    if (filters.rarity?.length) chips.push(...filters.rarity.map((r) => RARITIES[r]?.label ?? r));
     if (filters.setBonus?.length)
         chips.push(...filters.setBonus.map((s) => getGearSet(s)?.name ?? s));
-    if (filters.mainStat?.length) chips.push(...filters.mainStat.map((s) => statLabel(s)));
+    if (filters.mainStat?.length) {
+        chips.push(`Main: ${filters.mainStat.map(wishlistStatLabel).join(' / ')}`);
+    }
     if (filters.subStats?.length) {
-        const names = filters.subStats.map((s) => statLabel(s)).join(' + ');
+        const names = filters.subStats.map(wishlistStatLabel).join(' + ');
         const min = filters.subStatsMin ?? filters.subStats.length;
-        chips.push(min < filters.subStats.length ? `${min} of: ${names}` : names);
+        chips.push(min < filters.subStats.length ? `Subs: ${min} of ${names}` : `Subs: ${names}`);
     }
 
     if (chips.length === 0) {

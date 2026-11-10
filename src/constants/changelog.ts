@@ -4,7 +4,24 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Gear wishlist: entries show their match count; click one to see its gear.',
+    'Gear wishlist: entry names are optional and generated from the filters.',
+    'Gear wishlist: deleting an entry now asks you to confirm before it goes.',
+    'Gear wishlist: entries can now be duplicated with one click.',
+    'Gear wishlist: entries can now be reordered with up and down buttons.',
+    'Gear wishlist: failed saves and deletes now show an error message.',
+    'Gear wishlist: main stat options narrow to what the selected slots can roll.',
+    'Gear wishlist: the gear set picker can now be filtered by name.',
+    'Gear wishlist: results can now hide gear already equipped on ships.',
+    'Gear wishlist: results can now hide every levelled piece, not just maxed ones.',
+    'Gear wishlist: entries can target a ship or role and rank their matches.',
+    'Gear wishlist: Upgrade Analysis can save its settings as a wishlist entry.',
+    'Gear wishlist: targeted entries open in Upgrade Analysis with one click.',
+    'Import summary: wishlist hits for targeted entries show upgrade value, best first.',
+    'Import summary: Notable Gear and Wishlist Hits now both show after an import.',
+    'Import summary: a piece matching several wishlist entries now appears once.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

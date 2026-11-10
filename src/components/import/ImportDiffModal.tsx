@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal } from '../ui/layout/Modal';
 import { ImportDiff } from '../../types/importDiff';
 import { Ship } from '../../types/ship';
@@ -9,6 +9,10 @@ import { getGearSet } from '../../constants/gearSets';
 import { getImplantData } from '../../constants/implants';
 import { STATS } from '../../constants/stats';
 import { hasChanges } from '../../utils/import/computeImportDiff';
+import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
+import { useWishlistScores, type WishlistScoreRequest } from '../../hooks/useWishlistScores';
+import { compareHitScores, pickBestScore } from '../../utils/wishlist/wishlistScoreDisplay';
+import { WishlistScoreBadge } from '../gear/WishlistScoreBadge';
 
 interface Props {
     diff: ImportDiff | null;
@@ -66,6 +70,33 @@ function ImplantLine({ implant }: { implant: GearPiece }) {
 }
 
 export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose }) => {
+    const { entries } = useGearWishlistContext();
+
+    // One request per targeted entry that has a hit; the scorer ranks against the whole inventory.
+    const requests = useMemo<WishlistScoreRequest[]>(() => {
+        const hits = diff?.wishlistHits ?? [];
+        return entries.flatMap((entry) => {
+            if (!entry.target) return [];
+            const matches = hits.filter((h) => h.entryIds.includes(entry.id)).map((h) => h.gear);
+            return matches.length > 0 ? [{ entry, matches }] : [];
+        });
+    }, [diff, entries]);
+    const { results: scoreResults } = useWishlistScores(requests);
+
+    // Each hit shows its strongest score; hits sort upgrades first.
+    const scoredHits = useMemo(() => {
+        const hits = (diff?.wishlistHits ?? []).map((hit) => {
+            const perEntry = hit.entryIds.map((id, i) => ({
+                entryId: id,
+                entryName: hit.entryNames[i],
+                score: scoreResults.get(id)?.scores.find((s) => s.pieceId === hit.gear.id),
+            }));
+            const scores = perEntry.flatMap(({ score }) => (score ? [score] : []));
+            return { ...hit, perEntry, sortScore: pickBestScore(scores) };
+        });
+        return hits.sort((a, b) => compareHitScores(a.sortScore, b.sortScore));
+    }, [diff, scoreResults]);
+
     if (!diff) return null;
 
     const { ships, gear, implants } = diff;
@@ -282,26 +313,8 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                     )}
                                 </p>
                             )}
-                            {hasWishlistHits ? (
-                                <div>
-                                    <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
-                                        Wishlist Hits
-                                    </div>
-                                    <div className="space-y-2">
-                                        {(diff.wishlistHits ?? []).map(
-                                            ({ entryId, entryName, gear: g }) => (
-                                                <div key={`${entryId}-${g.id}`}>
-                                                    <div className="text-xs text-theme-text-secondary mb-0.5">
-                                                        {entryName}
-                                                    </div>
-                                                    <GearLine gear={g} />
-                                                </div>
-                                            )
-                                        )}
-                                    </div>
-                                </div>
-                            ) : gear.newLegendary6Star.length > 0 ? (
-                                <div>
+                            {gear.newLegendary6Star.length > 0 && (
+                                <div className={hasWishlistHits ? 'mb-3' : undefined}>
                                     <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
                                         Notable Gear
                                     </div>
@@ -309,7 +322,38 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                         <GearLine key={g.id} gear={g} />
                                     ))}
                                 </div>
-                            ) : null}
+                            )}
+                            {hasWishlistHits && (
+                                <div>
+                                    <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
+                                        Wishlist Hits
+                                    </div>
+                                    <div className="space-y-2">
+                                        {scoredHits.map(({ gear: g, perEntry, sortScore }) => (
+                                            <div
+                                                key={g.id}
+                                                className={
+                                                    sortScore && !sortScore.isUpgrade
+                                                        ? 'opacity-50'
+                                                        : ''
+                                                }
+                                            >
+                                                {perEntry.map(({ entryId, entryName, score }) => (
+                                                    <div key={entryId} className="mb-0.5">
+                                                        <div className="text-xs text-theme-text-secondary">
+                                                            {entryName}
+                                                        </div>
+                                                        {score && (
+                                                            <WishlistScoreBadge score={score} />
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                <GearLine gear={g} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

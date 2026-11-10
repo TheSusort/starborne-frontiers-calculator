@@ -1,17 +1,30 @@
 import React, { useState } from 'react';
-import { WishlistEntry } from '../../types/wishlist';
-import { Input, Button } from '../ui';
+import { WishlistEntry, WishlistTarget } from '../../types/wishlist';
+import { Callout, Input, Button, Select, RoleSelector } from '../ui';
+import { ShipSelector } from '../ship/ShipSelector';
+import { useShips } from '../../contexts/ShipsContext';
+import type { ShipTypeName } from '../../constants/shipTypes';
 import { GEAR_SLOT_ORDER, type GearSlotName } from '../../constants/gearTypes';
 import { RARITIES, type RarityName } from '../../constants/rarities';
 import { GEAR_SETS, getGearSet, type GearSetName } from '../../constants/gearSets';
 import { STATS } from '../../constants/stats';
 import IMPLANTS from '../../constants/implants';
 import { StatName, StatType } from '../../types/stats';
+import { filterMainStatKeys, getAllowedMainStatNames } from '../../utils/wishlist/allowedMainStats';
+import {
+    describeWishlistEntry,
+    WISHLIST_NAME_MAX_LENGTH,
+} from '../../utils/wishlist/describeWishlistEntry';
 
 interface Props {
-    initial?: WishlistEntry;
-    onSubmit: (entry: Omit<WishlistEntry, 'id'>) => void;
+    /** Prefills the form. Pass `submitLabel` when this is not an edit of a saved entry. */
+    initial?: Omit<WishlistEntry, 'id'>;
+    submitLabel?: string;
+    /** May reject: the caller decides whether the form stays open. */
+    onSubmit: (entry: Omit<WishlistEntry, 'id'>) => void | Promise<void>;
     onCancel?: () => void;
+    /** Shown above the form, e.g. how a prefill from Upgrade Analysis differs from it. */
+    notice?: string;
 }
 
 const ALL_STARS = ['1', '2', '3', '4', '5', '6'];
@@ -91,7 +104,14 @@ function toggle<T>(arr: T[], value: T): T[] {
     return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
-export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel }) => {
+export const WishlistEntryForm: React.FC<Props> = ({
+    initial,
+    submitLabel = initial ? 'Save' : 'Add Entry',
+    onSubmit,
+    onCancel,
+    notice,
+}) => {
+    const [submitting, setSubmitting] = useState(false);
     const [name, setName] = useState(initial?.name ?? '');
     const [slots, setSlots] = useState<GearSlotName[]>(initial?.filters.slot ?? []);
     const [stars, setStars] = useState<string[]>(initial?.filters.stars?.map(String) ?? []);
@@ -107,13 +127,28 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
             ({ name, type }) => `${name}:${type ?? STATS[name].allowedTypes[0]}`
         ) ?? []
     );
+    const { ships } = useShips();
+    const [targetKind, setTargetKind] = useState<'none' | 'role' | 'ship'>(
+        initial?.target?.kind ?? 'none'
+    );
+    // A stored target is kept as it is until the user edits it, even when its ship is gone or
+    // its role is unknown to this build.
+    const [role, setRole] = useState<ShipTypeName | ''>(
+        initial?.target?.kind === 'role' ? initial.target.role : ''
+    );
+    const [shipId, setShipId] = useState<string>(
+        initial?.target?.kind === 'ship' ? initial.target.shipId : ''
+    );
+    const [setFilter, setSetFilter] = useState('');
     const [subStatsMin, setSubStatsMin] = useState<number>(
         initial?.filters.subStatsMin ?? initial?.filters.subStats?.length ?? 1
     );
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const targetIncomplete = (targetKind === 'role' && !role) || (targetKind === 'ship' && !shipId);
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name.trim()) return;
+        if (submitting || targetIncomplete) return;
         const filters: WishlistEntry['filters'] = {
             ...(slots.length > 0 ? { slot: slots } : {}),
             ...(stars.length > 0 ? { stars: stars.map(Number) } : {}),
@@ -129,19 +164,85 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
                   }
                 : {}),
         };
-        onSubmit({ name: name.trim().slice(0, 64), filters });
+        const trimmed = name.trim().slice(0, WISHLIST_NAME_MAX_LENGTH);
+        const target: WishlistTarget | undefined =
+            targetKind === 'role' && role
+                ? { kind: 'role', role }
+                : targetKind === 'ship' && shipId
+                  ? { kind: 'ship', shipId }
+                  : undefined;
+        setSubmitting(true);
+        try {
+            await onSubmit({
+                name: trimmed || describeWishlistEntry(filters),
+                filters,
+                ...(target ? { target } : {}),
+            });
+        } finally {
+            setSubmitting(false);
+        }
     };
 
+    const allowedMainStats = getAllowedMainStatNames(slots);
+    const mainStatOptions = STAT_TYPE_KEYS.filter((k) =>
+        allowedMainStats.has(k.split(':')[0] as StatName)
+    );
+
+    // Selected sets stay listed even when the text filter hides them, so they can be unselected.
+    const needle = setFilter.trim().toLowerCase();
+    const visibleSets = GEAR_SET_ENTRIES.map(([key]) => key).filter(
+        (key) =>
+            setBonuses.includes(key) ||
+            !needle ||
+            (getGearSet(key)?.name ?? key).toLowerCase().includes(needle)
+    );
+
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+            {notice && (
+                <Callout variant="tip" title="Note">
+                    {notice}
+                </Callout>
+            )}
             <Input
                 label="Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                maxLength={64}
-                required
-                placeholder="e.g. 6★ Legendary Attack Weapon"
+                maxLength={WISHLIST_NAME_MAX_LENGTH}
+                placeholder="Optional. Leave blank to name it from the filters"
             />
+
+            <div className="space-y-2">
+                <Select
+                    label="Target (optional)"
+                    value={targetKind}
+                    onChange={(value) => {
+                        if (value === 'none' || value === 'role' || value === 'ship') {
+                            setTargetKind(value);
+                        }
+                    }}
+                    options={[
+                        { value: 'none', label: 'None' },
+                        { value: 'role', label: 'Role' },
+                        { value: 'ship', label: 'Ship' },
+                    ]}
+                    helpLabel="A target ranks matches by upgrade value: for a role, against every piece you own in the slot; for a ship, against what it wears now."
+                />
+                {targetKind === 'role' && (
+                    <RoleSelector value={role} onChange={setRole} label="Role" />
+                )}
+                {targetKind === 'ship' && (
+                    <ShipSelector
+                        selected={ships.find((ship) => ship.id === shipId) ?? null}
+                        onSelect={(ship) => setShipId(ship.id)}
+                    />
+                )}
+                {targetIncomplete && (
+                    <p className="text-xs text-theme-text-secondary">
+                        Pick a {targetKind === 'role' ? 'role' : 'ship'}, or set the target to None.
+                    </p>
+                )}
+            </div>
 
             <ChipPicker
                 label="Stars (any of)"
@@ -164,12 +265,22 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
                 allOptions={GEAR_SLOT_ORDER}
                 getLabel={(s) => s.charAt(0).toUpperCase() + s.slice(1)}
                 selected={slots}
-                onToggle={(s) => setSlots((prev) => toggle(prev, s))}
+                onToggle={(s) => {
+                    const next = toggle(slots, s);
+                    setSlots(next);
+                    setMainStats((prev) => filterMainStatKeys(prev, next));
+                }}
             />
 
+            <Input
+                label="Filter gear sets"
+                value={setFilter}
+                onChange={(e) => setSetFilter(e.target.value)}
+                placeholder="Type to narrow the gear set list"
+            />
             <ChipPicker
                 label="Gear Set (any of)"
-                allOptions={GEAR_SET_ENTRIES.map(([key]) => key)}
+                allOptions={visibleSets}
                 getLabel={(key) => getGearSet(key)?.name ?? key}
                 selected={setBonuses}
                 onToggle={(s) => setSetBonuses((prev) => toggle(prev, s))}
@@ -177,7 +288,7 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
 
             <ChipPicker
                 label="Main Stat (any of)"
-                allOptions={STAT_TYPE_KEYS}
+                allOptions={mainStatOptions}
                 getLabel={(k) => STAT_TYPE_KEY_LABEL[k] ?? k}
                 selected={mainStats}
                 onToggle={(k) => setMainStats((prev) => toggle(prev, k))}
@@ -200,18 +311,23 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
                 {subStats.length >= 2 && (
                     <div className="flex items-center gap-2 mt-2">
                         <span className="text-sm text-theme-text-secondary">At least</span>
-                        <input
-                            type="number"
-                            min={1}
-                            max={subStats.length}
-                            value={subStatsMin}
-                            onChange={(e) =>
-                                setSubStatsMin(
-                                    Math.max(1, Math.min(subStats.length, Number(e.target.value)))
-                                )
-                            }
-                            className="w-14 bg-dark border border-dark-border text-white text-sm px-2 py-1 text-center"
-                        />
+                        <div className="w-20">
+                            <Input
+                                type="number"
+                                min={1}
+                                max={subStats.length}
+                                value={subStatsMin}
+                                aria-label="Minimum matching substats"
+                                onChange={(e) =>
+                                    setSubStatsMin(
+                                        Math.max(
+                                            1,
+                                            Math.min(subStats.length, Number(e.target.value))
+                                        )
+                                    )
+                                }
+                            />
+                        </div>
                         <span className="text-sm text-theme-text-secondary">
                             of {subStats.length} must be present
                         </span>
@@ -220,8 +336,8 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
             </div>
 
             <div className="flex gap-2">
-                <Button type="submit" variant="primary" disabled={!name.trim()}>
-                    {initial ? 'Save' : 'Add Entry'}
+                <Button type="submit" variant="primary" disabled={submitting || targetIncomplete}>
+                    {submitLabel}
                 </Button>
                 {onCancel && (
                     <Button type="button" variant="secondary" onClick={onCancel}>

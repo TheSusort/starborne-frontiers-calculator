@@ -8,6 +8,8 @@ interface GearWishlistContextType {
     addEntry: (entry: Omit<WishlistEntry, 'id'>) => Promise<void>;
     updateEntry: (entry: WishlistEntry) => Promise<void>;
     deleteEntry: (id: string) => Promise<void>;
+    /** Moves an entry one place up (-1) or down (1). */
+    moveEntry: (id: string, offset: -1 | 1) => Promise<void>;
 }
 
 const GearWishlistContext = createContext<GearWishlistContextType | null>(null);

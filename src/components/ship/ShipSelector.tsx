@@ -62,6 +62,7 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
                 </ShipDisplay>
             ) : hidden ? null : (
                 <Button
+                    type="button"
                     aria-label="Select a Ship"
                     variant="secondary"
                     onClick={() => setIsShipModalOpen(true)}

@@ -1,7 +1,12 @@
 import { GearSlotName } from '../constants/gearTypes';
 import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
+import { ShipTypeName } from '../constants/shipTypes';
 import { StatName, StatType } from './stats';
+
+/** What a wishlist entry is hunting for: a specific ship's slot, or a role's gear pool. */
+export type WishlistTarget =
+    { kind: 'ship'; shipId: string } | { kind: 'role'; role: ShipTypeName };
 
 export interface WishlistEntry {
     id: string;
@@ -15,4 +20,5 @@ export interface WishlistEntry {
         subStats?: { name: StatName; type?: StatType }[]; // piece must have at least subStatsMin of these
         subStatsMin?: number; // how many of subStats must match (default = all)
     };
+    target?: WishlistTarget;
 }

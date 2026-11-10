@@ -113,11 +113,14 @@ export function computeImportDiff(
         const oldGearIdSet = new Set(oldInventory.filter(isGear).map((g) => g.id));
         const newlyAddedGear = newInventory.filter(isGear).filter((g) => !oldGearIdSet.has(g.id));
         wishlistHits = [];
-        for (const entry of wishlistEntries) {
-            for (const gear of newlyAddedGear) {
-                if (matchesWishlistEntry(gear, entry)) {
-                    wishlistHits.push({ entryId: entry.id, entryName: entry.name, gear });
-                }
+        for (const gear of newlyAddedGear) {
+            const matched = wishlistEntries.filter((entry) => matchesWishlistEntry(gear, entry));
+            if (matched.length > 0) {
+                wishlistHits.push({
+                    gear,
+                    entryIds: matched.map((e) => e.id),
+                    entryNames: matched.map((e) => e.name),
+                });
             }
         }
     }
