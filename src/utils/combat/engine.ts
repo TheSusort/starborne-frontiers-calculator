@@ -14210,8 +14210,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         // spread order-independent: a holder spreads this round only if it already carried Corrosion
         // when the round ended (a stack received THIS round spreads only the FOLLOWING round).
         // A boss destroyed this round ended the match: the round tail runs no combat
-        // (`bossDestroyed`'s doc).
-        const bossEndedMatch = matchOver && bossDestroyed();
+        // (`bossDestroyed`'s doc). Read without `matchOver`: a boss killed by its own turn-start
+        // tick as the round's last actor leaves the turn loop without setting it. Any destroyed
+        // boss here fell this round, since one destroyed earlier ended the run at that round's
+        // `sideIsWiped` break.
+        const bossEndedMatch = bossDestroyed();
         const toxicHolders: CombatActor[] = [];
         for (const holder of bossEndedMatch ? [] : allActors) {
             if (holder.destroyedRound !== undefined) continue;
