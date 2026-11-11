@@ -43,7 +43,9 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
         statsByLevel: {
             32: {
                 hp: 327000,
-                attack: 26800,
+                // Fitted to a measured in-game Disintegration Cannon hit (#519); the community
+                // sheet's rounded 26.8K over-predicted it by 1.5%.
+                attack: 26390,
                 defence: 14900,
                 hacking: 270,
                 security: 160,
