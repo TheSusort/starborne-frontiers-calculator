@@ -6,6 +6,9 @@ import { ChangelogEntry } from '../types/changelog';
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Grif's and Hermes's +20% defence passive no longer counts twice.",
+    "Combat simulator: Nifo's Defense Surge now adds defence to allies.",
+    'Combat simulator: Reflect statuses now bounce damage back when hit as primary target.',
+    "Combat simulator: Nifo's passive now grants Core Charge when allies gain Taunt.",
     'Combat simulator: killing a bounty boss now wins the fight.',
     'Combat simulator: Paracelsus and Faust death effects no longer trigger from bomb kills.',
     'Bounty bosses: Mamma Maglienza and her Capo escorts can now be fought.',

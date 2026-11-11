@@ -590,6 +590,21 @@ export const BUFFS: Buff[] = [
         type: 'buff',
     },
     {
+        name: 'Reflect I',
+        description: 'Reflects 10% of the direct damage when hit as a primary target.',
+        type: 'buff',
+    },
+    {
+        name: 'Reflect II',
+        description: 'Reflects 20% of the direct damage when hit as a primary target.',
+        type: 'buff',
+    },
+    {
+        name: 'Reflect III',
+        description: 'Reflects 30% of the direct damage when hit as a primary target.',
+        type: 'buff',
+    },
+    {
         name: 'Hit Mitigation',
         description:
             'Blocks the next direct hit, transforming the damage receieved into dot dealt over 3 rounds.',
@@ -631,6 +646,11 @@ export const BUFFS: Buff[] = [
     {
         name: 'Terran Guard III',
         description: '+15% Defense (Applying Unit)',
+        type: 'buff',
+    },
+    {
+        name: 'Defense Surge',
+        description: '+20% Defense (Applying Unit)',
         type: 'buff',
     },
     {

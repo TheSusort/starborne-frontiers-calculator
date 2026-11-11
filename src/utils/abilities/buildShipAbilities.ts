@@ -26,6 +26,7 @@ import {
     parseBombShareDamage,
     parseCounterAbilities,
     parseDamageReflection,
+    parseReflectAmplification,
     parseSecondaryDamage,
     parseOnResistHpDamage,
     parseOnResistShieldDamage,
@@ -1046,7 +1047,7 @@ function maskTagsPreservingLength(text: string): string {
  * Marks every ability whose own sentence says its allies are scoped to the caster's targeting
  * pattern — the literal "within the active pattern". See `Ability.patternScoped`: passive-slot
  * support is otherwise NOT narrowed to the firing skill's support footprint, and this is the
- * opt-back-in for the four corpus ships that name the pattern (AEGIS, Cultivator, Graphite).
+ * opt-back-in for the passives that name the pattern (grep docs/ship-skills.csv for the phrase).
  *
  * Skips anchorless abilities (`pos === MAX_POS`, or any out-of-range index) rather than letting
  * `sentenceContaining` fall through to the row's LAST sentence and mis-flag them.
@@ -1588,6 +1589,26 @@ function abilitiesFromText(
                 pos: reflectPos >= 0 ? reflectPos : MAX_POS,
             });
         }
+    }
+
+    // Nifo: "When an ally reflects damage increase that damage by N%." An ally-scoped
+    // victim-side marker, read by the engine's reflection block (see the 'reflect-amplification'
+    // config's doc). Its own trigger wording carries the semantics, so it builds on any slot.
+    const reflectAmp = parseReflectAmplification(text);
+    if (reflectAmp !== null) {
+        const ampPos = text.search(/when an ally reflects/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'modifier',
+                target: 'all-allies',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'reflect-amplification', pct: reflectAmp },
+                autoFilled: true,
+            },
+            pos: ampPos >= 0 ? ampPos : MAX_POS,
+        });
     }
 
     const sec = secForBaseGate;

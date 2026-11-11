@@ -299,7 +299,7 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             });
 
             it('flags exactly the corpus count, so a data refresh surfaces here', () => {
-                expect(flaggedShipCount()).toBe(47);
+                expect(flaggedShipCount()).toBe(48);
             });
 
             it('every trigger excludedCarriers surfaces across the corpus has TRIGGER_PROSE', () => {

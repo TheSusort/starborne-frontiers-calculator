@@ -331,6 +331,12 @@ export type AbilityTrigger =
     // recipient via eventCtx.counterTargetId — this is a debuff ability, whose executor reads
     // counterTargetId (NOT victimId, which only dot/convert-dot consume; see triggers.ts).
     | 'on-enemy-taunt-gained'
+    // Fires when a SAME-SIDE actor, the owner included ("an ally" includes self), gains the named
+    // "Taunt" buff (rides `buff-applied`, filtered on buffName === 'Taunt'). The same-side mirror of
+    // on-enemy-taunt-gained. Nifo's "When an ally gains Taunt, this Unit grants all allies within
+    // the active pattern N stacks of Core Charge I" — the recipients are the grant's own target
+    // (pattern-scoped all-allies), so the listener stamps no eventCtx.
+    | 'on-ally-taunt-gained'
     // Ship-kit Wave 3, Task 6: fires when an OPPOSING-side actor takes a Damage over Time TICK
     // (rides the existing `dot-ticked` event — combat/events.ts — opposing-scoped on targetId,
     // ANY dotType). Anemone's "When an enemy takes damage from a Damage over Time effect,
@@ -440,6 +446,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     // Ship-kit Wave 3, Task 4: opposing-scoped reaction to an enemy actor gaining Taunt (Amartya
     // Exposed).
     'on-enemy-taunt-gained',
+    // Same-side reaction to an ally (owner included) gaining Taunt (Nifo's Core Charge grant).
+    'on-ally-taunt-gained',
     // Ship-kit Wave 3, Task 6: opposing-scoped reaction to an enemy actor taking a DoT tick
     // (Anemone heal).
     'on-enemy-dot-damage',
@@ -1243,6 +1251,17 @@ export type AbilityConfig =
            *  every direct hit (Reflect gear set). */
           requirePrimaryTarget?: boolean;
       }
+    // Nifo R2+: "When an ally reflects damage increase that damage by N%." Every bounce whose
+    // reflector is a same-side ally of the carrier (the carrier included) is multiplied by
+    // (1 + pct/100). No-op marker config (mirrors damage-reflection), target 'all-allies':
+    // the engine fans it onto each ally's victim-side list beside the ally-scoped
+    // incoming-reduction, so a dead or turn-blocked carrier stops amplifying. Read only by the
+    // reflection block in `applyVictimDamage` (engine.ts).
+    | {
+          type: 'reflect-amplification';
+          /** Percentage increase to each reflected hit, e.g. 15 for 15%. */
+          pct: number;
+      }
     // Boost gear set: caster-side +1-turn extension on every buff the wearer applies.
     // No-op marker config (mirrors damage-reflection) — read by the engine when building
     // the per-owner extension map, NEVER executed by the ability fold.
@@ -1518,8 +1537,9 @@ export interface Ability {
      *  normal single-target route. */
     repairedRecipientTargeted?: boolean;
     /** The ability's own clause says its allies are scoped to the caster's targeting pattern —
-     *  the literal words "within the active pattern" (Graphite R2/R4's ally charge grant, AEGIS's
-     *  and Cultivator's ally-scoped triggers; the only corpus wording, see docs/ship-skills.csv).
+     *  the literal words "within the active pattern" (e.g. Graphite R2/R4's ally charge grant,
+     *  Nifo's Core Charge grant, AEGIS's ally-scoped trigger; the only corpus wording, see
+     *  docs/ship-skills.csv).
      *
      *  A ship's targeting pattern belongs to its CAST, so PASSIVE-slot support (heals, shields,
      *  buffs, charge) is NOT narrowed to the firing skill's support footprint — user-verified

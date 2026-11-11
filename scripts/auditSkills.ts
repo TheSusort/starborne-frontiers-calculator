@@ -112,7 +112,8 @@ const RULES: Rule[] = [
     {
         id: 'base-damage',
         severity: 'high',
-        keyword: (t) => /\d+(?:\.\d+)?%\s+damage\b(?!\s+reduction)/i.test(t) && !/\bmore\b/i.test(t),
+        keyword: (t) =>
+            /\d+(?:\.\d+)?%\s+damage\b(?!\s+reduction)/i.test(t) && !/\bmore\b/i.test(t),
         handled: (a) => hasType(a, 'damage'),
     },
     {
@@ -235,6 +236,33 @@ const RULES: Rule[] = [
         handled: (a) => a.some((x) => x.config.type === 'damage-reflection'),
     },
     {
+        id: 'reflect-amplification',
+        severity: 'medium',
+        // "When an ally reflects damage increase that damage by N%" (Nifo).
+        keyword: (t) => /\bally\s+reflects\b[^.]*\bincrease\b/i.test(t),
+        handled: (a) => a.some((x) => x.config.type === 'reflect-amplification'),
+    },
+    {
+        id: 'taunt-gain-trigger',
+        severity: 'high',
+        // "When an enemy defender gains Taunt" (Amartya) / "When an ally gains Taunt" (Nifo): the
+        // gain is a REACTIVE TRIGGER. A parse that reads "gains Taunt" as a Taunt this Unit holds
+        // or grants produces a phantom Taunt and a self-Taunt gate instead, which the
+        // ungated-effect rule cannot see (the phantom gate counts as a gate).
+        keyword: (t) => /\bwhen\s+an?\s+(?:ally|enemy)\b[^.]*?\bgains?\s+taunt\b/i.test(t),
+        handled: (a, t) =>
+            (!/\bwhen\s+an?\s+ally\b[^.]*?\bgains?\s+taunt\b/i.test(t) ||
+                a.some((x) => x.trigger === 'on-ally-taunt-gained')) &&
+            (!/\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\s+taunt\b/i.test(t) ||
+                a.some((x) => x.trigger === 'on-enemy-taunt-gained')) &&
+            !a.some(
+                (x) =>
+                    (x.config.type === 'control' && x.config.effect === 'taunt') ||
+                    (x.config.type === 'buff' && x.config.buffName === 'Taunt') ||
+                    x.conditions.some((c) => c.buffName === 'Taunt')
+            ),
+    },
+    {
         id: 'dot-application',
         severity: 'high',
         // A DoT named as a reaction's trigger object ("When this Unit inflicts a Bomb it gains
@@ -294,7 +322,8 @@ const RULES: Rule[] = [
             // when a damage ability carries BOTH an `enemy-type` condition AND `scaling` (the
             // replacement delta); a gate alone does not model the "instead" branch.
             const hasEnemyTypeGatedReplacement = dmg.some(
-                (x) => x.scaling !== undefined && x.conditions.some((c) => c.subject === 'enemy-type')
+                (x) =>
+                    x.scaling !== undefined && x.conditions.some((c) => c.subject === 'enemy-type')
             );
             return (hasNegatedBase && hasAnyOfReplacement) || hasEnemyTypeGatedReplacement;
         },

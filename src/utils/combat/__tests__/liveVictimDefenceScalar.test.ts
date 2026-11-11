@@ -10,7 +10,7 @@
  *   - enemy hits player: the player's Defense Up EXPIRED at the end of its own turn, before the
  *     enemy fired (a read of the player's last-turn context still sees it).
  *
- * The real-kit case is Zosimos → Yuyan in seeded composition 1, round 4.
+ * The real-kit cases are Zosimos's casts on Yuyan and on Heliodor, found by a seed search.
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { CombatEngineInput } from '../engine';
@@ -22,10 +22,11 @@ import { composeBattle, type TaggedShip } from '../audit/compose';
 import { tagShip } from '../audit/classes';
 import { runSeededBattle } from '../../simulator/seededRuns';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { loadShipSkillRecords, csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { loadShipDataByName, shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 
-/** Every event of the two kinds below, from every `runCombat` call (the battle simulator's too). */
+/** Every event of the three kinds below, from every `runCombat` call (the battle simulator's too). */
 const seen: CombatEvent[] = [];
 vi.mock('../engine', async (importOriginal) => {
     const mod = await importOriginal<typeof import('../engine')>();
@@ -34,6 +35,7 @@ vi.mock('../engine', async (importOriginal) => {
         runCombat: (input: Parameters<typeof mod.runCombat>[0]) => {
             input.bus?.on('ability-performed', (e) => seen.push(e));
             input.bus?.on('attacked', (e) => seen.push(e));
+            input.bus?.on('buff-applied', (e) => seen.push(e));
             return mod.runCombat(input);
         },
     };
@@ -222,65 +224,107 @@ describe('#657 the turn-level damage figures read the bound target LIVE defence'
     });
 });
 
-describe('#657 real kits: Zosimos → Yuyan, seeded composition 1', () => {
-    it("Zosimos's round-4 hit on Yuyan reports what Yuyan took", () => {
+/** Seeded compositions searched for a real-kit Zosimos cast. The anchor is DERIVED by search, not
+ *  pinned to one seed: which ships a seed composes shifts with every ship-data refresh, and the
+ *  agreement under test does not depend on which seed shows it. */
+const REAL_KIT_SEARCH_SEEDS = 60;
+
+let taggedCorpusCache: TaggedShip[] | null = null;
+function taggedCorpus(): TaggedShip[] {
+    if (taggedCorpusCache) return taggedCorpusCache;
+    const namesByUpper = new Map<string, string>();
+    for (const r of loadShipSkillRecords()) namesByUpper.set(r.name.toUpperCase(), r.name);
+    for (const [upper, data] of loadShipDataByName())
+        if (!namesByUpper.has(upper)) namesByUpper.set(upper, data.name);
+    const tagged: TaggedShip[] = [];
+    for (const name of namesByUpper.values()) {
+        const ship = buildTraceShip(name);
+        if (ship) tagged.push({ ship, classes: tagShip(ship) });
+    }
+    taggedCorpusCache = tagged;
+    return tagged;
+}
+
+/**
+ * The first seeded battle in which a ship `attacker` accepts casts, without a crit, at a bound
+ * target `victim` accepts (both by ship name) and lands exactly one hit on it that round; returns
+ * the cast with that hit. `heldStatus`, when given, also requires the target to have gained a
+ * status it accepts earlier in that round or the round before.
+ */
+function realKitCastOn(opts: {
+    attacker: (shipName: string) => boolean;
+    victim: (shipName: string) => boolean;
+    heldStatus?: (buffName: string) => boolean;
+}): { cast: AbilityPerformed; took: Attacked } | undefined {
+    for (let seed = 1; seed <= REAL_KIT_SEARCH_SEEDS; seed++) {
+        const input = composeBattle(seed, taggedCorpus());
+        const names = [...input.playerTeam, ...input.enemyTeam].map((p) => p.ship.name);
+        const attackers = names.filter(opts.attacker);
+        const victims = names.filter(opts.victim);
+        if (attackers.length === 0 || victims.length === 0) continue;
+        seen.length = 0;
+        runSeededBattle(input, seed);
+        for (const [at, e] of seen.entries()) {
+            if (e.type !== 'ability-performed' || e.didCrit) continue;
+            if (!attackers.some((n) => e.actorId.includes(n))) continue;
+            if (!victims.some((n) => e.targetId.includes(n))) continue;
+            const held = (b: CombatEvent) =>
+                b.type === 'buff-applied' &&
+                b.actorId === e.targetId &&
+                b.round >= e.round - 1 &&
+                opts.heldStatus!(b.buffName);
+            if (opts.heldStatus && !seen.slice(0, at).some(held)) continue;
+            const hits = seen.filter(
+                (t): t is Attacked =>
+                    t.type === 'attacked' &&
+                    t.round === e.round &&
+                    t.attackerId === e.actorId &&
+                    t.targetId === e.targetId
+            );
+            if (hits.length === 1) return { cast: e, took: hits[0] };
+        }
+    }
+    return undefined;
+}
+
+describe('#657 / #658 real kits: a cast reports what its bound target took', () => {
+    it('Zosimos → Yuyan: the live victim defence (#657)', () => {
         if (!csvAvailable() || !shipDataAvailable())
             throw new Error('docs/ship-skills.csv and docs/ship-data.json are required');
-        const namesByUpper = new Map<string, string>();
-        for (const r of loadShipSkillRecords()) namesByUpper.set(r.name.toUpperCase(), r.name);
-        for (const [upper, data] of loadShipDataByName())
-            if (!namesByUpper.has(upper)) namesByUpper.set(upper, data.name);
-        const tagged: TaggedShip[] = [];
-        for (const name of namesByUpper.values()) {
-            const ship = buildTraceShip(name);
-            if (ship) tagged.push({ ship, classes: tagShip(ship) });
-        }
+        const found = realKitCastOn({
+            attacker: (name) => name === 'Zosimos',
+            victim: (name) => name === 'Yuyan',
+        });
+        expect(found).toBeDefined();
+        expect(found!.cast.damage).toBeCloseTo(found!.took.damage!, 6);
+    });
 
-        seen.length = 0;
-        runSeededBattle(composeBattle(1, tagged), 1);
-
-        const isZosimos = (id: string) => id.includes('Zosimos');
-        const isYuyan = (id: string) => id.includes('Yuyan');
-        const cast = seen.find(
-            (e): e is AbilityPerformed =>
-                e.type === 'ability-performed' &&
-                e.round === 4 &&
-                isZosimos(e.actorId) &&
-                isYuyan(e.targetId)
+    it("a hit on a ship holding its own Inc. Damage Down, e.g. Heliodor's (#658)", () => {
+        if (!csvAvailable() || !shipDataAvailable())
+            throw new Error('docs/ship-skills.csv and docs/ship-data.json are required');
+        // Ships whose own kit grants an incoming-damage reduction status. Derived from the parse,
+        // so a refresh that adds or drops a carrier moves the set with it.
+        const carriers = new Set(
+            taggedCorpus()
+                .filter(({ ship }) =>
+                    buildShipAbilities(ship).slots.some((slot) =>
+                        slot.abilities.some(
+                            (a) =>
+                                a.config.type === 'buff' &&
+                                (a.config.parsedEffects.incomingDamage ?? 0) < 0
+                        )
+                    )
+                )
+                .map(({ ship }) => ship.name)
         );
-        const took = seen.find(
-            (e): e is Attacked =>
-                e.type === 'attacked' &&
-                e.round === 4 &&
-                isZosimos(e.attackerId) &&
-                isYuyan(e.targetId)
-        );
-        // The composition must still be the one this case was measured on.
-        expect(cast).toBeDefined();
-        expect(took).toBeDefined();
-        expect(cast!.didCrit).toBe(false);
-        expect(cast!.damage).toBeCloseTo(took!.damage!, 6);
-
-        // Round 2, Zosimos → Heliodor: Heliodor's own incoming reduction is in what it took, and
-        // so in the figure the cast reports (#658).
-        const cast2 = seen.find(
-            (e): e is AbilityPerformed =>
-                e.type === 'ability-performed' &&
-                e.round === 2 &&
-                isZosimos(e.actorId) &&
-                e.targetId.includes('Heliodor')
-        );
-        const took2 = seen.find(
-            (e): e is Attacked =>
-                e.type === 'attacked' &&
-                e.round === 2 &&
-                isZosimos(e.attackerId) &&
-                e.targetId.includes('Heliodor')
-        );
-        expect(cast2).toBeDefined();
-        expect(took2).toBeDefined();
-        expect(cast2!.didCrit).toBe(false);
-        expect(cast2!.damage).toBeCloseTo(took2!.damage!, 6);
+        expect(carriers.has('Heliodor')).toBe(true);
+        const found = realKitCastOn({
+            attacker: () => true,
+            victim: (name) => carriers.has(name),
+            heldStatus: (buffName) => buffName.startsWith('Inc. Damage Down'),
+        });
+        expect(found).toBeDefined();
+        expect(found!.cast.damage).toBeCloseTo(found!.took.damage!, 6);
     });
 });
 
