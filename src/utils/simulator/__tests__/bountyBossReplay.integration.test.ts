@@ -78,7 +78,9 @@ const FLEET: Record<string, FleetShip> = {
         stats: {
             hp: 43598,
             attack: 6276,
-            defence: 6673,
+            // The planner's 6,673 already counts Grif's "+20% defense" passive, and the engine
+            // applies that passive again; dividing it out here leaves one application.
+            defence: 6673 / 1.2,
             hacking: 110.4,
             security: 104.5,
             crit: 23,
@@ -299,13 +301,11 @@ describe('replay: the owner team against Mamma Maglienza Lv32 and her Capos', ()
         expectMeasured(hit?.amount, 214_012, 0.01);
     });
 
-    it("Judge's round-4 crit on Mamma is 163,318", () => {
-        const hit = attacksBy((id) => id === idOf(result, 'Judge'))
-            .filter(({ round }) => round === 4)
-            .flatMap(({ entry }) => entry.targets)
-            .find((t) => t.targetId === mamma);
-        expect(hit?.didCrit).toBe(true);
-        expectMeasured(hit?.amount, 163_318, TIGHT);
+    it("Mamma's first cast hits Grif for 6,799 without a crit", () => {
+        const first = attacksBy((id) => id === mamma)[0].entry;
+        const hit = first.targets.find((t) => nameOf(result, t.targetId) === 'Grif');
+        expect(hit?.didCrit).not.toBe(true);
+        expectMeasured(hit?.amount, 6_799, TIGHT);
     });
 
     it('every hit Mamma lands strikes a single row', () => {
