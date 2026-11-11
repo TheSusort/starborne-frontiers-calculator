@@ -6098,6 +6098,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         actors.some((a) => a.isBoss === true && a.destroyedRound !== undefined);
     const sideIsWiped = (): boolean =>
         sideDefeated(enemyAttackerActors) || sideDefeated(allPlayerActors);
+    // A destroyed bounty boss defeats its side at the END OF THAT TURN (owner ruling, #519): the
+    // round's remaining combat — the end-of-round reactives and the Toxic Overflow spread — does
+    // not run, so nothing after the boss's turn can wipe the other side too. An ordinary wipe
+    // keeps the round tail. `battleSimulator`'s outcome applies the same rule to the winner.
+    const bossDestroyed = (): boolean =>
+        [...enemyAttackerActors, ...allPlayerActors].some(
+            (a) => a.isBoss === true && a.destroyedRound !== undefined
+        );
     let matchOver = false;
 
     // §4.5 Stasis reductions owed by direct hits, keyed by victim id: one per hit that landed on
@@ -10044,14 +10052,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // scratch copy; the detonated entries leave the live container afterwards.
                 const liveBombs = victim.pendingBombs;
                 const bombsLeft = liveBombs.slice();
-                // The detonator's recipe, resolved per victim through the factors a tick on that
-                // victim reads: `victimDotMult` (both sides of `composeDotDamageFactor`, the
-                // gated dealer bonuses) and the victim's own DoT reductions.
+                // The detonator's recipe, resolved per victim through the dealer-side factors a
+                // tick on that victim reads: `victimDotMult` (both sides of
+                // `composeDotDamageFactor`, the gated dealer bonuses). The victim's own reductions
+                // (`detonatedDotFactor`) apply below, so the burst's raw intake excludes them.
                 const victimRecipe: DetonationRecipe = {
                     ...recipe,
-                    dotFactorFor: (dotType) =>
-                        victimDotMult(recipe, victim, dotType) *
-                        detonatedDotFactor(victim.id, dotType),
+                    dotFactorFor: (dotType) => victimDotMult(recipe, victim, dotType),
                 };
                 const result = detonateContainers(victimRecipe, {
                     corrosionEntries: victim.corrosionEntries,
@@ -10099,7 +10106,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     creditDealt(actorId, victim.id, bombOutcome.incomingBooked);
                 }
                 for (const b of detonatedBombs) spliceOut(liveBombs, b);
-                const bypass = result.inferno + result.corrosion;
+                const bypassRaw = result.inferno + result.corrosion;
+                const bypass =
+                    result.inferno * detonatedDotFactor(victim.id, 'inferno') +
+                    result.corrosion * detonatedDotFactor(victim.id, 'corrosion');
                 let bypassDelivered = 0;
                 if (bypass > 0) {
                     // DoT → bypass shield. `byDirectDamage: false` makes every divergence step in
@@ -10110,6 +10120,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // loosens — the reconciliation suite pins that.
                     const bypassOutcome = applyVictimDamage(bypass, victim, sink, {
                         byDirectDamage: false,
+                        preMitigationDamage: bypassRaw,
                     });
                     bypassDelivered = detonationDelivered(bypassOutcome);
                     bus.emit({
@@ -14198,8 +14209,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         // guard against the fixed round-end state first, then applying from that snapshot, makes the
         // spread order-independent: a holder spreads this round only if it already carried Corrosion
         // when the round ended (a stack received THIS round spreads only the FOLLOWING round).
+        // A boss destroyed this round ended the match: the round tail runs no combat
+        // (`bossDestroyed`'s doc).
+        const bossEndedMatch = matchOver && bossDestroyed();
         const toxicHolders: CombatActor[] = [];
-        for (const holder of allActors) {
+        for (const holder of bossEndedMatch ? [] : allActors) {
             if (holder.destroyedRound !== undefined) continue;
             // TIMED per-victim channel only — deliberately NOT `ownerDebuffNames`, the broad
             // three-channel name union. Toxic Overflow is a CONSUMABLE ("...and remove Toxic
@@ -14309,7 +14323,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // and before roundData assembly. This is the LAST drain of the round, and the only one
         // after the turn loop; it resolves in turn order (see `drainInTurnOrder`).
         bus.emit({ type: 'round-ended', round: r });
-        drainEndOfRound();
+        if (!bossEndedMatch) drainEndOfRound();
         // An end-of-round purge ends after the last Post Turn settle; the hangover lands now.
         settleOverclockHangovers(r);
 

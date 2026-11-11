@@ -1071,6 +1071,37 @@ describe.each(SIDES)('detonation reduction, carrier on the %s side', (placement)
             both: burst('both'),
         }).toEqual({ dot: none / 2, detonation: none / 2, both: none / 2 });
     });
+
+    it("a detonate-DoT burst's raw intake excludes the carrier's own reductions", () => {
+        // `incomingRaw` is the damage as thrown: the carrier's DoT and detonation reductions come
+        // off `incoming` only. The run's hits, ticks and the burst are the same for every set.
+        const detonator = opponentWith([
+            ...hitKit(1).slots[0].abilities,
+            ...mammaKit()
+                .slots.find((s) => s.slot === 'active')!
+                .abilities.filter((a) => a.type === 'dot'),
+            dotAbility({ type: 'detonate-dot', dotType: 'inferno', powerPct: 100 }, 'det'),
+        ]);
+        const intakeOf = (set: ReductionSet) => {
+            const c = reductionCarrier(set);
+            const { input, id } = boardInput(placement, c, [], [detonator], 2);
+            let post = 0;
+            let raw = 0;
+            for (const r of runCombat(input).rounds) {
+                const e = r.perActorIncoming?.[id(c)];
+                post += e?.incoming ?? 0;
+                raw += e?.incomingRaw ?? 0;
+            }
+            return { post: Math.round(post), raw: Math.round(raw) };
+        };
+        const none = intakeOf('none');
+        expect(none.raw).toBeGreaterThan(0);
+        for (const set of ['dot', 'detonation', 'both'] as const) {
+            const reduced = intakeOf(set);
+            expect(reduced.post).toBeLessThan(none.post);
+            expect(reduced.raw).toBe(none.raw);
+        }
+    });
 });
 
 describe.each(SIDES)('Bomb splash is detonation damage, carrier on the %s side', (placement) => {

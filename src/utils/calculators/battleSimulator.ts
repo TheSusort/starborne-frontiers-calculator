@@ -476,7 +476,8 @@ const _checkLogSuperset: _AssertLogSupersetOfAssembled = true;
  * Outcome: the first round that wipes a side decides it. A side that wipes the other while keeping a
  * ship alive wins. When both sides are wiped in the same round, the side that dealt the final
  * killing damage wins: the side whose ship was destroyed last loses (a dying ship's counter or
- * reaction that kills the last opposing ship wins it). Reaching `numRounds` with both still alive
+ * reaction that kills the last opposing ship wins it) — unless exactly one side lost a bounty boss,
+ * which loses. Reaching `numRounds` with both still alive
  * is an ENEMY win — a timeout is a defeat (docs/combat-system.md §1, "Round limit exceeded →
  * Defeat").
  */
@@ -814,19 +815,24 @@ export function assembleBattleResult(args: {
             const d = destroyedAt.get(r.actorId);
             return d !== undefined && d <= round;
         };
+        const lostBoss = (side: 'player' | 'enemy'): boolean =>
+            roster.some((r) => r.side === side && r.isBoss === true && destroyedBy(r));
         const isWiped = (side: 'player' | 'enemy'): boolean => {
             const members = roster.filter((r) => r.side === side);
-            return (
-                members.length > 0 &&
-                (members.every(destroyedBy) || members.some((r) => r.isBoss && destroyedBy(r)))
-            );
+            return members.length > 0 && (members.every(destroyedBy) || lostBoss(side));
         };
         const playerWiped = isWiped('player');
         const enemyWiped = isWiped('enemy');
 
         if (playerWiped || enemyWiped) {
             lastRound = round;
-            if (playerWiped && enemyWiped) {
+            const playerLostBoss = lostBoss('player');
+            const enemyLostBoss = lostBoss('enemy');
+            if (playerWiped && enemyWiped && playerLostBoss !== enemyLostBoss) {
+                // A destroyed boss defeats its side at the end of that turn (the engine's
+                // `bossDestroyed`), so the side that lost its boss loses whatever else fell.
+                winner = playerLostBoss ? 'enemy' : 'player';
+            } else if (playerWiped && enemyWiped) {
                 // Both wiped this round: the side that dealt the final killing damage wins, so
                 // the side whose ship was destroyed LAST loses.
                 let lastSide: 'player' | 'enemy' | undefined;

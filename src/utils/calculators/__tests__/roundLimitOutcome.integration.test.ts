@@ -185,6 +185,46 @@ describe('a same-round mutual wipe → the side that landed the final kill wins'
         expect(outcomeFor(['e1', 'attacker'])).toEqual({ winner: 'enemy', lastRound: 2 });
     });
 
+    it('the assembler: a side that lost its boss loses a same-round mutual defeat', () => {
+        // Each side: a boss and an escort. Whatever the death order, the side whose boss fell
+        // loses, while the other side lost every ship without a boss among its dead.
+        const outcomeFor = (bossSide: 'player' | 'enemy', order: string[]) => {
+            const entry = (actorId: string, side: 'player' | 'enemy', isBoss: boolean) => ({
+                actorId,
+                side,
+                name: actorId,
+                position: 'M4' as const,
+                maxHp: 1,
+                isBoss,
+            });
+            const roster = [
+                entry('p-boss', 'player', bossSide === 'player'),
+                entry('p-escort', 'player', false),
+                entry('e-boss', 'enemy', bossSide === 'enemy'),
+                entry('e-escort', 'enemy', false),
+            ];
+            return assembleBattleResult({
+                events: order.map((actorId) => ({
+                    type: 'ship-destroyed' as const,
+                    actorId,
+                    round: 2,
+                })),
+                perRoundPerTarget: {},
+                roster,
+                numRounds: 5,
+            }).outcome;
+        };
+        // The boss falls first, then the other side is wiped later in the round.
+        expect(outcomeFor('enemy', ['e-boss', 'p-boss', 'p-escort'])).toEqual({
+            winner: 'player',
+            lastRound: 2,
+        });
+        expect(outcomeFor('player', ['p-boss', 'e-boss', 'e-escort'])).toEqual({
+            winner: 'enemy',
+            lastRound: 2,
+        });
+    });
+
     it('a roster missing a side is refused rather than given a winner', () => {
         expect(() =>
             assembleBattleResult({
