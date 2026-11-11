@@ -4788,6 +4788,44 @@ export function runCombat(rawInput: CombatEngineInput): {
         ...runtimesById,
     ]);
 
+    // User-authored standing "+N% defense" passives per owner: unconditional, self-scoped
+    // `defense` modifiers on a passive slot, added in the skill editor. They join the victim's
+    // percentage defence channel (`victimIncomingModifiers`), so every hit the owner takes
+    // mitigates on the raised defence. A parser-filled one (`autoFilled`) is skipped: the parser
+    // mints none for a ship's own "+N% defense" text because the ship's stats already carry it
+    // (#784), and a kit saved before that still holds one. A ship passive stops contributing
+    // while its holder is turn-blocked (`livePassiveEntries`).
+    interface StandingDefence {
+        pct: number;
+        source?: 'equipment';
+    }
+    const standingDefenceByOwner = new Map<string, StandingDefence[]>();
+    for (const [ownerId, rt] of allRuntimesById) {
+        const entries: StandingDefence[] = [];
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const a of slot.abilities) {
+                const c = a.config;
+                if (
+                    c.type === 'modifier' &&
+                    c.channel === 'defense' &&
+                    a.target === 'self' &&
+                    a.conditions.length === 0 &&
+                    !a.scaling &&
+                    a.autoFilled !== true
+                ) {
+                    entries.push({ pct: c.value, ...(a.source ? { source: a.source } : {}) });
+                }
+            }
+        }
+        if (entries.length > 0) standingDefenceByOwner.set(ownerId, entries);
+    }
+    const standingDefencePctOf = (ownerId: string): number =>
+        livePassiveEntries(ownerId, standingDefenceByOwner.get(ownerId) ?? []).reduce(
+            (sum, e) => sum + e.pct,
+            0
+        );
+
     // Passive-slot standing leeches per owner (damage-leech spec §4): X% of credited
     // damage repaired/shielded immediately at credit time. Scanned once at setup from each
     // runtime's reactive-partitioned castSkills (passive-slot heal/shield abilities are
@@ -8932,7 +8970,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 VICTIM_INCOMING_CHANNELS
             );
             return {
-                enemyDefenseModifier: selfDefense + (shadow.delta.defense ?? 0),
+                enemyDefenseModifier:
+                    selfDefense + standingDefencePctOf(victimId) + (shadow.delta.defense ?? 0),
                 incomingDamageModifier: selfIncoming + (shadow.delta.incomingDamage ?? 0) + exposed,
                 // #358: the VICTIM-SIDE half of the sum above, published separately because the
                 // sum is a MIXED channel and nothing downstream can un-mix it.

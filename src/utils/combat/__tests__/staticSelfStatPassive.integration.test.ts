@@ -103,6 +103,48 @@ describe.each<Placement>(['player', 'enemy'])(
     }
 );
 
+/** A passive slot holding one standing self `defense` modifier, as the skill editor builds it. */
+const standingDefenceKit = (autoFilled?: true): ShipSkills => ({
+    slots: [
+        {
+            slot: 'passive',
+            abilities: [
+                {
+                    id: 'custom-def',
+                    type: 'modifier',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: {
+                        type: 'modifier',
+                        channel: 'defense',
+                        value: 20,
+                        isMultiplicative: true,
+                    },
+                    ...(autoFilled ? { autoFilled } : {}),
+                },
+            ],
+        },
+    ],
+});
+
+describe.each<Placement>(['player', 'enemy'])(
+    'a user-authored standing defense modifier on the %s side',
+    (placement) => {
+        it('still mitigates incoming hits', () => {
+            const raised = takenFromOneHit(placement, NO_KIT, DEFENCE * 1.2);
+            const custom = takenFromOneHit(placement, standingDefenceKit(), DEFENCE);
+            expect(custom).toBeCloseTo(raised, 6);
+        });
+
+        it('a parser-filled one (a kit saved before #784) does not', () => {
+            const printed = takenFromOneHit(placement, NO_KIT, DEFENCE);
+            const saved = takenFromOneHit(placement, standingDefenceKit(true), DEFENCE);
+            expect(saved).toBeCloseTo(printed, 6);
+        });
+    }
+);
+
 describe('reference ships carry the passive stat exactly once (#785)', () => {
     const catalogueRows = (name: string): AscensionStat[] => {
         const units = JSON.parse(readFileSync(CATALOGUE, 'utf8')).units as {
