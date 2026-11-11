@@ -742,47 +742,10 @@ function parseModifiers(text: string): ParsedModifier[] {
         }
     }
 
-    // "increases its Defense by N%" / "defense is increased by N%" → a STANDING self defense
-    // modifier (Grif's "This Unit increases its Defense by 20%", Hermes's "This Unit's defense is
-    // increased by 20% and when it critically repairs an ally, ..."). Multiplicative (a % of base
-    // defense), self-scoped. Scoped to "Defense" specifically so it never collides with the
-    // "defense penetration" branches below (penetration carries the extra "penetration" word).
-    const defM = plain.match(
-        /(?:increases?\s+its\s+defense\s+by|defense\s+is\s+increased\s+by)\s+(\d+(?:\.\d+)?)%/i
-    );
-    if (defM) {
-        // Sentence-scope the standing modifier: a triggered ("when X, increases its Defense by
-        // 20%") or finite-duration ("increases its Defense by 20% for 2 turns") clause with the
-        // same wording must NOT be promoted to a PERMANENT buff — that is wrong combat math. Only
-        // emit when the clause is standalone/standing (no trigger words, no finite duration). A
-        // second, triggered clause joined by "and" ("... by 20% and when it critically repairs")
-        // is a different effect and does not make this one conditional; a plain "and" ("by 20%
-        // and Attack by 10% for 2 turns") continues the same clause, so its duration still binds.
-        const defSentence = sentenceContaining(plain, defM.index!);
-        const defClauseEnd = defM.index! + defM[0].length;
-        const sentenceStart = plain.indexOf(defSentence);
-        const afterMatch = defSentence.slice(defClauseEnd - sentenceStart);
-        const andAt = afterMatch.search(
-            /\band\s*,?\s*(?=when\b|if\b|while\b|upon\b|after\b|each\b|every\b|at the start of\b)/i
-        );
-        const defClause = defSentence.slice(
-            0,
-            defClauseEnd - sentenceStart + (andAt === -1 ? afterMatch.length : andAt)
-        );
-        const hasTrigger = /\b(when|if|while|upon|after|each|every)\b|at the start of/i.test(
-            defClause
-        );
-        const hasFiniteDuration = /\bfor\s+\d+\s+turns?\b/i.test(defClause);
-        if (!hasTrigger && !hasFiniteDuration) {
-            out.push({
-                channel: 'defense',
-                value: parseFloat(defM[1]),
-                isMultiplicative: true,
-                target: 'self',
-                conditions: [],
-            });
-        }
-    }
+    // A standing "This Unit increases its defense by N%" / "This Unit's defense is increased by
+    // N%" (Grif, Hermes) mints nothing: the clause describes the refit ascension stat the ship's
+    // stats already carry (owner ruling #784), the same rule as the unit-subject defense
+    // penetration below. Tripwire: `staticSelfStatPassive.integration.test.ts`.
 
     const penM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration\s+for each\s+buff/i);
     if (penM) {

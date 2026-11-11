@@ -5,6 +5,7 @@ import { ChangelogEntry } from '../types/changelog';
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: Grif's and Hermes's +20% defence passive no longer counts twice.",
     'Combat simulator: killing a bounty boss now wins the fight.',
     'Combat simulator: Paracelsus and Faust death effects no longer trigger from bomb kills.',
     'Bounty bosses: Mamma Maglienza and her Capo escorts can now be fought.',

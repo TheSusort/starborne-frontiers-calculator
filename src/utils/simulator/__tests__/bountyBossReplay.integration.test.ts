@@ -78,9 +78,7 @@ const FLEET: Record<string, FleetShip> = {
         stats: {
             hp: 43598,
             attack: 6276,
-            // The planner's 6,673 already counts Grif's "+20% defense" passive, and the engine
-            // applies that passive again; dividing it out here leaves one application.
-            defence: 6673 / 1.2,
+            defence: 6673,
             hacking: 110.4,
             security: 104.5,
             crit: 23,
