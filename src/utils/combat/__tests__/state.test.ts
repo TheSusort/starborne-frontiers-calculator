@@ -470,3 +470,24 @@ describe('Echoing Burst accumulators are debuffs in the DoT-container helpers (R
         expect(h.genericDoTEntries.map((e) => e.remainingRounds)).toEqual([2, 3]);
     });
 });
+
+describe('createActor — multi-hex footprint', () => {
+    const base = { id: 'boss', side: 'enemy', kind: 'enemy', stats: baseStats } as const;
+
+    it('keeps a footprint that starts at the anchor', () => {
+        const actor = createActor({ ...base, position: 'M1', footprint: ['M1', 'M2'] });
+        expect(actor.footprint).toEqual(['M1', 'M2']);
+    });
+
+    it('rejects a footprint that does not start at the anchor', () => {
+        expect(() => createActor({ ...base, position: 'T3', footprint: ['M1', 'M2'] })).toThrow(
+            /must start at its anchor position T3/
+        );
+    });
+
+    it('rejects a footprint on an unplaced actor', () => {
+        expect(() => createActor({ ...base, footprint: ['M1', 'M2'] })).toThrow(
+            /must start at its anchor/
+        );
+    });
+});

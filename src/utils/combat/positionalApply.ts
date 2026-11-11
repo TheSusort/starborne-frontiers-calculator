@@ -2,7 +2,7 @@ import type { Position } from '../../types/encounters';
 import type { ParsedPattern, ParsedTarget } from '../targetingParser';
 import { resolveCells, type CellRole } from '../targeting/resolvePattern';
 import {
-    resolvePositionalTarget,
+    resolvePositionalTargetCell,
     type ActorTargetingStatus,
     type PositionalActing,
 } from './positionalBinding';
@@ -14,12 +14,13 @@ import {
     type VictimDefenseProfile,
 } from './victimDamage';
 import type { CombatActor } from './state';
+import { buildCellIndex, cellsOf, hitCellOf } from './cellIndex';
 import type { RedirectBasis } from './protectionTransfer';
 
 /**
- * One footprint cell that landed on a living opposing actor.
- * `roleScale` is the per-cell damage multiplier: origin cells deal full damage
- * (1.0), covered/splash cells deal half (0.5).
+ * One living opposing unit a footprint landed on — one entry per unit, however many of its cells
+ * the footprint covers. `roleScale` is the damage multiplier: full (1.0) when any of its cells is
+ * the origin, half (0.5) when it is only covered.
  */
 export interface FootprintHit {
     victim: CombatActor;
@@ -267,10 +268,11 @@ const roleScaleFor = (role: CellRole): number => (role === 'origin' ? 1.0 : 0.5)
 /**
  * Expand a positional pattern footprint into the list of living victims it hits.
  *
- * PURE helper. Given a parsed pattern, the resolved anchor position, and the living
- * opposing roster, returns one {@link FootprintHit} per occupied footprint cell with
- * its role scale. Empty cells contribute nothing; dead actors are not in the roster
- * map and so are never hit.
+ * PURE helper. Given a parsed pattern, the resolved anchor CELL, and the living opposing roster,
+ * returns one {@link FootprintHit} per living unit the footprint touches, in footprint order.
+ * A multi-hex unit under several footprint cells is hit ONCE, at the highest scale among its
+ * cells (origin wins). Empty cells contribute nothing; dead actors are not in the roster map and
+ * so are never hit.
  *
  * `not-self` patterns produce only non-origin (covered) cells — the scale is keyed off
  * the resolved `role`, never off whether the cell equals the anchor.
@@ -280,21 +282,18 @@ export function footprintVictims(
     anchor: Position,
     opposingLiving: CombatActor[]
 ): FootprintHit[] {
-    // Mirror positionalBinding.byCell: living, positioned actors, ≤1 per cell.
-    const byCell = new Map<Position, CombatActor>();
-    for (const a of opposingLiving) {
-        if (a.position !== undefined && a.currentHp > 0) {
-            byCell.set(a.position, a);
-        }
-    }
+    const byCell = buildCellIndex(opposingLiving.filter((a) => a.currentHp > 0));
 
-    const hits: FootprintHit[] = [];
+    const hitByVictim = new Map<CombatActor, FootprintHit>();
     for (const { position, role } of resolveCells(pattern, anchor)) {
         const victim = byCell.get(position);
         if (!victim) continue; // empty cell: contributes nothing
-        hits.push({ victim, roleScale: roleScaleFor(role) });
+        const roleScale = roleScaleFor(role);
+        const prior = hitByVictim.get(victim);
+        if (prior === undefined) hitByVictim.set(victim, { victim, roleScale });
+        else prior.roleScale = Math.max(prior.roleScale, roleScale);
     }
-    return hits;
+    return [...hitByVictim.values()];
 }
 
 /**
@@ -346,6 +345,9 @@ export function applyPositionalDamage(args: {
      * Unsupplied, or the actor is gone → sub-attack 0 resolves like every other.
      */
     firstAnchorId?: string;
+    /** The cell of `firstAnchorId` the cast was aimed at (its pattern origin). Unsupplied, or not
+     *  one of that unit's cells → the attacker's normal aim at it (`hitCellOf`). */
+    firstAnchorCell?: Position;
     /** `didCrit` is this victim's own crit on the hit being read (a per-enemy crit bonus scales
      *  off it — Crucialis). */
     defenseProfileOf: (v: CombatActor, didCrit: boolean) => VictimDefenseProfile;
@@ -524,6 +526,7 @@ export function applyPositionalDamage(args: {
         statusOf,
         acting,
         firstAnchorId,
+        firstAnchorCell,
         defenseProfileOf,
         applyToVictim,
         emitHit,
@@ -561,10 +564,23 @@ export function applyPositionalDamage(args: {
                       (a) => a.id === firstAnchorId && a.currentHp > 0 && a.position !== undefined
                   )
                 : undefined;
-        const anchorActor =
-            lockedAnchor ??
-            resolvePositionalTarget(actorPosition, target, opposingLiving, statusOf, acting);
-        if (anchorActor === null || anchorActor.position === undefined) {
+        const lockedCell =
+            lockedAnchor === undefined
+                ? undefined
+                : firstAnchorCell !== undefined && cellsOf(lockedAnchor).includes(firstAnchorCell)
+                  ? firstAnchorCell
+                  : hitCellOf(lockedAnchor, actorPosition, target.selection);
+        const resolved =
+            lockedAnchor !== undefined && lockedCell !== undefined
+                ? { actor: lockedAnchor, cell: lockedCell }
+                : resolvePositionalTargetCell(
+                      actorPosition,
+                      target,
+                      opposingLiving,
+                      statusOf,
+                      acting
+                  );
+        if (resolved === null) {
             // WHIFF — no living target resolvable for this sub-attack. Skip entirely, but still
             // record an entry so `subAttacks[h]` stays aligned with the loop index.
             subAttacks.push({
@@ -587,7 +603,8 @@ export function applyPositionalDamage(args: {
         const subVictimIds: string[] = [];
         const subCritVictimIds: string[] = [];
 
-        const footprint = footprintVictims(pattern, anchorActor.position, opposingLiving);
+        const anchorActor = resolved.actor;
+        const footprint = footprintVictims(pattern, resolved.cell, opposingLiving);
         const subVictimIdsForHooks = footprint.map((f) => f.victim.id);
         const primaryVictimIds = wholeBattlefield
             ? subVictimIdsForHooks

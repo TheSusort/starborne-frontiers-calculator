@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildTeam } from '../buildTeam';
 import type { BoardState } from '../../../components/simulator/PlacementBoard';
 import type { Ship } from '../../../types/ship';
+import { bossShip } from '../../../constants/bountyBosses';
 
 // `type` is set so the engineering lookup takes its real branch; `deps` returns undefined for it,
 // which is the un-engineered case. `calculateTotalStats` defaults refits/implants, so a hollow
@@ -57,5 +58,22 @@ describe('buildTeam', () => {
         const bare = buildTeam({ T1: { ship: ship('a', 'x') } }, deps);
         const empty = buildTeam({ T1: { ship: ship('a', 'x'), overrides: {} } }, deps);
         expect(bare[0].statOverrides).toEqual(empty[0].statOverrides);
+    });
+});
+
+describe('buildTeam — bounty boss footprint', () => {
+    it('a boss placement carries the boss footprint; an ordinary ship carries none', () => {
+        const board: BoardState = {
+            M1: { ship: bossShip('fenri', 32)! },
+            T3: { ship: ship('a', 'First') },
+        };
+        const team = buildTeam(board, deps);
+        expect(team.find((p) => p.position === 'M1')?.footprint).toEqual(['M1', 'M2']);
+        expect(team.find((p) => p.position === 'T3')).not.toHaveProperty('footprint');
+    });
+
+    it('a boss placed anywhere but its anchor cell is rejected', () => {
+        const board: BoardState = { T3: { ship: bossShip('fenri', 32)! } };
+        expect(() => buildTeam(board, deps)).toThrow(/must be placed at its anchor M1, not T3/);
     });
 });

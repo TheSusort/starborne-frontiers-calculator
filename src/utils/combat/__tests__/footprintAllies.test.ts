@@ -73,3 +73,28 @@ describe('footprintAllies', () => {
         expect(hits.map((a) => a.id)).toEqual(['supporter']);
     });
 });
+
+describe('footprintAllies — multi-hex units', () => {
+    const boss = (): CombatActor =>
+        ({
+            id: 'boss',
+            position: 'M1',
+            footprint: ['M1', 'M2'],
+            currentHp: 100,
+        }) as unknown as CombatActor;
+
+    it('a support footprint covering both hexes of a two-hex ally returns it once', () => {
+        // Line-Support-Range-1 @ M1 → {M1, M2}: both of the ally's hexes.
+        const pattern = parsePattern('Pattern-Line-Support-Range-1');
+        const hits = footprintAllies({ pattern, anchor: 'M1', sameSideLiving: [boss()] });
+        expect(hits.map((a) => a.id)).toEqual(['boss']);
+    });
+
+    it('a support footprint covering only the non-anchor hex still reaches the ally', () => {
+        // Line-Support-Range-1 @ M2 → {M2, M3}: the boss's M2 hex only.
+        const pattern = parsePattern('Pattern-Line-Support-Range-1');
+        const roster = [boss(), actor('m3', 'M3')];
+        const hits = footprintAllies({ pattern, anchor: 'M2', sameSideLiving: roster });
+        expect(hits.map((a) => a.id).sort()).toEqual(['boss', 'm3']);
+    });
+});

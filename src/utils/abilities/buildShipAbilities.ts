@@ -72,6 +72,7 @@ import {
     detectCritRepairTrigger,
     detectEnemyDebuffedTrigger,
     killSentenceScope,
+    killSentenceRequiresDirectDeath,
     detectStasisAppliedTrigger,
     detectCheatDeathActivatedTrigger,
     detectDestroyedTrigger,
@@ -110,6 +111,7 @@ import {
     parseForceAffinityAdvantage,
     parseStasisBreakExemption,
     parseChargeLossImmune,
+    parseControlImmune,
     parseAlwaysCrits,
     detectIgnoresForcedTargeting,
     detectIgnoresStealth,
@@ -133,7 +135,7 @@ import {
     detectPurgeStripsShield,
     parseHealNoCrit,
     parseSkillEffects,
-    withCanonicalStatusNames,
+    withCanonicalSkillText,
     classifyEnemyEffect,
     statusEffectCondition,
     parsePreCombatStatGrants,
@@ -155,12 +157,14 @@ import {
     detectEnemyGrantScope,
     adjacentEnemyScopeForName,
     adjacentEnemyScopeAtPos,
+    parseDotDurationHpOverrides,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
     buildSkillBuffAutoFill,
     DOT_TIER_MAP,
 } from '../calculators/skillBuffAutoFill';
+import { dotFlagsOf } from '../dotFlags';
 import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
 import { TOXIC_OVERFLOW, TOXIC_OVERFLOW_DURATION } from '../../constants/toxicOverflow';
 import { FACTION_NAMES, factionSpellings, type FactionName } from '../../constants/factions';
@@ -819,8 +823,36 @@ function parseModifiers(text: string): ParsedModifier[] {
         }
     }
 
+    // "When this Unit's HP drops below N%, the damage increases by X%" (Fenri's Doom Shot) — an
+    // outgoing bonus on the skill's own cast, gated on the caster's HP when it casts. The "drops
+    // below" reads as a cast-time state here, not a crossing reaction (owner ruling, #519).
+    const increaseM = DAMAGE_INCREASES_BY_RE.exec(plain);
+    if (increaseM) {
+        const hpGateM = SELF_HP_DROPS_BELOW_RE.exec(sentenceContaining(plain, increaseM.index));
+        if (hpGateM) {
+            out.push({
+                channel: 'outgoingDamage',
+                value: parseFloat(increaseM[1]),
+                isMultiplicative: true,
+                target: 'self',
+                conditions: [
+                    {
+                        subject: 'hp-threshold',
+                        derivable: true,
+                        hpComparator: 'below',
+                        hpPercent: parseFloat(hpGateM[1]),
+                        hpSubject: 'self',
+                    },
+                ],
+            });
+        }
+    }
+
     return out;
 }
+
+const DAMAGE_INCREASES_BY_RE = /\bthe damage increases by (\d+(?:\.\d+)?)%/i;
+const SELF_HP_DROPS_BELOW_RE = /\bthis unit['’]s hp (?:drops|falls|is) below (\d+(?:\.\d+)?)\s*%/i;
 
 /**
  * Detects Iridium's crit reduction — "has N% damage reduction from critical hits" — and returns
@@ -936,11 +968,10 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
-    // Voron: "This Unit takes N% less damage from Damage over Time effects" — a flat
-    // reduction against the unit's OWN incoming DoT ticks. scope:'dot' + condition:'always'
-    // are both existing type-valid values (Tormenter uses the same pair via hpScaling).
+    // "This Unit takes N% less damage from Damage over Time effects" (Voron) / "… from DoTs"
+    // (Fenri) — a flat reduction against the unit's OWN incoming DoT ticks.
     const voronM =
-        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+damage\s+over\s+time\s+effects/i.exec(
+        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+(?:damage\s+over\s+time\s+effects|dots?\b)/i.exec(
             plain
         );
     if (voronM) {
@@ -1100,6 +1131,9 @@ function markBoardWide(positioned: PositionedAbility[], text: string): void {
  * `killSentenceScope`). The ability's own sentence decides. An ability anchored outside any kill
  * sentence (no anchor, or an anchor the kill clause does not share) reads the row instead:
  * owner-scoped only when every kill sentence in it names this Unit as the killer.
+ *
+ * Also stamps `triggerRequiresDirectDeath` on a reaction whose own sentence says "on kill"
+ * (`killSentenceRequiresDirectDeath`).
  */
 function markKillerScope(positioned: PositionedAbility[], text: string): void {
     const onKill = positioned.filter((p) => p.ability.trigger === 'on-enemy-destroyed');
@@ -1117,6 +1151,12 @@ function markKillerScope(positioned: PositionedAbility[], text: string): void {
                 : undefined;
         if ((own ?? (rowIsOwner ? 'owner' : 'any')) === 'owner')
             p.ability.triggerKillerScope = 'owner';
+        if (
+            p.pos >= 0 &&
+            p.pos < masked.length &&
+            killSentenceRequiresDirectDeath(sentenceContaining(masked, p.pos))
+        )
+            p.ability.triggerRequiresDirectDeath = true;
     }
 }
 
@@ -2075,6 +2115,7 @@ function abilitiesFromText(
                         type: 'dot',
                         dotType: info.type,
                         tier: info.tier,
+                        ...dotFlagsOf(info),
                         stacks: eff.stacks ?? 1,
                         duration: typeof eff.duration === 'number' ? eff.duration : 2,
                     },
@@ -2119,6 +2160,7 @@ function abilitiesFromText(
                             type: 'dot',
                             dotType: info.type,
                             tier: info.tier,
+                            ...dotFlagsOf(info),
                             stacks: 1,
                             duration: selfCritDotEffect.turns,
                         },
@@ -2157,6 +2199,7 @@ function abilitiesFromText(
                         type: 'dot',
                         dotType: info.type,
                         tier: info.tier,
+                        ...dotFlagsOf(info),
                         stacks: 1,
                         duration: slotReactionDot.turns,
                     },
@@ -2198,6 +2241,7 @@ function abilitiesFromText(
                     type: 'dot',
                     dotType: dotInfo.type,
                     tier: dotInfo.tier,
+                    ...dotFlagsOf(dotInfo),
                     stacks: eff.stacks ?? 1,
                     duration: typeof eff.duration === 'number' ? eff.duration : 2,
                 },
@@ -3141,7 +3185,9 @@ function abilitiesFromText(
     // the buff is cleared from ALL self stores (scope: 'all'). The removal fires unconditionally:
     // removeSelfBuffByName is a safe no-op if the buff was never present.
     for (const rem of parseSelfBuffRemovals(text)) {
-        const removePos = findBuffNamePos(text, rem.buffName);
+        // Anchored on the removal clause, not the buff's first mention: the anchor's sentence
+        // decides the kill gates (`markKillerScope`).
+        const removePos = rem.namePos;
         out.push({
             ability: {
                 id: nextId(),
@@ -3441,6 +3487,7 @@ function dotAbility(entry: DoTApplicationEntry): Ability {
             tier: entry.tier,
             stacks: entry.stacks,
             duration: entry.duration,
+            ...dotFlagsOf(entry),
         },
         autoFilled: true,
     };
@@ -3567,8 +3614,9 @@ function applyPurgeRepairPin(shipName: string, bySlot: Map<SkillSlot, Positioned
 
 export function buildShipAbilities(rawShip: Ship): ShipSkills {
     counter = 0;
-    // Every pass below reads status names off the text by position (canonicaliseStatusNames).
-    const ship = withCanonicalStatusNames(rawShip);
+    // Every pass below reads the canonical text: engine status names (positional passes read
+    // them off the text) and "This Unit" for a boss's "The Boss" subject.
+    const ship = withCanonicalSkillText(rawShip);
 
     // DoTs are derived at the ship level (active/charge only — no passive DoTs).
     const { activeDoTs, chargedDoTs } = buildDoTAutoFill(ship);
@@ -3591,11 +3639,14 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     }
 
     // Merge ship-level DoTs into their slots (creating the slot entry if needed).
-    // Position anchor: index of the DoT type name (e.g. "Corrosion", "Inferno") in the row text.
+    // Position anchor: the case-insensitive whole-word index of the DoT's name in the row text —
+    // its family for a named DoT ("White Phosphorus"), else its type ("Corrosion", "Inferno").
     for (const slot of ['active', 'charged'] as const) {
         const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
-        const dots = dotsForSlot(slot).map((entry) => {
-            const pos = rowText.search(new RegExp(entry.type, 'i'));
+        const lowerRowText = rowText.toLowerCase();
+        const hpOverrides = parseDotDurationHpOverrides(rowText);
+        const dots = dotsForSlot(slot).flatMap((entry) => {
+            const pos = findBuffNamePos(lowerRowText, (entry.family ?? entry.type).toLowerCase());
             const ability = dotAbility(entry);
             // Crit-inflicted DoT form ("When this Unit critically hits an enemy it inflicts
             // Corrosion …"): route through the reactive machinery. Anchor on the DoT type name,
@@ -3609,7 +3660,37 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
             // separate Stasis sentence, so it resolves to null and the DoT stays 'enemy'.
             const adjacentScope = rowText ? adjacentEnemyScopeForName(rowText, entry.type) : null;
             if (adjacentScope) ability.target = adjacentScope;
-            return { ability, pos: pos >= 0 ? pos : MAX_POS };
+            const anchor = pos >= 0 ? pos : MAX_POS;
+            // "When this Unit's HP falls below N%, <DoT> duration increases to M turns": the cast
+            // inflicts exactly one of a twin pair, split on the caster's HP at cast.
+            const override = hpOverrides.find((o) => {
+                const named = DOT_TIER_MAP[o.statusName];
+                return (
+                    !!named &&
+                    named.type === entry.type &&
+                    named.tier === entry.tier &&
+                    named.family === entry.family
+                );
+            });
+            if (!override || ability.config.type !== 'dot') return [{ ability, pos: anchor }];
+            const selfHp = (hpComparator: 'below' | 'at-or-above'): Condition => ({
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator,
+                hpPercent: override.hpBelowPct,
+                hpSubject: 'self',
+            });
+            ability.conditions = [selfHp('at-or-above')];
+            const lowHp: Ability = {
+                ...ability,
+                id: nextId(),
+                conditions: [selfHp('below')],
+                config: { ...ability.config, duration: override.duration },
+            };
+            return [
+                { ability, pos: anchor },
+                { ability: lowHp, pos: anchor },
+            ];
         });
         if (!dots.length) continue;
         pushToSlot(bySlot, slot, dots);
@@ -4226,6 +4307,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                     type: 'dot',
                     dotType: dotInfo.type,
                     tier: dotInfo.tier,
+                    ...dotFlagsOf(dotInfo),
                     stacks: eff.stacks ?? 1,
                     // Same 2-turn default the other reactive-DoT builder blocks use (Crocus
                     // on-ally-crit-dot, Pestilence on-enemy-cleansed) when the clause omits one.
@@ -4320,6 +4402,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     const stasisBreakExemptWhen = stasisExemptions.find((x) => x.conditions.length > 0)?.conditions;
 
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
+    const controlImmune = getShipSkillRows(ship).some((row) => parseControlImmune(row.text));
     const alwaysCrits = getShipSkillRows(ship).some((row) => parseAlwaysCrits(row.text));
 
     // Ship-kit correctness backlog: check ALL skill rows for the "ignores Taunt and Provoke"
@@ -4336,6 +4419,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}),
         ...(!doesntBreakStasis && stasisBreakExemptWhen ? { stasisBreakExemptWhen } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
+        ...(controlImmune ? { controlImmune: true } : {}),
         ...(alwaysCrits ? { alwaysCrits: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),
         ...(ignoresStealth ? { ignoresStealth: true } : {}),

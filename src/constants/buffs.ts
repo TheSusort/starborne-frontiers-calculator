@@ -895,4 +895,27 @@ export const BUFFS: Buff[] = [
         description: 'Any of Stasis, Disable, Provoke, Taunt or Concentrate Fire.',
         type: 'effect',
     },
+    {
+        name: 'Pressing Onslaught',
+        description: '+10% Outgoing Direct Damage, Stackable',
+        type: 'buff',
+    },
+    {
+        name: 'White Phosphorus I',
+        description:
+            "Deals Damage equal to 15% of this units's attack, ignores defense and shield. Cannot be cleansed.",
+        type: 'debuff',
+    },
+    {
+        name: 'White Phosphorus II',
+        description:
+            "Deals Damage equal to 30% of this units's attack, ignores defense and shield. Cannot be cleansed.",
+        type: 'debuff',
+    },
+    {
+        name: 'White Phosphorus III',
+        description:
+            "Deals Damage equal to 45% of this units's attack, ignores defense and shield. Cannot be cleansed.",
+        type: 'debuff',
+    },
 ];

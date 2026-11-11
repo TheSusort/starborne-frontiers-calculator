@@ -66,6 +66,40 @@ describe('statusEngine.purge (newest-first self-buff removal)', () => {
         expect(names).not.toContain('Attack Up');
     });
 
+    it('Pressing Onslaught (unremovable except by its holder) survives purge(all)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, mkTimedBuff('Pressing Onslaught'), 'e1');
+
+        expect(eng.purge('e1', 'all')).toBe(0);
+        const names = eng.timedAbilityStatuses('self', 'e1').map((s) => s.payload.buffName);
+        expect(names).toContain('Pressing Onslaught');
+    });
+
+    // Fenri's stacks live in the ACCUMULATING store (a per-round passive grant), not the timed one.
+    it('Pressing Onslaught survives purge(all) from the accumulating store', () => {
+        const accum = (buffName: string): RegisteredAbilityStatus => ({
+            kind: 'accumulating',
+            side: 'self',
+            sourceSlot: 'passive',
+            conditions: [],
+            casterId: 'e1',
+            stackTrigger: 'per-round',
+            payload: { buffName, stacks: 1, isStackable: true, parsedEffects: {} },
+        });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.registerAbilityStatuses([accum('Pressing Onslaught'), accum('Blast')], 'e1');
+        eng.beginRound(1);
+        eng.beginRound(2);
+
+        // Blast is the removable control: the purge reaches this store.
+        expect(eng.purge('e1', 'all')).toBe(1);
+        const held = eng
+            .activeAbilityStatuses('self', () => ({}) as never, 'e1')
+            .map((s) => [s.active.buffName, s.active.stacks]);
+        expect(held).toEqual([['Pressing Onslaught', 2]]);
+    });
+
     it('(d) unknown actor id returns 0 and does not throw', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);

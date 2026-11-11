@@ -2256,30 +2256,32 @@ describe('detectReactiveTrigger — non-Marauder reclassifications (Overload-lif
 });
 
 describe('parseSelfBuffRemovals', () => {
-    it('emits for "upon destroying an enemy, removes Overload" (Butcher)', () =>
-        expect(
-            parseSelfBuffRemovals(
-                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.'
-            )
-        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
-    it('emits for "removes Overload and gains Marauder Rage III" (Ravager)', () =>
-        expect(
-            parseSelfBuffRemovals(
-                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.'
-            )
-        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
-    it('resolves the removal trigger by removal position, not first buff-name sentence (Asphyxiator)', () =>
-        expect(
-            parseSelfBuffRemovals(
-                'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.'
-            )
-        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
-    it('resolves the removal trigger by removal position within a shared sentence (Ruiner)', () =>
-        expect(
-            parseSelfBuffRemovals(
-                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.'
-            )
-        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    // The removal is anchored on the removed name inside the removal clause — the last mention.
+    const overloadRemovalAt = (text: string) => ({
+        buffName: 'Overload',
+        trigger: 'on-enemy-destroyed',
+        namePos: text.lastIndexOf('Overload'),
+    });
+    it('emits for "upon destroying an enemy, removes Overload" (Butcher)', () => {
+        const text =
+            'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.';
+        expect(parseSelfBuffRemovals(text)).toEqual([overloadRemovalAt(text)]);
+    });
+    it('emits for "removes Overload and gains Marauder Rage III" (Ravager)', () => {
+        const text =
+            'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.';
+        expect(parseSelfBuffRemovals(text)).toEqual([overloadRemovalAt(text)]);
+    });
+    it('resolves the removal trigger by removal position, not first buff-name sentence (Asphyxiator)', () => {
+        const text =
+            'At the start of the round, if there are any enemies with 3 or more <unit-aid>debuffs</unit-aid>, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.';
+        expect(parseSelfBuffRemovals(text)).toEqual([overloadRemovalAt(text)]);
+    });
+    it('resolves the removal trigger by removal position within a shared sentence (Ruiner)', () => {
+        const text =
+            'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy preforms a <unit-aid>repair</unit-aid>, upon destroying an enemy, this Unit removes <unit-skill>Overload</unit-skill>.';
+        expect(parseSelfBuffRemovals(text)).toEqual([overloadRemovalAt(text)]);
+    });
     it('returns [] for no-loss text', () =>
         expect(
             parseSelfBuffRemovals('This Unit gains <unit-skill>Overload</unit-skill> every turn')

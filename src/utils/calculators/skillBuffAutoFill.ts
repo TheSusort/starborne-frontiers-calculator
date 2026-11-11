@@ -2,6 +2,7 @@ import { SelectedGameBuff, DoTApplicationEntry, DoTType } from '../../types/calc
 import { Ship } from '../../types/ship';
 import { BUFFS } from '../../constants/buffs';
 import { parseAllSkillEffects, SkillEffect, detectFullyCharged } from '../skillTextParser';
+import { dotFlagsOf } from '../dotFlags';
 import { parseBuffEffects, isStackable } from './buffParser';
 
 // Every enemy-side SkillEffect target scope (single-target, whole-team, and the two
@@ -15,10 +16,11 @@ const ENEMY_SIDE_TARGETS = new Set<SkillEffect['target']>([
     'target-and-adjacent-enemies',
 ]);
 
-// DoT buff name prefixes — these go to the DoT config, not the buff picker
+// DoT buff names — these go to the DoT config, not the buff picker: the base DoT families by
+// prefix, plus every named DoT in DOT_TIER_MAP (White Phosphorus, an Inferno by another name).
 const DOT_PREFIXES = new Set(['Corrosion', 'Inferno', 'Bomb']);
 function isDoTBuffName(name: string): boolean {
-    return DOT_PREFIXES.has(name.split(' ')[0]);
+    return DOT_PREFIXES.has(name.split(' ')[0]) || Object.hasOwn(DOT_TIER_MAP, name);
 }
 
 export interface SkillBuffAutoFill {
@@ -143,7 +145,12 @@ export function mergeAutoFill(
 
 // Maps parsed buff names to their DoT type and numeric tier.
 // Also used to exclude DoT buffs from the buff picker auto-fill (they go to the DoT config).
-export const DOT_TIER_MAP: Record<string, { type: DoTType; tier: number }> = {
+// `family` / `unremovable` mark a named DoT that rides an existing DoT type (White Phosphorus is an
+// Inferno that cannot be cleansed); they land on the applied `ActiveDoTStack`.
+export const DOT_TIER_MAP: Record<
+    string,
+    { type: DoTType; tier: number; family?: string; unremovable?: boolean }
+> = {
     Corrosion: { type: 'corrosion', tier: 3 },
     'Corrosion I': { type: 'corrosion', tier: 3 },
     'Corrosion II': { type: 'corrosion', tier: 6 },
@@ -156,6 +163,24 @@ export const DOT_TIER_MAP: Record<string, { type: DoTType; tier: number }> = {
     'Bomb I': { type: 'bomb', tier: 100 },
     'Bomb II': { type: 'bomb', tier: 200 },
     'Bomb III': { type: 'bomb', tier: 300 },
+    'White Phosphorus I': {
+        type: 'inferno',
+        tier: 15,
+        family: 'White Phosphorus',
+        unremovable: true,
+    },
+    'White Phosphorus II': {
+        type: 'inferno',
+        tier: 30,
+        family: 'White Phosphorus',
+        unremovable: true,
+    },
+    'White Phosphorus III': {
+        type: 'inferno',
+        tier: 45,
+        family: 'White Phosphorus',
+        unremovable: true,
+    },
 };
 
 export interface DoTAutoFill {
@@ -178,17 +203,22 @@ export function buildDoTAutoFill(ship: Ship): DoTAutoFill {
         if (!dotInfo) continue;
 
         const entry: DoTApplicationEntry = {
-            id: `autofill-${effect.source}-${dotInfo.type}-${dotInfo.tier}`,
+            id: `autofill-${effect.source}-${dotInfo.family ?? dotInfo.type}-${dotInfo.tier}`,
             type: dotInfo.type,
             tier: dotInfo.tier,
             stacks: effect.stacks ?? 1,
             duration: typeof effect.duration === 'number' ? effect.duration : 2,
             autoFilled: true,
+            ...dotFlagsOf(dotInfo),
         };
 
         const list = effect.source === 'active' ? activeDoTs : chargedDoTs;
         // Deduplicate: one entry per type+tier per skill slot
-        if (!list.some((d) => d.type === entry.type && d.tier === entry.tier)) {
+        if (
+            !list.some(
+                (d) => d.type === entry.type && d.tier === entry.tier && d.family === entry.family
+            )
+        ) {
             list.push(entry);
         }
     }

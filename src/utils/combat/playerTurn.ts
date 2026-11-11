@@ -1,3 +1,4 @@
+import { dotFlagsOf } from '../dotFlags';
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext, dotReadings } from '../abilities/roundContext';
@@ -143,6 +144,7 @@ import {
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
 import { scaledStatusCount } from './statusCountScaling';
 import { isStasis } from './stasisBuffs';
+import { immuneToEnemyStatus } from './controlImmunity';
 export { scaledStatusCount };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
@@ -1959,6 +1961,7 @@ function applyNewDoTs(args: {
                 sourceId: args.sourceId,
                 appliedSeq,
                 appliedAttack: args.effectiveAttack,
+                ...dotFlagsOf(dot),
             });
             args.emitDotApplied('inferno', dot.stacks, dot.tier, appliedSeq, procs);
         } else if (dot.type === 'bomb') {
@@ -3261,6 +3264,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!decision.landed) scheduledResistViaRoll.set(buff.buffName, decision.viaRoll);
         return decision.landed;
     });
+    statusEngine.setSkipsTimedEnemyApplication(
+        (buff) => hasVictim && immuneToEnemyStatus(enemy, buff.buffName, buff.parsedEffects)
+    );
 
     // Per-round buff totals from the status engine. This actor notifies the
     // engine of its REAL fired slot this round (action-fed: scheduled timed
@@ -3385,8 +3391,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // turnsRemaining) already drew their landing roll at application — fold them
     // unconditionally. RECURRING/always/accumulating statuses ('recurring') are
     // conceptually re-applied each round — re-roll them via resolveEnemyDebuffs.
+    // A status the victim is control-immune to is never re-applied: no roll, no resist, no landing
+    // (`controlImmunityBlocks`).
     const recurringEnemySnap = entry.activeEnemyDebuffs.filter(
-        (ab) => ab.turnsRemaining === 'recurring'
+        (ab) =>
+            ab.turnsRemaining === 'recurring' &&
+            !(
+                hasVictim &&
+                immuneToEnemyStatus(
+                    enemy,
+                    ab.buffName,
+                    enemyDebuffLookup.get(ab.buffName)?.[0]?.parsedEffects
+                )
+            )
     );
     const timedEnemySnap = entry.activeEnemyDebuffs.filter(
         (ab) => ab.turnsRemaining !== 'recurring'
@@ -4235,6 +4252,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 anyGateRejected = true;
                 continue;
             }
+            // A control-immune recipient is never attempted (`controlImmunityBlocks`). It counts
+            // as turned away, so the clause's paired control announces nothing on it either.
+            if (
+                immuneToEnemyStatus(
+                    resolvedVictim,
+                    status.payload.buffName,
+                    status.payload.parsedEffects
+                )
+            ) {
+                anyGateRejected = true;
+                continue;
+            }
             // A sub-attack's after-damage clause rolls once its damage has resolved, so a victim
             // that damage destroyed gets nothing from it (see `DeferredEnemyApplication.landsOnId`)
             // — no roll, no landing, no resist, only the `landing-dropped` record. A passive riding
@@ -4706,6 +4735,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (hasVictim) {
         for (const s of recurringAbilityEnemy) {
             const sb = payloadToSelectedBuff(s.payload);
+            if (immuneToEnemyStatus(enemy, sb.buffName, sb.parsedEffects)) continue;
             const isApply = sb.application === 'apply';
             const lands = isApply ? !landingAtDisadvantage : roundDebuffLanded();
             if (!lands) {
@@ -5467,8 +5497,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // status landed on, handled above; with none it controlled nobody. Only the single-target
         // 'enemy' scope names the bound target here.
         if (ctrl.target !== 'enemy') continue;
-        // Standalone control with no named status: only Block-Debuff immunity gates it.
-        if (targetImmuneToDebuffs) continue;
+        // Standalone control with no named status: Block-Debuff immunity and control immunity
+        // gate it.
+        if (targetImmuneToDebuffs || immuneToEnemyStatus(enemy, pairedName)) continue;
         // Paired named status resisted on the scheduled path → suppress the success event.
         if (resistedEnemyDebuffNames.has(pairedName)) continue;
         emitControl(effect, enemy.id);

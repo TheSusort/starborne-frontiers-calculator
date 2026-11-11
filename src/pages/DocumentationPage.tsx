@@ -4821,6 +4821,13 @@ const DocumentationPage: React.FC = () => {
                                         cells first, fills the free cells from the rest, and says
                                         how many were left out
                                     </li>
+                                    <li>
+                                        The Encounter option on the enemy board loads a bounty boss
+                                        (Fenri Khaliriz, level 32) in place of a team. He fills two
+                                        cells, so the rest of the enemy board stays closed while he
+                                        is loaded, and the enemy squad leader is hidden. Encounters
+                                        need the normal board; None brings the empty board back
+                                    </li>
                                 </ul>
                             </div>
 

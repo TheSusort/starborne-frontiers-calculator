@@ -54,6 +54,7 @@ const ENEMY_TYPE_OPTIONS: { value: EnemyBaseClass; label: string }[] = [
 const HP_COMPARATOR_OPTIONS = [
     { value: 'below', label: 'below' },
     { value: 'above', label: 'above' },
+    { value: 'at-or-above', label: 'at or above' },
 ];
 
 const HP_SUBJECT_OPTIONS = [
@@ -185,7 +186,7 @@ export const ConditionRow: React.FC<Props> = ({ condition, onChange, onRemove })
                         onChange={(value) =>
                             onChange({
                                 ...condition,
-                                hpComparator: value as 'below' | 'above',
+                                hpComparator: value as NonNullable<Condition['hpComparator']>,
                             })
                         }
                     />

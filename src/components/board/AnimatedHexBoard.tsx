@@ -144,6 +144,9 @@ interface AnimatedHexBoardProps {
     onSelectCell?: (cell: Position) => void;
     /** The cell drawn as selected (a yellow rim). */
     selectedCell?: Position | null;
+    /** Cells covered by a multi-hex unit, each mapped to the unit's anchor cell (the key `ships`
+     *  uses). A covered cell draws the unit's rim and name without bars, and selects the anchor. */
+    secondaryCells?: Partial<Record<Position, Position>>;
     className?: string;
 }
 
@@ -168,6 +171,7 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
     label,
     onSelectCell,
     selectedCell = null,
+    secondaryCells,
     className = '',
 }) => {
     const layout = hexBoardLayout(cells);
@@ -180,7 +184,50 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
         >
             {cells.map((cell) => {
                 const b = layout.box(cell, mirrored);
+                const anchor = secondaryCells?.[cell];
+                const anchorShip = anchor ? ships[anchor] : undefined;
                 const ship = ships[cell];
+                if (anchor && anchorShip) {
+                    const covered = (
+                        <HexTile
+                            rimClassName={
+                                selectedCell === anchor ? 'bg-yellow-500' : TONE_RIM[tone]
+                            }
+                            className={anchorShip.alive ? '' : 'opacity-40 grayscale'}
+                        >
+                            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-semibold text-theme-text-secondary sm:text-xs">
+                                {anchorShip.name}
+                            </span>
+                        </HexTile>
+                    );
+                    return (
+                        <div
+                            key={cell}
+                            data-cell={cell}
+                            className="absolute p-[1%]"
+                            style={{
+                                left: `${b.left}%`,
+                                top: `${b.top}%`,
+                                width: `${b.width}%`,
+                                height: `${b.height}%`,
+                            }}
+                        >
+                            {onSelectCell ? (
+                                <button
+                                    type="button"
+                                    aria-pressed={selectedCell === anchor}
+                                    aria-label={cellLabel(anchorShip, anchor)}
+                                    onClick={() => onSelectCell(anchor)}
+                                    className="relative block h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                >
+                                    {covered}
+                                </button>
+                            ) : (
+                                covered
+                            )}
+                        </div>
+                    );
+                }
                 return (
                     <div
                         key={cell}

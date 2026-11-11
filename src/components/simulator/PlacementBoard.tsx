@@ -54,6 +54,10 @@ interface PlacementBoardProps {
     resolveShip: (position: Position) => Ship | null;
     /** The cells ships can be placed on (see FormationGrid's `cells`). */
     cells?: readonly Position[];
+    /** The cells a multi-hex unit occupies (see FormationGrid's `footprintOf`). */
+    footprintOf?: (shipId: string) => readonly Position[] | undefined;
+    /** Rendered between the heading and the load/save controls (e.g. the encounter picker). */
+    headerSlot?: React.ReactNode;
 }
 
 /** One placement board: a side heading, an optional "load encounter" dropdown, a FormationGrid,
@@ -74,6 +78,8 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     hasOverrides,
     resolveShip,
     cells,
+    footprintOf,
+    headerSlot,
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
     const resolveStoredShip = useShipIdResolver();
@@ -116,6 +122,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     return (
         <div className="card">
             <h2 className="text-lg font-semibold mb-2">{title}</h2>
+            {headerSlot && <div className="mb-3">{headerSlot}</div>}
             {encounters.length > 0 && (
                 <div className="mb-3">
                     <Select
@@ -161,6 +168,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                 hasOverrides={hasOverrides}
                 resolveShip={resolveShip}
                 cells={cells}
+                footprintOf={footprintOf}
             />
             {/* Picker contract: mounted ONLY while a cell is selected. Mount/unmount drives the
                 modal — it opens on mount; onClose clears the selection, which unmounts this and

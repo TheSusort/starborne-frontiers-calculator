@@ -621,7 +621,9 @@ export interface Condition {
     // (e.g. "when this attack targets non-defenders").
     negate?: boolean;
     buffName?: string;
-    hpComparator?: 'below' | 'above';
+    /** 'below' and 'above' are strict; 'at-or-above' is the exact complement of 'below' at the
+     *  same percent, for a twin pair that splits one cast on a threshold (Fenri's Doom Shot). */
+    hpComparator?: 'below' | 'above' | 'at-or-above';
     hpPercent?: number;
     // For 'hp-threshold': whose HP the threshold applies to. Defaults to 'enemy' (offensive
     // scaling). 'target' = the heal target's live HP%. Until #415 this was threaded in healing
@@ -934,6 +936,10 @@ export type AbilityConfig =
           tier: number;
           stacks: number;
           duration: number;
+          /** Named DoT family riding `dotType` (White Phosphorus on `'inferno'`), stamped on the
+           *  applied stack with `unremovable`. */
+          family?: string;
+          unremovable?: boolean;
           /** The landing verb the DoT's source text states — the Burner gear set's "Applies
            *  Inferno 1" sets `'apply'`; absent → an inflict. It decides two things, exactly as a
            *  debuff's `application` does: how a REACTIVE DoT lands (`'apply'` = the affinity check
@@ -1341,9 +1347,11 @@ export interface Ability {
      *  this Unit is directly damaged as a primary target, … gains Legion Discipline II"
      *  (Stalwart). Absent → any hit. */
     triggerPrimaryTargetOnly?: boolean;
-    /** on-destroyed only: fire only when the owner died to DIRECT damage, never to a
-     *  damage-over-time tick — "Upon being destroyed by direct damage, … grants all allies
-     *  Everliving Regeneration II" (Paracelsus). Absent → the listener's per-type rule. */
+    /** Fire only on a death by DIRECT damage: a damage-over-time tick death and a bomb
+     *  detonation death are both excluded (`isDirectDeath`, triggers.ts), for on-destroyed and
+     *  on-enemy-destroyed alike. "Upon being destroyed by direct damage, … grants all allies
+     *  Everliving Regeneration II" (Paracelsus); "On kill, the Boss clears Pressing Onslaught"
+     *  (Fenri, #519). Absent → the listener's per-type rule. */
     triggerRequiresDirectDeath?: boolean;
     /** Landing-verb filter for the debuff-inflicted trigger family (on-debuff-inflicted,
      *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-enemy-debuff-inflicted,
@@ -1605,6 +1613,9 @@ export interface ShipSkills {
      *  Threaded onto CombatActor.chargeLossImmune by the engine adapter; enemy-sourced
      *  charge removal is a no-op against actors with this flag set. */
     chargeLossImmune?: boolean;
+    /** True when the ship's passive text declares immunity to control debuffs (Fenri). Read
+     *  onto `CombatActor.controlImmune`, whose doc holds what the immunity does. */
+    controlImmune?: boolean;
     /** True when the ship's refit-active text says "This Unit's attacks always critically hit"
      *  (Tormenter, Asphodel R2+). Read by the engine onto CombatActor.alwaysCrits: every attack
      *  then rolls at a 100% crit rate, which no affinity disadvantage or Crit Rate Down lowers

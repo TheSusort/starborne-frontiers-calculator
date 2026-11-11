@@ -7,6 +7,7 @@ import { snapshotOverrides } from '../../utils/simulator/compareRuns';
 import type { BoardState } from '../../components/simulator/PlacementBoard';
 import type { Position } from '../../types/encounters';
 import type { Ship } from '../../types/ship';
+import { bossShip } from '../../constants/bountyBosses';
 import type { BattleResult } from '../../utils/calculators/battleSimulator';
 import type { SeedSetAggregate } from '../../utils/simulator/seededRuns';
 
@@ -702,5 +703,20 @@ describe('divergence playback', () => {
         });
         expect(result.current.divergence).toBeNull();
         expect(result.current.runError).toBe('engine exploded');
+    });
+});
+
+describe('useSimulatorRuns build failures', () => {
+    it('surfaces a buildTeam throw (a boss off its anchor) as runError instead of doing nothing', async () => {
+        const { result } = renderHook(() =>
+            useSimulatorRuns(
+                baseArgs({ enemyBoard: { T3: { ship: bossShip('fenri', 32)! } }, runCount: 1 })
+            )
+        );
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.runError).toMatch(/anchor/i);
+        expect(mockRunSeededBattle).not.toHaveBeenCalled();
     });
 });

@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, Skill } from '../../../types/abilities';
+import { bossShip, bossShipId } from '../../../constants/bountyBosses';
+import {
+    canonicaliseSkillSubject,
+    parseSkillEffects,
+    withCanonicalSkillText,
+} from '../../skillTextParser';
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -5735,5 +5741,283 @@ describe('game 3.23 catalogue texts', () => {
             abilities.find((a) => a.config.type === 'buff' && a.config.buffName === name);
         expect(byName('Attack Up II')!.trigger).toBe('on-cast');
         expect(byName('Defense Up II')!.trigger).toBe('on-enemy-destroyed');
+    });
+});
+
+describe('bounty boss subject: "The Boss" reads as "This Unit"', () => {
+    it('rewrites the subject and its possessive, preserving sentence-initial case', () => {
+        expect(
+            canonicaliseSkillSubject(
+                "The Boss deals damage. When the Boss's HP drops, the Boss’s shield and the boss gain."
+            )
+        ).toBe(
+            "This Unit deals damage. When this Unit's HP drops, this Unit’s shield and this Unit gain."
+        );
+    });
+
+    it('leaves text without the subject untouched', () => {
+        const text = 'This Unit deals <unit-damage>100% damage</unit-damage>. Bossy enemies.';
+        expect(canonicaliseSkillSubject(text)).toBe(text);
+    });
+
+    it('applies at the whole-ship entry, so a leading "Every turn" grant parses as accumulating', () => {
+        // The accrual rule keys on "this Unit gains"; without the rewrite the boss clause is missed.
+        const passive = slot(
+            buildShipAbilities(
+                ship({
+                    id: bossShipId('fenri', 32),
+                    refits: [],
+                    firstPassiveSkillText:
+                        'Every turn, The Boss gains <unit-skill>Pressing Onslaught</unit-skill>.',
+                })
+            ).slots,
+            'passive'
+        )!;
+        expect(passive.abilities[0].config).toMatchObject({
+            stackTrigger: 'per-round',
+            duration: 'recurring',
+        });
+    });
+
+    it('leaves a non-boss ship\'s "the boss" text as written', () => {
+        const text = 'Every turn, The Boss gains <unit-skill>Pressing Onslaught</unit-skill>.';
+        const regular = ship({ id: 'regular-ship', refits: [], firstPassiveSkillText: text });
+        expect(withCanonicalSkillText(regular)).toBe(regular);
+        const boss = withCanonicalSkillText({ ...regular, id: bossShipId('fenri', 32) });
+        expect(boss.firstPassiveSkillText).toBe(
+            'Every turn, This Unit gains <unit-skill>Pressing Onslaught</unit-skill>.'
+        );
+    });
+});
+
+describe('Fenri passive (bounty boss)', () => {
+    const skills = buildShipAbilities(bossShip('fenri', 32)!);
+    const passive = slot(skills.slots, 'passive')!.abilities;
+    const buffsNamed = (name: string) =>
+        passive.filter((a) => a.config.type === 'buff' && a.config.buffName === name);
+
+    it('takes 50% less damage from DoTs', () => {
+        const reductions = passive.filter((a) => a.type === 'incoming-reduction');
+        expect(reductions).toHaveLength(1);
+        expect(reductions[0].config).toMatchObject({ scope: 'dot', condition: 'always', pct: 50 });
+    });
+
+    it('gains one accumulating, uncapped stack of Pressing Onslaught every round', () => {
+        const grants = buffsNamed('Pressing Onslaught');
+        expect(grants).toHaveLength(1);
+        expect(grants[0].trigger).toBe('on-cast');
+        expect(grants[0].config).toMatchObject({
+            stacks: 1,
+            isStackable: true,
+            stackTrigger: 'per-round',
+            duration: 'recurring',
+        });
+        expect(grants[0].config.type === 'buff' && grants[0].config.maxStacks).toBeUndefined();
+    });
+
+    it('repairs 10% max HP and gains Attack Up II for 2 turns on any enemy death', () => {
+        const heals = passive.filter((a) => a.type === 'heal');
+        expect(heals).toHaveLength(1);
+        expect(heals[0].trigger).toBe('on-enemy-destroyed');
+        expect(heals[0].config).toMatchObject({ pct: 10, basis: 'hp' });
+        expect(heals[0].triggerKillerScope).toBeUndefined();
+        expect(heals[0].triggerRequiresDirectDeath).toBeUndefined();
+
+        const attackUp = buffsNamed('Attack Up II');
+        expect(attackUp).toHaveLength(1);
+        expect(attackUp[0].trigger).toBe('on-enemy-destroyed');
+        expect(attackUp[0].config).toMatchObject({ duration: 2 });
+        expect(attackUp[0].triggerKillerScope).toBeUndefined();
+        expect(attackUp[0].triggerRequiresDirectDeath).toBeUndefined();
+    });
+
+    it('clears Pressing Onslaught only on its own direct-damage kill', () => {
+        const removals = passive.filter((a) => a.type === 'remove-self-buff');
+        expect(removals).toHaveLength(1);
+        expect(removals[0]).toMatchObject({
+            trigger: 'on-enemy-destroyed',
+            triggerKillerScope: 'owner',
+            triggerRequiresDirectDeath: true,
+            config: { buffName: 'Pressing Onslaught', scope: 'all' },
+        });
+    });
+
+    it('is immune to control and charge loss', () => {
+        expect(skills.controlImmune).toBe(true);
+        expect(skills.chargeLossImmune).toBe(true);
+    });
+
+    it('emits nothing else on the passive', () => {
+        expect(passive.map((a) => a.type).sort()).toEqual(
+            ['buff', 'buff', 'heal', 'incoming-reduction', 'remove-self-buff'].sort()
+        );
+        expect(passive.some((a) => a.trigger === 'on-cast' && a.type === 'heal')).toBe(false);
+    });
+});
+
+describe('immunity flags', () => {
+    it('a ship without immunity text carries neither flag', () => {
+        const skills = buildShipAbilities(
+            ship({
+                firstPassiveSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            })
+        );
+        expect(skills.controlImmune).toBeUndefined();
+        expect(skills.chargeLossImmune).toBeUndefined();
+    });
+});
+
+describe('"clears" is a removal verb, like "removes"', () => {
+    it('a status cleared in the same clause as an earlier grant is not granted', () => {
+        const passive = slot(
+            buildShipAbilities(
+                ship({
+                    refits: [],
+                    firstPassiveSkillText:
+                        'Upon destroying an enemy, this Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns and clears <unit-skill>Pressing Onslaught</unit-skill>.',
+                })
+            ).slots,
+            'passive'
+        )!.abilities;
+        const grantsOnslaught = passive.some(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Pressing Onslaught'
+        );
+        expect(grantsOnslaught).toBe(false);
+        expect(passive.filter((a) => a.type === 'remove-self-buff')).toHaveLength(1);
+    });
+});
+
+describe('"on kill" is the only kill phrasing that requires a direct-damage death', () => {
+    it('an "upon destroying an enemy" removal is owner-scoped but not direct-death gated (Butcher)', () => {
+        const passive = slot(
+            buildShipAbilities(
+                ship({
+                    refits: [],
+                    firstPassiveSkillText:
+                        'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.',
+                })
+            ).slots,
+            'passive'
+        )!.abilities;
+        const removal = passive.find((a) => a.type === 'remove-self-buff')!;
+        expect(removal.triggerKillerScope).toBe('owner');
+        expect(removal.triggerRequiresDirectDeath).toBeUndefined();
+    });
+});
+
+describe('leading "Every turn, this Unit gains <X>" accrual guards', () => {
+    const onslaught = (passiveText: string) =>
+        parseSkillEffects(passiveText, 'passive1').find(
+            (e) => e.buffName === 'Pressing Onslaught'
+        )!;
+
+    it('a mid-sentence "… and every turn, this Unit gains <X>" does not accrue', () => {
+        const effect = onslaught(
+            'At the start of combat and every turn, this Unit gains <unit-skill>Pressing Onslaught</unit-skill>.'
+        );
+        expect(effect.stacks).toBeUndefined();
+        expect(effect.stackTrigger).toBeUndefined();
+    });
+
+    it('a sentence-opening grant with a duration does not accrue', () => {
+        const effect = onslaught(
+            'Every turn, this Unit gains <unit-skill>Pressing Onslaught</unit-skill> for 2 turns.'
+        );
+        expect(effect.duration).toBe(2);
+        expect(effect.stacks).toBeUndefined();
+        expect(effect.stackTrigger).toBeUndefined();
+    });
+
+    it('the sentence-opening durationless grant accrues one stack per round', () => {
+        expect(
+            onslaught('Every turn, this Unit gains <unit-skill>Pressing Onslaught</unit-skill>.')
+        ).toMatchObject({ stacks: 1, duration: 'recurring', stackTrigger: 'per-round' });
+    });
+});
+
+describe('Fenri charged (Doom Shot): HP thresholds read at cast', () => {
+    const skills = buildShipAbilities(bossShip('fenri', 32)!);
+    const charged = slot(skills.slots, 'charged')!.abilities;
+    const selfHp = (hpComparator: 'below' | 'at-or-above', hpPercent: number) => [
+        { subject: 'hp-threshold', derivable: true, hpComparator, hpPercent, hpSubject: 'self' },
+    ];
+
+    it('deals 400% damage', () => {
+        const dmg = charged.filter((a) => a.type === 'damage');
+        expect(dmg).toHaveLength(1);
+        expect(dmg[0].config).toMatchObject({ multiplier: 400 });
+        expect(dmg[0].conditions).toEqual([]);
+    });
+
+    it('gains +50% outgoing damage below 66% HP', () => {
+        const mods = charged.filter((a) => a.type === 'modifier');
+        expect(mods).toHaveLength(1);
+        expect(mods[0]).toMatchObject({
+            target: 'self',
+            trigger: 'on-cast',
+            config: { channel: 'outgoingDamage', value: 50 },
+        });
+        expect(mods[0].conditions).toEqual(selfHp('below', 66));
+    });
+
+    it('inflicts White Phosphorus III for 3 turns at or above 33% HP and 4 turns below', () => {
+        const dots = charged.filter((a) => a.type === 'dot');
+        expect(dots).toHaveLength(2);
+        for (const d of dots) {
+            expect(d.trigger).toBe('on-cast');
+            expect(d.config).toMatchObject({
+                dotType: 'inferno',
+                tier: 45,
+                stacks: 1,
+                family: 'White Phosphorus',
+                unremovable: true,
+            });
+        }
+        const byDuration = (n: number) =>
+            dots.find((d) => d.config.type === 'dot' && d.config.duration === n)!;
+        expect(byDuration(3).conditions).toEqual(selfHp('at-or-above', 33));
+        expect(byDuration(4).conditions).toEqual(selfHp('below', 33));
+    });
+
+    it('emits nothing else: no White Phosphorus debuff, no crossing reaction', () => {
+        // In text order: the skill's clauses resolve in the order they are written.
+        expect(charged.map((a) => a.type)).toEqual(['damage', 'dot', 'dot', 'modifier']);
+        const all = skills.slots.flatMap((s) => s.abilities);
+        expect(all.some((a) => a.trigger === 'on-hp-threshold-crossed')).toBe(false);
+    });
+
+    it('"the damage increases by X%" without an HP clause yields no modifier', () => {
+        const chargedOf = (text: string) =>
+            slot(
+                buildShipAbilities(
+                    ship({
+                        activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+                        chargeSkillText: text,
+                        chargeSkillCharge: 3,
+                    })
+                ).slots,
+                'charged'
+            )!.abilities;
+        const ungated = chargedOf(
+            'This Unit deals <unit-damage>400% damage</unit-damage>. The damage increases by 50% against marked targets.'
+        );
+        expect(ungated.some((a) => a.type === 'modifier')).toBe(false);
+        const gated = chargedOf(
+            "This Unit deals <unit-damage>400% damage</unit-damage>. When this Unit's HP drops below 66%, the damage increases by 50%."
+        );
+        expect(gated.filter((a) => a.type === 'modifier')).toHaveLength(1);
+    });
+
+    it('a White Phosphorus inflict is a dot, like an Inferno inflict, never a named debuff', () => {
+        const active = slot(
+            buildShipAbilities(
+                ship({
+                    activeSkillText:
+                        'This Unit inflicts <unit-skill>White Phosphorus II</unit-skill> for 2 turns.',
+                })
+            ).slots,
+            'active'
+        )!.abilities;
+        expect(active.map((a) => a.type)).toEqual(['dot']);
     });
 });

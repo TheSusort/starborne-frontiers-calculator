@@ -3,7 +3,11 @@ import { dirname } from 'path';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fetchBuffsFromRocky } from './updateBuffsDataFetcher';
-import { MANUAL_DESCRIPTION_OVERRIDES, MANUAL_TYPE_OVERRIDES } from './buffDataOverrides';
+import {
+    MANUAL_BUFF_ADDITIONS,
+    MANUAL_DESCRIPTION_OVERRIDES,
+    MANUAL_TYPE_OVERRIDES,
+} from './buffDataOverrides';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -119,7 +123,7 @@ async function updateBuffsData() {
 
     // Re-add implant-only buffs that the upstream fetch never produces, so a regen
     // preserves them. Only add when absent — never clobber a fetched description.
-    for (const b of MANUAL_BUFFS) {
+    for (const b of [...MANUAL_BUFFS, ...MANUAL_BUFF_ADDITIONS]) {
         if (!buffsMap.has(b.name)) buffsMap.set(b.name, b);
     }
 

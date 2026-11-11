@@ -1,3 +1,4 @@
+import { dotFlagsOf } from '../dotFlags';
 import {
     Ability,
     AbilityTarget,
@@ -102,6 +103,7 @@ import {
 import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx, RateGate } from './playerTurn';
 import type { ActorTargetingStatus } from './positionalBinding';
 import { extendsDotFrom } from './dotDurationExtension';
+import { immuneToEnemyStatus } from './controlImmunity';
 
 /** The trigger values the engine consumes — defined next to AbilityTrigger in
  *  types/abilities.ts (so UI consumers don't import the engine for one constant)
@@ -109,6 +111,13 @@ import { extendsDotFrom } from './dotDurationExtension';
  *  the `round-started` event (one per round, before any turn — see the
  *  AbilityTrigger doc note). */
 export { LIVE_TRIGGERS };
+
+/** A death by DIRECT damage: neither a DoT tick (`byDirectDamage: false`) nor a bomb burst or
+ *  splash, which arrives stamped `byDirectDamage: true` with `byDetonation`. The one rule behind
+ *  `Ability.triggerRequiresDirectDeath` on `on-destroyed` and `on-enemy-destroyed`, and behind the
+ *  killer-targeted `on-destroyed` reactions (#519). */
+const isDirectDeath = (e: { byDirectDamage?: boolean; byDetonation?: boolean }): boolean =>
+    e.byDirectDamage === true && e.byDetonation !== true;
 
 /**
  * The lineage rule (owner ruling, measured in game 2026-10-06): a passive never fires on an event
@@ -2326,14 +2335,14 @@ export function registerReactiveListeners(args: {
                     bus.on('ship-destroyed', (e) => {
                         // Self-scoped: THIS owner was destroyed (mirrors on-crit's own-id scoping).
                         // Killer-targeted reactions (Faust's PURGE, Martyrdom's DEBUFF, Paracelsus's
-                        // HP-scaled retaliation DAMAGE) fire only when killed by DIRECT damage
-                        // and route to the killer (counterTargetId = e.killerId). Salvation's
+                        // HP-scaled retaliation DAMAGE) fire only on a direct death
+                        // (`isDirectDeath`) and route to the killer (counterTargetId = e.killerId). Salvation's
                         // self-destruct HEAL (and any other on-destroyed reaction) fires on ANY
                         // death, unchanged.
                         if (e.actorId !== ownerId) return;
                         // "Upon being destroyed by direct damage" on any payload (Paracelsus's
-                        // Everliving Regeneration II grant): a DoT-tick death fires nothing.
-                        if (ra.ability.triggerRequiresDirectDeath && !e.byDirectDamage) return;
+                        // Everliving Regeneration II grant): see `isDirectDeath`.
+                        if (ra.ability.triggerRequiresDirectDeath && !isDirectDeath(e)) return;
                         // fromOwnDeath: marks this as the owner's OWN death reaction so the
                         // dead-owner drain gate (executeIntent) lets it through even though the
                         // owner is now destroyed (Martyrdom's killer-Disable, Salvation's heal,
@@ -2343,7 +2352,7 @@ export function registerReactiveListeners(args: {
                             ra.ability.config.type === 'debuff' ||
                             ra.ability.config.type === 'damage'
                         ) {
-                            if (!e.byDirectDamage) return;
+                            if (!isDirectDeath(e)) return;
                             enqueue({
                                 ...intent,
                                 eventCtx: {
@@ -2391,6 +2400,8 @@ export function registerReactiveListeners(args: {
                         if (!isOpposing(e.actorId)) return;
                         if (ra.ability.triggerKillerScope === 'owner' && e.killerId !== ownerId)
                             return;
+                        // "On kill, the Boss clears Pressing Onslaught": see `isDirectDeath`.
+                        if (ra.ability.triggerRequiresDirectDeath && !isDirectDeath(e)) return;
                         const killedDebuffs = debuffCountOf?.(e.actorId);
                         enqueue({
                             ...intent,
@@ -6085,6 +6096,15 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // only place every route has a real target in hand.
             if (!perVictimOk(applicationTargetId)) continue;
             const debuffTargetId = applicationTargetId;
+            // A control-immune target is never attempted (`controlImmunityBlocks`).
+            if (
+                immuneToEnemyStatus(
+                    ctx.actorById?.(debuffTargetId),
+                    cfg.buffName,
+                    cfg.parsedEffects
+                )
+            )
+                continue;
             // #590 R1: a weaker same-family debuff onto a target already holding a stronger one
             // is never attempted — no roll, no landing, no resist. Checked before Block Debuff so
             // an outclassed reactive application is skipped rather than surfacing as a
@@ -6291,6 +6311,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     sourceId: intent.ownerId,
                     appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
                     ...(appliedAttack !== undefined ? { appliedAttack } : {}),
+                    ...dotFlagsOf(cfg),
                 });
             } else if (cfg.dotType === 'bomb') {
                 // A bomb SNAPSHOTS the owner's effective attack at application, as an Inferno

@@ -1,3 +1,4 @@
+import { dotFlagsOf } from '../dotFlags';
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import { DoTApplicationConfig, DoTType, SecondaryDamage } from '../../types/calculator';
 import { dotStackCount } from '../combat/state';
@@ -216,6 +217,7 @@ export function dotsFromSkill(skill: Skill | undefined): DoTApplicationConfig {
             tier: ability.config.tier,
             stacks: ability.config.stacks,
             duration: ability.config.duration,
+            ...dotFlagsOf(ability.config),
             ...(ability.target === 'adjacent-enemies' ||
             ability.target === 'target-and-adjacent-enemies'
                 ? { splashTarget: ability.target }

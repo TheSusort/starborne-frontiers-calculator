@@ -4,6 +4,7 @@ import type { Position } from '../../types/encounters';
 import type { ParsedTarget } from '../targetingParser';
 import { drawKeyed } from '../calculators/rateAccumulator';
 import type { CombatActor } from './state';
+import { buildCellIndex, cellsOf, hitCellOf, representativeCells } from './cellIndex';
 
 /** Per-actor targeting statuses consulted during positional resolution.
  *  An `undefined` lookup result (see resolvePositionalTarget) is treated as all-false. */
@@ -106,6 +107,8 @@ export function resolvesPositionalVictim(
 export interface PositionalActing {
     ignoresForcedTargeting?: boolean;
     ignoresStealth?: boolean;
+    /** Skips the Concentrate Fire override (a control-immune attacker, `CombatActor.controlImmune`). */
+    ignoresConcentrateFire?: boolean;
     provokedBy?: string;
     /** Keys the Concentrate Fire random pick to this attacker's own RNG stream. */
     attackerId?: string;
@@ -120,8 +123,9 @@ export interface PositionalActing {
  * When `statusOf` is omitted, or the target is ally-side, no forced-targeting or stealth rule
  * runs — this is the arm the golden fixtures pin. When `statusOf` is supplied
  * AND `target.side === 'enemy'`, forced targeting and stealth run before `selectTargets`:
- *   1. Concentrate Fire (bypasses stealth, never skipped) — force the marked actor (one picked at
- *      random when several are marked; a pick the cast already made stays while it lives).
+ *   1. Concentrate Fire (bypasses stealth) — force the marked actor (one picked at random when
+ *      several are marked; a pick the cast already made stays while it lives). Skipped only when
+ *      `acting.ignoresConcentrateFire` is true; `ignoresForcedTargeting` does not skip it.
  *   2. Taunt (before stealth) — force a taunting actor. Several taunters are ordered by the
  *      attacker's NORMAL targeting over the taunters' cells (its own row first, then the next
  *      rows; front to back for a `front` target), never by roster or application order.
@@ -146,13 +150,35 @@ export function resolvePositionalTarget(
     statusOf?: (id: string) => ActorTargetingStatus | undefined,
     acting?: PositionalActing
 ): CombatActor | null {
-    const byCell = new Map<Position, CombatActor>();
-    for (const a of opposingLiving) {
-        if (a.position !== undefined && a.currentHp > 0) {
-            byCell.set(a.position, a);
-        }
-    }
-    if (byCell.size === 0) {
+    return (
+        resolvePositionalTargetCell(actorPosition, target, opposingLiving, statusOf, acting)
+            ?.actor ?? null
+    );
+}
+
+/** A resolved positional target: the unit, and the cell of it the cast is pointed at (the
+ *  pattern origin). For a single-hex unit the cell is its own position. */
+export interface PositionalTargetHit {
+    actor: CombatActor;
+    cell: Position;
+}
+
+/**
+ * {@link resolvePositionalTarget} plus the selected CELL. A multi-hex unit (a bounty boss) is
+ * selected as one unit across every cell it occupies: it is in every row it occupies, and a
+ * `skip` passes over it as a whole. The cell is the one the attacker's normal selection lands on
+ * (`hitCellOf`): front-most in the scanned row, back-most for a `back` target. A forced pick
+ * (Concentrate Fire, Taunt, Provoke) is aimed the same way at the forced unit's cells.
+ */
+export function resolvePositionalTargetCell(
+    actorPosition: Position,
+    target: ParsedTarget,
+    opposingLiving: CombatActor[],
+    statusOf?: (id: string) => ActorTargetingStatus | undefined,
+    acting?: PositionalActing
+): PositionalTargetHit | null {
+    const living = opposingLiving.filter((a) => a.position !== undefined && a.currentHp > 0);
+    if (living.length === 0) {
         return null;
     }
 
@@ -161,40 +187,50 @@ export function resolvePositionalTarget(
         return null;
     }
 
-    // Candidate cells; the stealth filter narrows this list, byCell stays intact for lookup.
-    let cells = [...byCell.keys()];
+    const aimAt = (actor: CombatActor): PositionalTargetHit => ({
+        actor,
+        cell: hitCellOf(actor, actorPosition, target.selection) ?? actor.position!,
+    });
+    const selectAmong = (units: CombatActor[]): PositionalTargetHit | null => {
+        const byCell = buildCellIndex(units);
+        const { anchor } = selectTargets(target, {
+            casterPosition: actorPosition,
+            enemyOccupied: representativeCells(units, target.selection),
+        });
+        const actor = anchor ? byCell.get(anchor) : undefined;
+        return actor && anchor ? { actor, cell: anchor } : null;
+    };
+
+    // Candidate units; the stealth filter narrows this list.
+    let candidates = living;
 
     if (statusOf) {
-        const actors = [...byCell.values()];
         const ignore = acting?.ignoresForcedTargeting;
 
-        // 1. Concentrate Fire — bypasses stealth, never skipped (even when ignore is true).
-        //    Several marked actors → one is picked at random from the attacker's keyed stream;
-        //    a single mark draws nothing.
-        const concentrated = actors.filter((a) => statusOf(a.id)?.concentrated);
+        // 1. Concentrate Fire — bypasses stealth; `ignore` does not skip it, only
+        //    `ignoresConcentrateFire` does. Several marked actors → one is picked at random from
+        //    the attacker's keyed stream; a single mark draws nothing.
+        const concentrated = acting?.ignoresConcentrateFire
+            ? []
+            : living.filter((a) => statusOf(a.id)?.concentrated);
         if (concentrated.length === 1) {
-            return concentrated[0];
+            return aimAt(concentrated[0]);
         }
         if (concentrated.length > 1) {
             const stuck = concentrated.find((a) => a.id === acting?.concentrateFirePickId);
-            if (stuck) return stuck;
-            const ordered = [...concentrated].sort(
-                (x, y) => colOf(y.position!) - colOf(x.position!)
-            );
+            if (stuck) return aimAt(stuck);
+            const frontCol = (a: CombatActor) => Math.max(...cellsOf(a).map(colOf));
+            const ordered = [...concentrated].sort((x, y) => frontCol(y) - frontCol(x));
             const draw = drawKeyed(`${acting?.attackerId ?? ''}:concentrate-fire-pick`);
-            return ordered[Math.min(ordered.length - 1, Math.floor(draw * ordered.length))];
+            return aimAt(ordered[Math.min(ordered.length - 1, Math.floor(draw * ordered.length))]);
         }
 
         // 2. Taunt — evaluated before the stealth filter. Skipped when the attacker ignores
         //    forced targeting.
         if (!ignore) {
-            const taunting = actors.filter((a) => statusOf(a.id)?.taunting);
+            const taunting = living.filter((a) => statusOf(a.id)?.taunting);
             if (taunting.length) {
-                const { anchor } = selectTargets(target, {
-                    casterPosition: actorPosition,
-                    enemyOccupied: taunting.map((a) => a.position!),
-                });
-                return anchor ? (byCell.get(anchor) ?? taunting[0]) : taunting[0];
+                return selectAmong(taunting) ?? aimAt(taunting[0]);
             }
         }
 
@@ -202,25 +238,21 @@ export function resolvePositionalTarget(
         //    (forced-targeting override). Falls through if the provoker is dead/absent.
         //    Skipped when the attacker ignores forced targeting.
         if (!ignore && acting?.provokedBy !== undefined) {
-            const provoker = actors.find((a) => a.id === acting.provokedBy);
+            const provoker = living.find((a) => a.id === acting.provokedBy);
             if (provoker) {
-                return provoker;
+                return aimAt(provoker);
             }
         }
 
         // 4. Stealth filter — restore all if every candidate is stealthed. Skipped entirely when
         //    the acting attacker (ship-level) OR this cast's target (per-ability) ignores Stealth.
         if (!acting?.ignoresStealth && !target.ignoresStealth) {
-            const visible = cells.filter((p) => !statusOf(byCell.get(p)!.id)?.stealthed);
+            const visible = candidates.filter((a) => !statusOf(a.id)?.stealthed);
             if (visible.length) {
-                cells = visible;
+                candidates = visible;
             }
         }
     }
 
-    const { anchor } = selectTargets(target, {
-        casterPosition: actorPosition,
-        enemyOccupied: cells,
-    });
-    return anchor ? (byCell.get(anchor) ?? null) : null;
+    return selectAmong(candidates);
 }

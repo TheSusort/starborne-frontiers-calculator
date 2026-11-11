@@ -5,7 +5,11 @@
 import { describe, it, expect } from 'vitest';
 import { BUFFS } from '../../../constants/buffs';
 import { parseBuffEffects } from '../../calculators/buffParser';
-import { MANUAL_DESCRIPTION_OVERRIDES, MANUAL_TYPE_OVERRIDES } from '../buffDataOverrides';
+import {
+    MANUAL_BUFF_ADDITIONS,
+    MANUAL_DESCRIPTION_OVERRIDES,
+    MANUAL_TYPE_OVERRIDES,
+} from '../buffDataOverrides';
 
 const entry = (name: string) => {
     const found = BUFFS.find((b) => b.name === name);
@@ -54,5 +58,23 @@ describe('fetch-buffs overrides re-apply what buffs.ts holds', () => {
 
     it.each(Object.entries(MANUAL_TYPE_OVERRIDES))('%s type', (name, type) => {
         expect(entry(name).type).toBe(type);
+    });
+});
+
+describe('fetch-buffs manual additions', () => {
+    it.each(MANUAL_BUFF_ADDITIONS.map((b) => [b.name, b] as const))(
+        '%s is in buffs.ts as written',
+        (name, added) => {
+            expect(entry(name)).toMatchObject(added);
+        }
+    );
+
+    it('carries Pressing Onslaught and the three White Phosphorus tiers', () => {
+        expect(MANUAL_BUFF_ADDITIONS.map((b) => b.name)).toEqual([
+            'Pressing Onslaught',
+            'White Phosphorus I',
+            'White Phosphorus II',
+            'White Phosphorus III',
+        ]);
     });
 });

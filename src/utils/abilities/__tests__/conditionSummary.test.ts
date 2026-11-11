@@ -14,6 +14,18 @@ describe('conditionSummary', () => {
         ).toBe('below 60% HP');
     });
 
+    it('renders the at-or-above comparator in words', () => {
+        expect(
+            conditionSummary({
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'at-or-above',
+                hpPercent: 33,
+                hpSubject: 'self',
+            })
+        ).toBe('at or above 33% HP');
+    });
+
     it('names WHOSE HP when it is not this ship', () => {
         expect(
             conditionSummary({

@@ -904,13 +904,17 @@ export type CombatEvent =
      *  `byDirectDamage` (C2b-2 Faust): the lethal attacker and whether the kill was a
      *  DIRECT hit (vs a DoT-tick batch, which has no single killer → byDirectDamage:false,
      *  killerId undefined). Optional. Read by Faust's on-destroyed purge, and by an
-     *  `on-enemy-destroyed` reaction scoped to its owner's kills (`Ability.triggerKillerScope`). */
+     *  `on-enemy-destroyed` reaction scoped to its owner's kills (`Ability.triggerKillerScope`).
+     *  `byDetonation`: the lethal application carried bomb/detonation damage (a burst or splash
+     *  arrives stamped `byDirectDamage: true`), so it was not a direct hit — the funnel's
+     *  `byDirectDamage && bombPortion === 0` definition. Present only when true. */
     | ({
           type: 'ship-destroyed';
           actorId: string;
           round: number;
           killerId?: string;
           byDirectDamage?: boolean;
+          byDetonation?: boolean;
       } & ReactiveStamp)
     /** Emitted when a Cheat Death passive intercepts what would have been a lethal
      *  hit, keeping the actor alive at 1 HP. `actorId` is the surviving actor. */

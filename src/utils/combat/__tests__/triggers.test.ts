@@ -2830,7 +2830,7 @@ describe('death-trigger live listeners (Task 5)', () => {
             // the given reactive ability.
             function emitDestroyedCause(
                 ability: Ability,
-                cause: { byDirectDamage?: boolean; killerId?: string }
+                cause: { byDirectDamage?: boolean; byDetonation?: boolean; killerId?: string }
             ): Intent[] {
                 const bus = createEventBus();
                 const intents: Intent[] = [];
@@ -2858,6 +2858,16 @@ describe('death-trigger live listeners (Task 5)', () => {
             it('PURGE: does NOT fire on a non-direct (DoT) kill (byDirectDamage:false)', () => {
                 expect(
                     emitDestroyedCause(purgeDeathAbility(), { byDirectDamage: false })
+                ).toHaveLength(0);
+            });
+
+            it('PURGE: does NOT fire on a bomb-detonation kill (byDetonation)', () => {
+                expect(
+                    emitDestroyedCause(purgeDeathAbility(), {
+                        byDirectDamage: true,
+                        byDetonation: true,
+                        killerId: 'enemy',
+                    })
                 ).toHaveLength(0);
             });
 

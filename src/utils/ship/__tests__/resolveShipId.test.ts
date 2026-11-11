@@ -45,4 +45,15 @@ describe('resolveShipId', () => {
     it('returns null for a reference id whose template is not in the catalogue', () => {
         expect(resolveShipId('template:gone:r0', deps)).toBeNull();
     });
+
+    it('resolves a boss id without consulting the owned roster', () => {
+        const throwing: ShipIdResolverDeps = {
+            ...deps,
+            getShipById: () => {
+                throw new Error('owned lookup must not run');
+            },
+        };
+        expect(resolveShipId('boss:fenri:32', throwing)?.baseStats.hp).toBe(327000);
+        expect(resolveShipId('boss:fenri:31', throwing)).toBeNull();
+    });
 });

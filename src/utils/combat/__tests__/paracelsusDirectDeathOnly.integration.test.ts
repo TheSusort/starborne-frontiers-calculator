@@ -1,8 +1,8 @@
 /**
  * Paracelsus: "Upon being destroyed by direct damage, this Unit deals damage equal to 50% of its
  * max HP and grants all allies Everliving Regeneration II for 4 turns." One condition heads the
- * whole sentence: a death to a damage-over-time tick fires neither half. Salvation's unqualified
- * "When this Unit is destroyed" still fires on any death.
+ * whole sentence: a death to a damage-over-time tick or a Bomb burst fires neither half.
+ * Salvation's unqualified "When this Unit is destroyed" still fires on any death.
  *
  * Real parsed passives (buildTraceShip, refit 4), mounted on both sides. The dying ship sits at M4
  * at 1 HP with an ally behind it at M3. A faster enemy either hits it (attack 1000) or carries no
@@ -16,6 +16,7 @@ import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import type { ShipSkills } from '../../../types/abilities';
 import type { CombatActor } from '../state';
+import { textKit } from '../__testutils__/textKit';
 import { mirrorBoard, realSlots, MirrorTeams } from './__fixtures__/mirrorBoard';
 
 beforeAll(() => {
@@ -45,7 +46,13 @@ const hit: ShipSkills = {
     ],
 };
 
-const teams = (ship: string, by: 'hit' | 'corrosion'): MirrorTeams => ({
+/** A pure Bomb I thrower: the cast itself deals no damage, the burst does. */
+const bomber = (): ShipSkills =>
+    textKit('Bomber', { active: 'This Unit inflicts <unit-skill>Bomb I</unit-skill> for 1 turn.' });
+
+type KilledBy = 'hit' | 'corrosion' | 'bomb';
+
+const teams = (ship: string, by: KilledBy): MirrorTeams => ({
     caster: [
         {
             id: 'dying',
@@ -61,23 +68,28 @@ const teams = (ship: string, by: 'hit' | 'corrosion'): MirrorTeams => ({
             id: 'killer',
             position: 'M4',
             speed: 150,
-            attack: by === 'hit' ? 1000 : 0,
-            skills: by === 'hit' ? hit : undefined,
+            attack: by === 'corrosion' ? 0 : 1000,
+            hacking: by === 'bomb' ? 1e6 : 0,
+            skills: by === 'hit' ? hit : by === 'bomb' ? bomber() : undefined,
         },
     ],
 });
 
-const run = (ship: string, by: 'hit' | 'corrosion', side: 'player' | 'enemy') => {
+const run = (ship: string, by: KilledBy, side: 'player' | 'enemy') => {
     const { input, idOf } = mirrorBoard(teams(ship, by), side);
     const dying = idOf('dying');
     const killer = idOf('killer');
     const bus = createEventBus();
-    let death: { direct: boolean } | undefined;
+    let death: { direct: boolean; detonation?: boolean } | undefined;
     const grants: string[] = [];
     let retaliation = 0;
     let repairs = 0;
     bus.on('ship-destroyed', (e) => {
-        if (e.actorId === dying) death = { direct: e.byDirectDamage === true };
+        if (e.actorId === dying)
+            death = {
+                direct: e.byDirectDamage === true,
+                ...(e.byDetonation ? { detonation: true } : {}),
+            };
     });
     bus.on('buff-applied', (e) => {
         if (e.buffName === 'Everliving Regeneration II') grants.push(e.actorId);
@@ -113,6 +125,12 @@ describe("Paracelsus: 'Upon being destroyed by direct damage' gates both halves"
             expect(r.death).toEqual({ direct: true });
             expect(r.retaliation).toBe(1);
             expect(r.grants).toBeGreaterThan(0);
+        });
+        it(`${side}-side: killed by a Bomb burst → neither half`, () => {
+            const r = run('Paracelsus', 'bomb', side);
+            expect(r.death).toEqual({ direct: true, detonation: true });
+            expect(r.retaliation).toBe(0);
+            expect(r.grants).toBe(0);
         });
         it(`${side}-side: killed by a Corrosion tick → neither half`, () => {
             expect(run('Paracelsus', 'corrosion', side)).toEqual({

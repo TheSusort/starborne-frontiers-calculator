@@ -41,6 +41,9 @@ interface FormationGridProps {
     /** Opt-in: the cells drawn. A cell left out keeps its place in the 3x4 layout as an empty,
      *  hidden slot, so a subset such as the small grid keeps its hex shape. Default: all 12. */
     cells?: readonly Position[];
+    /** Opt-in: the cells a multi-hex unit occupies, anchor first. The other cells draw as part of
+     *  the same unit and route their clicks to the anchor. */
+    footprintOf?: (shipId: string) => readonly Position[] | undefined;
 }
 
 const FormationGrid: React.FC<FormationGridProps> = ({
@@ -55,6 +58,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     hasOverrides,
     resolveShip,
     cells,
+    footprintOf,
 }) => {
     const { ships } = useShips();
     const { ships: templateShips } = useShipsData();
@@ -86,6 +90,17 @@ const FormationGrid: React.FC<FormationGridProps> = ({
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onSetSortOrder, handleKeyDown]);
+    // Secondary footprint cell -> the anchor cell of the unit that covers it.
+    const anchorOfSecondary = useMemo(() => {
+        const map = new Map<Position, Position>();
+        if (!footprintOf) return map;
+        for (const entry of formation) {
+            for (const cell of footprintOf(entry.shipId)?.slice(1) ?? []) {
+                map.set(cell, entry.position);
+            }
+        }
+        return map;
+    }, [formation, footprintOf]);
     const rows: Position[][] = [
         ['T1', 'T2', 'T3', 'T4'],
         ['M1', 'M2', 'M3', 'M4'],
@@ -156,8 +171,12 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                 />
                             );
                         }
-                        const shipPosition = formation.find((s) => s.position === pos);
-                        const ship = getShipForPosition(pos);
+                        const anchorPos = anchorOfSecondary.get(pos);
+                        const isSecondary = anchorPos !== undefined;
+                        // Every interaction on a unit's secondary cell acts on its anchor.
+                        const targetPos = anchorPos ?? pos;
+                        const shipPosition = formation.find((s) => s.position === targetPos);
+                        const ship = getShipForPosition(targetPos);
                         const fullShip = ship && isFullShip(ship) ? ship : null;
                         const template = ship ? getTemplateData(ship.name) : null;
                         const rawImageKey = fullShip?.imageKey || template?.imageKey;
@@ -170,11 +189,12 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                         const roleIconUrl = shipType && SHIP_TYPES[shipType]?.iconUrl;
                         // The cell's hex clip-path removes the corners, so the override marker rides in the
                         // bottom stack with the ship name rather than floating in a corner.
-                        const overrideMarker = hasOverrides?.(pos) ? (
-                            <span className="text-[9px] font-bold text-amber-400 leading-tight">
-                                MOD
-                            </span>
-                        ) : null;
+                        const overrideMarker =
+                            hasOverrides?.(targetPos) && !isSecondary ? (
+                                <span className="text-[9px] font-bold text-amber-400 leading-tight">
+                                    MOD
+                                </span>
+                            ) : null;
                         return (
                             <div
                                 key={pos}
@@ -187,22 +207,27 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                 <HexButton
                                     onClick={(e) => {
                                         if (e.ctrlKey || e.metaKey) {
-                                            onRemoveShip?.(pos);
+                                            onRemoveShip?.(targetPos);
                                         } else if (e.shiftKey && onEditStats && ship) {
-                                            onEditStats(pos);
+                                            onEditStats(targetPos);
                                         } else {
-                                            onPositionSelect?.(pos);
+                                            onPositionSelect?.(targetPos);
                                         }
                                     }}
                                     isActive={!!ship}
-                                    isSelected={selectedPosition === pos}
+                                    isSelected={selectedPosition === targetPos}
                                     imageKey={imageKey}
                                     affinity={affinity}
                                     rarity={rarity}
                                     roleIconUrl={roleIconUrl}
                                     sortOrder={shipPosition?.sortOrder}
+                                    aria-label={
+                                        isSecondary && ship
+                                            ? `${ship.name} (also covers ${pos})`
+                                            : undefined
+                                    }
                                 >
-                                    {ship ? (
+                                    {isSecondary ? null : ship ? (
                                         <div
                                             className="flex flex-col items-center justify-end w-full h-full
                     scale-[0.9151]"
@@ -261,7 +286,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                         <span className="text-xs">{pos}</span>
                                     )}
                                 </HexButton>
-                                {onEditStats && ship && (
+                                {onEditStats && ship && !isSecondary && (
                                     // Renders as a sibling of HexButton's <button>, not a child of it: a
                                     // <button> nested inside another <button> has undefined accessibility
                                     // semantics (ambiguous focus/activation and screen-reader announcement).

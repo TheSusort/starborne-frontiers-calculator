@@ -556,10 +556,13 @@ export interface CombatActor {
     /** Board position of this actor — set at construction and consumed by the positional path:
      *  `isPositional` gates on it and `resolvePositionalTarget` reads it as the acting anchor. */
     position?: Position;
+    /** Every board cell this actor occupies, anchor (`position`) first — a multi-hex bounty boss.
+     *  Absent → the actor occupies `position` only. Targeting reads it through `cellsOf`. */
+    footprint?: readonly Position[];
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
-     *  plumbing — set at construction, consumed by resolvePositionalTarget. ORed at the
-     *  engine.ts read sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts), so this
-     *  field alone is not the resolver's effective input. */
+     *  plumbing — set at construction, consumed by resolvePositionalTarget. engine.ts's
+     *  `targetingBypassesOf` ORs it with the timed `Rogue's Liberty` buff (rogueLiberty.ts) and
+     *  `controlImmune`, so this field alone is not the resolver's effective input. */
     ignoresForcedTargeting?: boolean;
     /** Attacker ignores the Stealth targeting filter on ALL its casts (Lodolite's "ignores
      *  Stealth effects" passive). Positional plumbing — set at construction, consumed by
@@ -594,6 +597,15 @@ export interface CombatActor {
     /** When true, enemy-sourced charge removal is a no-op against this actor
      *  ("immune to charge loss effects"). Derived from ship skill text. */
     chargeLossImmune: boolean;
+    /** Immune to control (ShipSkills.controlImmune; #519). Two halves:
+     *   - Stasis, Disable and speed debuffs are never attempted against this actor (the set lives
+     *     at `controlImmunityBlocks`, controlImmunity.ts).
+     *   - Provoke, Taunt and Concentrate Fire land on it as ordinary debuffs, but never force its
+     *     target choice, and Stealth never hides a unit from it: the engine's targeting read
+     *     sites OR this flag into `ignoresForcedTargeting` and `ignoresStealth` and pass it as
+     *     `PositionalActing.ignoresConcentrateFire`.
+     *  Absent → false. */
+    controlImmune?: boolean;
     /** Every attack of this actor crits at a 100% rate, whatever its affinity matchup or crit
      *  debuffs (ShipSkills.alwaysCrits). Absent → the ordinary capped crit rate. */
     alwaysCrits?: boolean;
@@ -611,12 +623,14 @@ export function createActor(
         chargeCount?: number;
         startCharged?: boolean;
         position?: Position;
+        footprint?: readonly Position[];
         ignoresForcedTargeting?: boolean;
         ignoresStealth?: boolean;
         doesntBreakStasis?: boolean;
         stasisBreakExemptWhen?: Condition[];
         affinity?: AffinityName;
         chargeLossImmune?: boolean;
+        controlImmune?: boolean;
         alwaysCrits?: boolean;
         preFight?: PreFightCombatModifiers;
     }
@@ -624,6 +638,12 @@ export function createActor(
     // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
     // stored on the actor — banked charges are the only mutable charge state.
     const { chargeCount = 0, startCharged = false, ...rest } = partial;
+    if (partial.footprint !== undefined && partial.footprint[0] !== partial.position) {
+        throw new Error(
+            `createActor: ${partial.id}'s footprint [${partial.footprint.join(', ')}] must start ` +
+                `at its anchor position ${partial.position ?? '(none)'}`
+        );
+    }
     return {
         ...rest,
         currentHp: partial.stats.hp,
@@ -639,6 +659,7 @@ export function createActor(
         pendingBombs: [],
         pendingAccumulators: [],
         position: partial.position,
+        footprint: partial.footprint,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
         ignoresStealth: partial.ignoresStealth,
         doesntBreakStasis: partial.doesntBreakStasis,
@@ -659,11 +680,19 @@ export function recordDestroyed(
     round: number,
     bus: CombatEventBus,
     killerId?: string,
-    byDirectDamage?: boolean
+    byDirectDamage?: boolean,
+    byDetonation?: boolean
 ): void {
     if (actor.destroyedRound !== undefined) return;
     actor.destroyedRound = round;
-    bus.emit({ type: 'ship-destroyed', actorId: actor.id, round, killerId, byDirectDamage });
+    bus.emit({
+        type: 'ship-destroyed',
+        actorId: actor.id,
+        round,
+        killerId,
+        byDirectDamage,
+        ...(byDetonation ? { byDetonation: true } : {}),
+    });
 }
 
 /** Safety cap on the engine round loop's `selectNextBySpeed` pool drain — converts a runaway

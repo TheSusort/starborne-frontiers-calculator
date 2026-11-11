@@ -265,7 +265,14 @@ export interface BattleResult {
     /** There is no draw: a same-round mutual wipe goes to the side that dealt the final killing
      *  damage, and the round limit is an `enemy` win. See `assembleBattleResult`. */
     outcome: { winner: BattleWinner; lastRound: number };
-    roster: Array<{ actorId: string; side: 'player' | 'enemy'; name: string; position: Position }>;
+    roster: Array<{
+        actorId: string;
+        side: 'player' | 'enemy';
+        name: string;
+        position: Position;
+        /** Every cell of a multi-hex unit, `position` first; absent for a one-cell unit. */
+        footprint?: readonly Position[];
+    }>;
     /**
      * Rich, hierarchical play-by-play folded from the raw CombatEvent stream by
      * `buildCombatLog`. Spans ALL rounds and carries its own `round` numbers (NOT
@@ -345,6 +352,7 @@ interface RosterEntry {
     side: 'player' | 'enemy';
     name: string;
     position: Position;
+    footprint?: readonly Position[];
     maxHp: number;
 }
 
@@ -844,11 +852,12 @@ export function assembleBattleResult(args: {
     return {
         rounds: trimmed,
         outcome: { winner, lastRound },
-        roster: roster.map(({ actorId, side, name, position }) => ({
+        roster: roster.map(({ actorId, side, name, position, footprint }) => ({
             actorId,
             side,
             name,
             position,
+            ...(footprint && footprint.length > 1 ? { footprint } : {}),
         })),
         combatLog,
     };
@@ -875,6 +884,9 @@ export interface BattlePlacement {
      *  See the WARNING on `BattlePlacement`: omitting this yields un-geared base stats. */
     statOverrides?: Partial<CombatStatBlock & { speed: number }>;
     position: Position;
+    /** Every cell the ship occupies, `position` first (a multi-hex bounty boss). Absent →
+     *  `position` only. */
+    footprint?: readonly Position[];
 }
 
 export interface BattleSimulationInput {
@@ -1009,6 +1021,7 @@ interface PlacementPlan {
     id: string;
     name: string;
     position: Position;
+    footprint: readonly Position[] | undefined;
     /** Raw `Ship.faction` — drives the pre-fight squad-leader aura's faction gating.
      *  Narrowed to the real union via `asFactionName` only at the engine-input boundary
      *  (`EnemyActorInput.faction` etc.), not here. */
@@ -1059,6 +1072,7 @@ function planPlacement(
         id,
         name: p.ship.name,
         position: p.position,
+        footprint: p.footprint,
         faction: p.ship.faction,
         role: p.ship.type,
         stats: resolveStats(p),
@@ -1231,6 +1245,7 @@ export function simulateBattle(
             enemyDebuffs: [],
             ...preFightModifiersFor(plan.id),
             position: plan.position,
+            footprint: plan.footprint,
             target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
             pattern: plan.targeting?.pattern,
             chargedPattern: plan.chargedTargeting?.pattern,
@@ -1308,6 +1323,7 @@ export function simulateBattle(
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
                 position: plan.position,
+                footprint: plan.footprint,
                 target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
                 pattern: plan.targeting?.pattern,
                 chargedPattern: plan.chargedTargeting?.pattern,
@@ -1370,6 +1386,7 @@ export function simulateBattle(
         security: focus.stats.security,
         /* eslint-enable no-restricted-syntax */
         position: focus.position,
+        footprint: focus.footprint,
         target: withStealthBypass(focus.targeting?.target, focus.activeIgnoresStealth),
         pattern: focus.targeting?.pattern,
         chargedPattern: focus.chargedTargeting?.pattern,
@@ -1462,6 +1479,7 @@ export function simulateBattle(
             side: 'player' as const,
             name: plan.name,
             position: plan.position,
+            footprint: plan.footprint,
             maxHp: plan.stats.hp,
         })),
         ...enemyPlans.map((plan) => ({
@@ -1469,6 +1487,7 @@ export function simulateBattle(
             side: 'enemy' as const,
             name: plan.name,
             position: plan.position,
+            footprint: plan.footprint,
             maxHp: plan.stats.hp,
         })),
     ];

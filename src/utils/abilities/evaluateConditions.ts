@@ -424,7 +424,14 @@ function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean | unde
     // absent enemy either" and its hp-threshold comparator-proof (lte) case.
     if (hp === undefined) return undefined;
     const t = cond.hpPercent ?? 0;
-    return cond.hpComparator === 'above' ? hp > t : hp < t;
+    switch (cond.hpComparator) {
+        case 'above':
+            return hp > t;
+        case 'at-or-above':
+            return hp >= t;
+        default:
+            return hp < t;
+    }
 }
 
 /**

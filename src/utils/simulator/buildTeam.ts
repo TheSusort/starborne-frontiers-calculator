@@ -1,4 +1,5 @@
 import type { Position } from '../../types/encounters';
+import { bossFootprint } from '../../constants/bountyBosses';
 import type { BoardState } from '../../components/simulator/PlacementBoard';
 import type { BattlePlacement } from '../calculators/battleSimulator';
 import { combatStatsFromShip, shipFinalStats, type CombatStatsDeps } from '../ship/combatStats';
@@ -33,10 +34,18 @@ export function buildTeam(board: BoardState, deps: CombatStatsDeps): BattlePlace
     return POSITION_ORDER.flatMap((position) => {
         const placement = board[position];
         if (!placement) return [];
+        const footprint = bossFootprint(placement.ship);
+        if (footprint && footprint[0] !== position) {
+            throw new Error(
+                `buildTeam: ${placement.ship.name} occupies ${footprint.join('+')} and must be ` +
+                    `placed at its anchor ${footprint[0]}, not ${position}`
+            );
+        }
         return [
             {
                 ship: placement.ship,
                 position,
+                ...(footprint ? { footprint } : {}),
                 statOverrides: applyStatOverrides(
                     combatStatsFromShip(shipFinalStats(placement.ship, deps)),
                     placement.overrides

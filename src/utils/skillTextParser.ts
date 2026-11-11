@@ -22,9 +22,11 @@ import {
 } from '../types/abilities';
 import type { ShipRoleCategory } from '../constants/shipTypes';
 import { FACTION_NAMES, factionSpellings, type FactionName } from '../constants/factions';
+import { parseBossShipId } from '../constants/bountyBosses';
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 import { EXPOSED } from './combat/exposedStatus';
+import { CONTROL_EFFECT_STATUSES } from './combat/controlImmunity';
 
 /**
  * Represents a parsed segment of skill text
@@ -753,8 +755,6 @@ const ENEMY_AFFECTED_BONUS_RE =
 // other category name stays unparsed, since no status carries it.
 const STATUS_CATEGORY_RE = /\ban?\s+<unit-skill>[^<]+<\/unit-skill>\s+effects?\b/i;
 const CONTROL_EFFECT_CATEGORY_RE = /\ban?\s+<unit-skill>\s*control\s*<\/unit-skill>\s+effects?\b/i;
-// The statuses "a control effect" covers (user ruling 2026-10-02).
-const CONTROL_EFFECT_STATUSES = ['Stasis', 'Disable', 'Provoke', 'Taunt', 'Concentrate Fire'];
 // "an additional N% damage to enemies affected by <Effect>[ or <Effect>]" — the same enemy-state
 // bonus with the effects named AFTER the amount (Rikra). Matched on RAW text so the <unit-skill>
 // tags delimit the names; the list ends at the first non-tag word.
@@ -1606,20 +1606,21 @@ const OWN_CLEANSE_TRIGGER_RE =
 // Tested on tag-stripped clauses (detectReactiveTrigger).
 const ENEMY_BUFFED_RE = /\bwhen\s+an?\s+enemy\s+gains\s+an?\s+buff\b/i;
 // Enemy-death phrasings that resolve a buff grant/removal, a self charge gain or a self-repair
-// to on-enemy-destroyed: "when an enemy dies", "upon destroying an enemy", "when this Unit
-// destroys an enemy", "when an enemy is destroyed". The "destroys" alternate is anchored on the
-// "this Unit" subject so a rule sentence such as Enforcer's "If an attack destroys an enemy, …"
-// mints no trigger. A bare "destroyed" is NOT an enemy death: it is also the self-death ("when
-// this Unit is destroyed", "destroyed by direct damage") and ally-death ("when an ally is
-// destroyed") vocabulary. Separate from ENEMY_DEATH_PHRASING_RE (the ally-charge bail-out and
-// extra-action trigger), which keeps its own enemy-death list.
+// to on-enemy-destroyed: "when an enemy dies", "whenever any enemy unit dies", "upon destroying
+// an enemy", "when this Unit destroys an enemy", "when an enemy is destroyed", "on kill". The
+// "destroys" alternate is anchored on the "this Unit" subject so a rule sentence such as
+// Enforcer's "If an attack destroys an enemy, …" mints no trigger. A bare "destroyed" is NOT an
+// enemy death: it is also the self-death ("when this Unit is destroyed", "destroyed by direct
+// damage") and ally-death ("when an ally is destroyed") vocabulary. Separate from
+// ENEMY_DEATH_PHRASING_RE (the ally-charge bail-out and extra-action trigger), which keeps its
+// own enemy-death list.
 const KILL_TRIGGER_RE =
-    /when\s+an\s+enemy\s+dies|\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\bwhen\s+an\s+enemy\s+is\s+destroyed\b/i;
+    /when\s+an\s+enemy\s+dies|\bwhenever\s+(?:any|an)\s+enemy(?:\s+unit)?\s+dies\b|\bon\s+kill\b|\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\bwhen\s+an\s+enemy\s+is\s+destroyed\b/i;
 // The kill phrasings that make the OWNER the killer — "upon destroying an enemy", "When this
-// Unit destroys an enemy", "each enemy destroyed by this Unit" — as opposed to any death ("When
-// an enemy is destroyed", "when an enemy dies"). See `killSentenceScope`.
+// Unit destroys an enemy", "each enemy destroyed by this Unit", "on kill" — as opposed to any
+// death ("When an enemy is destroyed", "when an enemy dies"). See `killSentenceScope`.
 const OWNER_KILL_RE =
-    /\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\benemy\s+destroyed\s+by\s+this\s+unit\b/i;
+    /\bon\s+kill\b|\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\benemy\s+destroyed\s+by\s+this\s+unit\b/i;
 
 /**
  * Whose kill a sentence's on-kill clause reacts to: `'owner'` when it names this Unit as the
@@ -1630,6 +1631,14 @@ export function killSentenceScope(sentence: string): 'owner' | 'any' | undefined
     if (OWNER_KILL_RE.test(sentence)) return 'owner';
     if (KILL_TRIGGER_RE.test(sentence) || ENEMY_DESTROYED_BY_ATTACK_RE.test(sentence)) return 'any';
     return undefined;
+}
+
+/** "on kill" counts only this Unit's own DIRECT-damage kill: a damage-over-time or bomb kill is
+ *  not its kill (owner ruling 2026-11-10, #519), so its reaction carries
+ *  `triggerRequiresDirectDeath`. The other owner-kill phrasings carry no such ruling. */
+const ON_KILL_RE = /\bon\s+kill\b/i;
+export function killSentenceRequiresDirectDeath(sentence: string): boolean {
+    return ON_KILL_RE.test(sentence);
 }
 
 // "destroying an enemy WITH A DEBUFF" (Meiying) — the qualifier KILL_TRIGGER_RE drops.
@@ -2064,20 +2073,21 @@ function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
     return 'on-cast';
 }
 
-// "removes <unit-skill>NAME</unit-skill>" — this Unit removing its own buff (Overload: Mangler,
-// Ravager, Asphyxiator, Butcher, Ruiner).
-const SELF_BUFF_REMOVAL_RE = /\bremoves\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
+// "removes|clears <unit-skill>NAME</unit-skill>" — this Unit removing its own buff (Overload:
+// Mangler, Ravager, Asphyxiator, Butcher, Ruiner; Pressing Onslaught: Fenri).
+const SELF_BUFF_REMOVAL_RE = /\b(?:removes|clears)\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
 
 /**
  * Parses "this Unit removes <buff>" into self-buff-removal descriptors, resolving each removal's
  * trigger from text NEAR the removal verb (NOT by buff-name sentence — see
  * detectRemovalTriggerAt). Unknown buffs are skipped (resolveBuffName gate) and duplicate buff
- * names are deduped. Operates on the TAGGED text. Reference data: docs/ship-skills.csv.
+ * names are deduped. Operates on the TAGGED text; `namePos` is the index of the removed buff's
+ * name inside the removal clause. Reference data: docs/ship-skills.csv.
  */
 export function parseSelfBuffRemovals(
     text: string
-): { buffName: string; trigger: AbilityTrigger }[] {
-    const out: { buffName: string; trigger: AbilityTrigger }[] = [];
+): { buffName: string; trigger: AbilityTrigger; namePos: number }[] {
+    const out: { buffName: string; trigger: AbilityTrigger; namePos: number }[] = [];
     const seen = new Set<string>();
     SELF_BUFF_REMOVAL_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -2085,7 +2095,11 @@ export function parseSelfBuffRemovals(
         const name = resolveBuffName(m[1]);
         if (!name || seen.has(name)) continue;
         seen.add(name);
-        out.push({ buffName: name, trigger: detectRemovalTriggerAt(text, m.index) });
+        out.push({
+            buffName: name,
+            trigger: detectRemovalTriggerAt(text, m.index),
+            namePos: m.index + m[0].indexOf(m[1]),
+        });
     }
     return out;
 }
@@ -3674,6 +3688,23 @@ export function detectHpCrossingTrigger(
     };
 }
 
+// "When this Unit's HP falls below N%, <DoT> duration increases to M turns." (Fenri's Doom Shot)
+// — the same cast's DoT lasts M turns instead when the caster casts below N% HP. A cast-time
+// state, not a crossing reaction (owner ruling, #519).
+const DOT_DURATION_HP_OVERRIDE_RE =
+    /\bthis unit['’]s hp (?:drops|falls) below (\d+(?:\.\d+)?)\s*%,\s*<unit-skill>([^<]+)<\/unit-skill>\s+duration increases to (\d+) turns?\b/gi;
+
+/** Every "below N% HP, <DoT> duration increases to M turns" clause in `text` (tagged). */
+export function parseDotDurationHpOverrides(
+    text: string
+): { statusName: string; hpBelowPct: number; duration: number }[] {
+    return [...text.matchAll(DOT_DURATION_HP_OVERRIDE_RE)].map((m) => ({
+        statusName: m[2].trim(),
+        hpBelowPct: parseFloat(m[1]),
+        duration: parseInt(m[3], 10),
+    }));
+}
+
 // Hermes charged skill: "If an ally has less than N% HP" gate on a grant clause.
 // Distinct from the self-subject HP_CROSSING_RE — this reads the grant RECIPIENT's HP and is a
 // one-shot cast-time gate, not a reactive crossing.
@@ -3886,12 +3917,21 @@ export function parseAlwaysCrits(text: string | null | undefined): boolean {
     return !!text && ALWAYS_CRITS_RE.test(stripUnitTags(text));
 }
 
-/** True iff this skill text declares the unit is immune to charge loss effects (Lev). */
-const CHARGE_LOSS_IMMUNE_RE = /\bimmune to charge[- ]?loss\b/i;
+/** True iff this skill text declares the unit is immune to charge loss effects — "immune to
+ *  charge loss" (Lev), or Charge Loss later in the same sentence's immunity list ("immune to
+ *  Control debuffs and Charge Loss effects", Fenri). */
+const CHARGE_LOSS_IMMUNE_RE = /\bimmune to\b[^.]*?\bcharge[- ]?loss\b/i;
 export function parseChargeLossImmune(text: string | null | undefined): boolean {
     // No apostrophe-normalisation (unlike parseStasisBreakExemption): the matched phrase
     // "immune to charge loss" contains no apostrophe, so curly/straight quotes can't affect it.
     return !!text && CHARGE_LOSS_IMMUNE_RE.test(stripUnitTags(text));
+}
+
+/** True iff this skill text declares the unit is immune to control debuffs ("immune to Control
+ *  debuffs", Fenri). */
+const CONTROL_IMMUNE_RE = /\bimmune to control\b/i;
+export function parseControlImmune(text: string | null | undefined): boolean {
+    return !!text && CONTROL_IMMUNE_RE.test(stripUnitTags(text));
 }
 
 // SP-F F5 (Meatshield, R4 refit-active passive) — "Any direct damage dealt to a non-defender
@@ -5968,7 +6008,7 @@ const APPLICATION_VERBS = new Set([...SELF_VERBS, ...ENEMY_VERBS, ...AMBIGUOUS_V
 // Past participles double as adjectives ("the newly inflicted Corrosion") — that's a
 // reference to an existing effect being extended, not a fresh application.
 const ADJECTIVAL_MARKER = 'newly';
-const SKIP_VERBS = new Set(['ignoring', 'removes', 'resists', 'when']);
+const SKIP_VERBS = new Set(['ignoring', 'removes', 'clears', 'resists', 'when']);
 // `\s*` (not `\s+`) between the number and "turn(s)" tolerates a CSV concatenation typo
 // ("for 1turn." — Morao's active) where the tag-removal boundary leaves no space. `\s+` before
 // the number is left mandatory since "for" is always followed by a real space in the corpus.
@@ -5976,6 +6016,10 @@ const DURATION_RE = /for\s+(\d+)\s*turns?/i;
 const RECURRING_RE = /every\s+turn/i;
 // Matches "N stacks of" at the END of a text segment (immediately before the tag)
 const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
+// A sentence that opens "Every turn, this Unit gains" and ends at the tag (Fenri's Pressing
+// Onslaught). Sentence-opening only: "At the start of combat and every turn, …" is not it.
+const LEADING_EVERY_TURN_GAIN_RE =
+    /(?:^|[.;]|<br\s*\/?>)\s*every\s+turn,\s*this\s+unit\s+gains\s*$/i;
 // Lionheart refit passive: "After taking damage redirected through Protection, all Protection
 // is removed." Marks the ship's Protection grant as consumable (clear-all-on-redirect) and,
 // because such Protection is a fixed pool, caps its round-start accumulation at the grant count
@@ -6049,14 +6093,27 @@ const SHIP_SKILL_TEXT_FIELDS = [
     'thirdPassiveSkillText',
 ] as const;
 
-/** `ship` with `canonicaliseStatusNames` applied to every skill text; the same object when no
- *  text carries an aliased spelling. */
-export function withCanonicalStatusNames(ship: Ship): Ship {
+/**
+ * Rewrites a bounty boss's subject, "The Boss" (and its possessive), to the "This Unit" every
+ * parser rule is written against. The first letter's case is kept, so a sentence-initial
+ * "The Boss" stays sentence-initial.
+ */
+export function canonicaliseSkillSubject(text: string): string {
+    return text.replace(/\b(t)he boss\b/gi, (_, t: string) =>
+        t === 'T' ? 'This Unit' : 'this Unit'
+    );
+}
+
+/** `ship` with `canonicaliseStatusNames` applied to every skill text, and on a bounty boss also
+ *  `canonicaliseSkillSubject`; the same object when no text changes. */
+export function withCanonicalSkillText(ship: Ship): Ship {
+    const isBoss = typeof ship.id === 'string' && parseBossShipId(ship.id) !== null;
     let out: Ship | undefined;
     for (const field of SHIP_SKILL_TEXT_FIELDS) {
         const text = ship[field];
         if (!text) continue;
-        const canonical = canonicaliseStatusNames(text);
+        const statusCanonical = canonicaliseStatusNames(text);
+        const canonical = isBoss ? canonicaliseSkillSubject(statusCanonical) : statusCanonical;
         if (canonical === text) continue;
         out ??= { ...ship };
         out[field] = canonical;
@@ -6869,9 +6926,21 @@ export function parseSkillEffects(
             }
         }
 
-        // Step 4: Stack detection from immediately preceding text segment
+        // Step 4: Stack detection from immediately preceding text segment. A passive's leading
+        // "Every turn, this Unit gains <X>" with no stated count and no duration is the same
+        // one-stack-per-round accumulation as "gains 1 stack of <X> every turn".
         const stackMatch = STACKS_RE.exec(prevText);
-        const stacks = stackMatch ? parseInt(stackMatch[1], 10) : undefined;
+        const leadingEveryTurnStack =
+            !stackMatch &&
+            duration === null &&
+            source !== 'active' &&
+            source !== 'charge' &&
+            LEADING_EVERY_TURN_GAIN_RE.test(prevText);
+        const stacks = stackMatch
+            ? parseInt(stackMatch[1], 10)
+            : leadingEveryTurnStack
+              ? 1
+              : undefined;
         // Only use 'recurring' from stacks if no finite duration was found — except a CAST's
         // durationless stack grant of a round-scoped status (ROUND_SCOPED_STATUSES), which lasts
         // the 1-turn window its own definition gives it.

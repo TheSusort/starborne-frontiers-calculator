@@ -140,6 +140,16 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({
         setPinned((prev) => (prev === actorId ? null : actorId));
     };
 
+    // Secondary footprint cell -> anchor, per side, for the roster's multi-hex units.
+    const secondaryCellsOf = (side: FightSide): Partial<Record<Position, Position>> => {
+        const map: Partial<Record<Position, Position>> = {};
+        for (const r of result.roster) {
+            if (r.side !== side) continue;
+            for (const cell of r.footprint?.slice(1) ?? []) map[cell] = r.position;
+        }
+        return map;
+    };
+
     const board = (side: FightSide) => (
         <section className="min-w-0 flex-1 space-y-2">
             <h2 className="text-lg font-semibold">
@@ -158,6 +168,7 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({
                     identity,
                 })}
                 mirrored={side === 'enemy'}
+                secondaryCells={secondaryCellsOf(side)}
                 tone={side}
                 label={side === 'player' ? 'Your team battle board' : 'Enemy team battle board'}
                 onSelectCell={pinCell(side)}

@@ -6,6 +6,7 @@ import type { Ship } from '../../types/ship';
 // vi.mock calls below are hoisted above these imports, so the page import is safe here.
 import SimulatorPage from '../SimulatorPage';
 import { SETUP_STORAGE_KEYS } from '../../utils/simulator/setupStorage';
+import { SQUAD_LEADER_STORAGE_KEYS } from '../../utils/simulator/squadLeaderSelection';
 
 const fakeShip = { id: 'fake-ship', name: 'Fake' } as unknown as Ship;
 
@@ -122,6 +123,60 @@ describe('SimulatorPage setup autosave', () => {
         await new Promise((resolve) => setTimeout(resolve, 400));
         expect(JSON.parse(localStorage.getItem(SETUP_STORAGE_KEYS.autosave) ?? 'null')).toEqual(
             stored
+        );
+    });
+});
+
+describe('SimulatorPage boss setups', () => {
+    it('loads a stored boss on its anchor and drops one stored anywhere else', async () => {
+        const stored = (cell: string) =>
+            JSON.stringify({
+                version: 1,
+                name: '(autosave)',
+                playerBoard: { T1: { shipId: fakeShip.id } },
+                enemyBoard: { [cell]: { shipId: 'boss:fenri:32' } },
+                seed: 1,
+                runCount: 1,
+                savedAt: 1,
+            });
+        localStorage.setItem(SETUP_STORAGE_KEYS.autosave, stored('M1'));
+        const anchored = renderPage();
+        expect(screen.getByTestId('formation-Enemy Team (1)')).toHaveTextContent('boss:fenri:32');
+        anchored.unmount();
+
+        localStorage.setItem(SETUP_STORAGE_KEYS.autosave, stored('T3'));
+        renderPage();
+        expect(screen.getByTestId('formation-Enemy Team')).toHaveTextContent(/^$/);
+    });
+
+    it('neither saves nor drops the hidden enemy leader while a boss is loaded', async () => {
+        const leader = { faction: 'ATLAS_SYNDICATE', name: 'Intern', stage: 1 };
+        localStorage.setItem(SQUAD_LEADER_STORAGE_KEYS.enemy, JSON.stringify(leader));
+        localStorage.setItem(
+            SETUP_STORAGE_KEYS.autosave,
+            JSON.stringify({
+                version: 1,
+                name: '(autosave)',
+                playerBoard: { T1: { shipId: fakeShip.id } },
+                // A boss setup is saved without an enemy leader.
+                enemyBoard: { M1: { shipId: 'boss:fenri:32' } },
+                seed: 7,
+                runCount: 1,
+                savedAt: 1,
+            })
+        );
+        renderPage();
+        expect(screen.getByTestId('formation-Enemy Team (1)')).toHaveTextContent('boss:fenri:32');
+        await waitFor(() =>
+            expect(
+                JSON.parse(localStorage.getItem(SETUP_STORAGE_KEYS.autosave) ?? 'null').savedAt
+            ).not.toBe(1)
+        );
+        const written = JSON.parse(localStorage.getItem(SETUP_STORAGE_KEYS.autosave) ?? 'null');
+        expect(written.enemyBoard).toEqual({ M1: { shipId: 'boss:fenri:32' } });
+        expect(written.enemySquadLeader).toBeUndefined();
+        expect(JSON.parse(localStorage.getItem(SQUAD_LEADER_STORAGE_KEYS.enemy) ?? 'null')).toEqual(
+            leader
         );
     });
 });
