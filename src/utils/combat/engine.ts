@@ -5348,9 +5348,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         );
     /** The victim's factor on a detonation's damage: its `scope: 'detonation'` reductions alone
      *  (Mamma Maglienza, "50% less damage from DoTs and Detonations"). A Bomb or Echoing Burst
-     *  burst takes this factor; a detonate-DoT burst takes the stronger of it and the victim's DoT
-     *  reduction for that family, never both (`detonatedDotFactor`). Bomb splash is not a
-     *  detonation and keeps its own path. */
+     *  burst and Bomb splash (a dying ship's splash, Demolisher's splash copy) take this factor; a
+     *  detonate-DoT burst takes the stronger of it and the victim's DoT reduction for that family,
+     *  never both (`detonatedDotFactor`). */
     const incomingDetonationReductionFor = (victimId: string): number =>
         composeDotReductionFactor(
             incomingReductionPartsForHit(incomingAbilitiesOf(victimId), {
@@ -7630,11 +7630,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                             for (const bomb of bombs) {
                                 const splash = splashDamageForBomb(bomb, bomb.splashModifier);
                                 if (splash <= 0) continue;
-                                const splashOutcome = applyVictimDamage(splash, ally, sink, {
+                                const splashIntake =
+                                    splash * incomingDetonationReductionFor(ally.id);
+                                const splashOutcome = applyVictimDamage(splashIntake, ally, sink, {
                                     killerId: bomb.sourceId,
                                     byDirectDamage: true,
-                                    bombPortion: splash, // full bomb → full shield drain, no penetration
+                                    bombPortion: splashIntake, // full shield drain, no penetration
                                     shieldPenetrationPct: 0,
+                                    preMitigationDamage: splash,
                                 });
                                 // perActorSplash stays the FULL splash — it reports what the dying
                                 // bomb threw out, the splash counterpart of perActorReflected.
@@ -8721,8 +8724,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
             // A Bomb splash copy is not a direct hit, so it is aimed at no one.
             const procAim = splashCopy ? undefined : aimReactiveHit(victim.id);
+            // A splash copy is Bomb damage, so the victim's detonation reductions apply to it.
+            const procIntake = splashCopy ? raw * incomingDetonationReductionFor(victim.id) : raw;
             try {
-                procOutcome = applyVictimDamage(raw, victim, sink, {
+                procOutcome = applyVictimDamage(procIntake, victim, sink, {
                     killerId: ownerId,
                     byDirectDamage: true,
                     isPrimaryTarget: procAim?.isPrimary ?? false,
@@ -8739,7 +8744,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     shieldPenetrationPct: splashCopy ? 0 : attackerShieldPenOf(ownerId),
                     // A splash copy is Bomb damage through and through: full shield drain, no
                     // reflect, no one-shot block spent.
-                    bombPortion: splashCopy ? raw : 0,
+                    bombPortion: splashCopy ? procIntake : 0,
                 });
             } finally {
                 deferConsequenceLogs = wasDeferring;

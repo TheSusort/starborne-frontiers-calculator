@@ -4,8 +4,8 @@
  *     advantage over her; Block Debuff and control immunity still stop it;
  *   - "Whenever any ship dies": any death on either side, any cause, never the owner's own;
  *   - "after attacking": once after each of the owner's own attack casts;
- *   - "50% less damage from DoTs and Detonations": Bomb and Echoing Burst detonations and
- *     detonate-DoT bursts, once per burst;
+ *   - "50% less damage from DoTs and Detonations": Bomb and Echoing Burst detonations,
+ *     detonate-DoT bursts (once per burst) and Bomb splash;
  *   - Arc-Retribution: Stasis on the killer of a direct-damage death only, rolled normally.
  * Every board runs with the carrier on the player side and on the enemy side.
  */
@@ -557,6 +557,53 @@ describe.each(SIDES)('whenever any ship dies, carrier on the %s side', (placemen
         expect(grantsOf(events, id(c), 'Repair Self Over Time I')).toHaveLength(1);
     });
 
+    it("the carrier's own death by a direct hit grants nothing", () => {
+        // The killing hit's reaction chain is one a dead owner may still react to (R117), so
+        // only the listener's own-death exclusion stops this grant. The grant here reaches every
+        // ally, because a dead carrier's self-grant has no living recipient to observe it on.
+        const toAllies: Ability = {
+            ...passiveOf(mammaKit(), 'Repair Self Over Time I'),
+            target: 'all-allies',
+        };
+        const c: BoardUnit = {
+            id: 'mamma',
+            kit: { slots: [{ slot: 'passive', abilities: [toAllies] }] },
+            position: 'M2',
+            speed: 1,
+            hp: 100,
+        };
+        const ally = dummyAt('ally', 'T3');
+        const { input, id } = boardInput(placement, c, [ally], [rowKiller('killer', 'M1')], 1);
+        const events = runEvents(input);
+        const deaths = ofType(events, 'ship-destroyed');
+        expect(deaths.map((e) => e.actorId)).toEqual([id(c)]);
+        expect(deaths[0].byDirectDamage).toBe(true);
+        expect(grantsOf(events, id(ally), 'Repair Self Over Time I')).toEqual([]);
+    });
+
+    it('validity: the same all-allies grant reaches the ally when another ship dies', () => {
+        const toAllies: Ability = {
+            ...passiveOf(mammaKit(), 'Repair Self Over Time I'),
+            target: 'all-allies',
+        };
+        const c: BoardUnit = {
+            id: 'mamma',
+            kit: { slots: [{ slot: 'passive', abilities: [toAllies] }] },
+            position: 'B1',
+            speed: 1,
+        };
+        const ally = dummyAt('ally', 'T3');
+        const { input, id } = boardInput(
+            placement,
+            c,
+            [ally, rowKiller('killer', 'M1')],
+            [fodder('e1', 'M3'), dummyAt('e3', 'T4')],
+            1
+        );
+        const events = runEvents(input);
+        expect(grantsOf(events, id(ally), 'Repair Self Over Time I')).toHaveLength(1);
+    });
+
     it('validity: no death, no grant', () => {
         const c = carrier();
         const { input, id } = boardInput(
@@ -990,5 +1037,83 @@ describe.each(SIDES)('detonation reduction, carrier on the %s side', (placement)
             detonation: burst('detonation'),
             both: burst('both'),
         }).toEqual({ dot: none / 2, detonation: none / 2, both: none / 2 });
+    });
+});
+
+describe.each(SIDES)('Bomb splash is detonation damage, carrier on the %s side', (placement) => {
+    /** HP the carrier (M1) lost to splash from its bombed neighbour at M2. */
+    const splashLoss = (
+        set: ReductionSet,
+        holderHp: number,
+        opponents: BoardUnit[],
+        rounds: number
+    ) => {
+        const c = reductionCarrier(set);
+        const holder: BoardUnit = {
+            id: 'holder',
+            kit: NO_KIT,
+            position: 'M2',
+            speed: 1,
+            hp: holderHp,
+        };
+        const { input, id } = boardInput(placement, c, [holder], opponents, rounds);
+        const events = runEvents(input);
+        const last = ofType(events, 'hp-snapshot')
+            .filter((e) => e.actorId === id(c))
+            .at(-1)!;
+        return Math.round(last.maxHp - last.currentHp);
+    };
+    const longBomb = dotAbility(
+        { type: 'dot', dotType: 'bomb', tier: 100, stacks: 1, duration: 9 },
+        'bomb'
+    );
+
+    it("a bombed ally's death splash: halved by the detonation scope only", () => {
+        // The bomber plants a long-fused Bomb on the holder; the killer then destroys it. One
+        // round, so the killer never reaches the carrier.
+        const opponents = [
+            { ...opponentWith([longBomb]), id: 'bomber' },
+            {
+                ...opponentWith(hitKit(100).slots[0].abilities),
+                id: 'killer',
+                speed: 200,
+                attack: 1e7,
+            },
+        ];
+        const loss = (set: ReductionSet) => splashLoss(set, 100, opponents, 1);
+        const none = loss('none');
+        expect(none).toBeGreaterThan(0);
+        expect({ dot: loss('dot'), detonation: loss('detonation'), both: loss('both') }).toEqual({
+            dot: none,
+            detonation: none / 2,
+            both: none / 2,
+        });
+    });
+
+    it("Demolisher's splash copy of a Bomb burst: halved by the detonation scope only", () => {
+        const splashCopy: Ability = {
+            id: 'demolisher-splash',
+            type: 'damage',
+            target: 'adjacent-enemies',
+            trigger: 'on-bomb-detonated',
+            conditions: [],
+            config: { type: 'damage', multiplier: 100, noCrit: true, ignoresDefense: true },
+        };
+        // Plants a one-turn Bomb on the holder each round; its burst splashes onto the carrier.
+        const bomber = opponentWith([
+            dotAbility({ type: 'dot', dotType: 'bomb', tier: 100, stacks: 1, duration: 1 }, 'bomb'),
+        ]);
+        const demolisher: BoardUnit = {
+            ...bomber,
+            kit: { slots: [...bomber.kit.slots, { slot: 'passive', abilities: [splashCopy] }] },
+        };
+        const loss = (set: ReductionSet) => splashLoss(set, 1e9, [demolisher], 2);
+        const none = loss('none');
+        expect(none).toBeGreaterThan(0);
+        expect({ dot: loss('dot'), detonation: loss('detonation'), both: loss('both') }).toEqual({
+            dot: none,
+            detonation: none / 2,
+            both: none / 2,
+        });
     });
 });

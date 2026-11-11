@@ -469,3 +469,40 @@ describe('resolvePositionalTargetCell — multi-hex units', () => {
         expect(hit).toMatchObject({ actor: { id: 'e' }, cell: 'B2' });
     });
 });
+
+describe('resolvePositionalTargetCell — row choice and stealth', () => {
+    // Row B: a stealthed ship at the front (B4) and two visible ones; row M: two visible.
+    const enemies = [
+        actor('m4', 'M4'),
+        actor('m2', 'M2'),
+        actor('ghost', 'B4'),
+        actor('b3', 'B3'),
+        actor('b1', 'B1'),
+    ];
+    const so = statusFrom({ ghost: { stealthed: true } });
+
+    it('a stealthed ship counts toward its row; the cast is aimed at a visible ship there', () => {
+        const hit = resolvePositionalTargetCell('T1', enemyTarget('row-most'), enemies, so);
+        expect(hit).toMatchObject({ actor: { id: 'b3' }, cell: 'B3' });
+    });
+
+    it('a row of stealthed ships only is aimed at its front-most ship', () => {
+        const allHidden = statusFrom({
+            ghost: { stealthed: true },
+            b3: { stealthed: true },
+            b1: { stealthed: true },
+        });
+        const hit = resolvePositionalTargetCell('T1', enemyTarget('row-most'), enemies, allHidden);
+        expect(hit).toMatchObject({ actor: { id: 'ghost' }, cell: 'B4' });
+    });
+
+    it('validity: without the Stealth the row is aimed at its front-most ship', () => {
+        const hit = resolvePositionalTargetCell(
+            'T1',
+            enemyTarget('row-most'),
+            enemies,
+            statusFrom({})
+        );
+        expect(hit).toMatchObject({ actor: { id: 'ghost' }, cell: 'B4' });
+    });
+});

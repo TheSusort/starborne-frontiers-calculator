@@ -5,7 +5,8 @@
  *   - most: the row with the most living enemies, ties M → B → T; least: the fewest among
  *     non-empty rows, ties on the caster's own row first, then M → B → T;
  *   - a multi-hex unit counts once in each row it covers;
- *   - a caster under Taunt hits the forcing ship's row;
+ *   - a stealthed ship counts toward its row's size, and the row hit strikes it;
+ *   - a caster under Taunt, Provoke or Concentrate Fire hits the forcing ship's row;
  *   - Protection still redirects a row hit (it is not a whole-battlefield hit).
  * Every board runs with the attacker on the player side and on the enemy side.
  */
@@ -129,6 +130,145 @@ const tauntSelf: Ability = {
     },
 };
 
+const selfBuff = (buffName: string): Ability => ({
+    ...tauntSelf,
+    id: `self-${buffName}`,
+    config: { ...tauntSelf.config, buffName } as Ability['config'],
+});
+
+/** A unit that casts `buffName` on itself before the row caster acts. */
+const selfBuffer = (id: string, position: Position, buffName: string): BoardUnit => ({
+    id,
+    kit: { slots: [{ slot: 'active', abilities: [selfBuff(buffName)] }] },
+    position,
+    speed: 400,
+});
+
+const debuffNamed = (buffName: string): Ability => ({
+    ...probeDebuff,
+    id: `debuff-${buffName}`,
+    config: { ...probeDebuff.config, buffName, duration: 2 } as Ability['config'],
+});
+
+/** A fast unit whose cast lands `buffName` on the front-most opposing ship of its own row. */
+const debuffer = (id: string, position: Position, buffName: string): BoardUnit => ({
+    id,
+    kit: { slots: [{ slot: 'active', abilities: [debuffNamed(buffName)] }] },
+    position,
+    speed: 400,
+    hacking: 100_000,
+});
+
+describe.each(SIDES)('forced targeting picks the row, attacker on the %s side', (placement) => {
+    // Row M holds three, so an unforced row-most cast strikes M.
+    const board = (provoker: BoardUnit) => [
+        dummy('m4', 'M4'),
+        dummy('m2', 'M2'),
+        dummy('m1', 'M1'),
+        provoker,
+        dummy('t2', 'T2'),
+        dummy('b3', 'B3'),
+        dummy('b1', 'B1'),
+    ];
+
+    it("a provoked row-most caster strikes the provoker's whole row", () => {
+        const opponents = board(debuffer('provoker', 'T4', 'Provoke'));
+        const attacker = rowAttacker('row-most', 'T1');
+        const { input, id } = boardInput(placement, attacker, [], opponents, 1);
+        const { hits } = runRound1(input, id(attacker));
+        expect([...hits.keys()].sort()).toEqual(
+            opponents
+                .filter((u) => u.position.startsWith('T'))
+                .map(id)
+                .sort()
+        );
+    });
+
+    it("a row-most caster strikes the Concentrate Fire carrier's whole row", () => {
+        const opponents = board(dummy('t4', 'T4'));
+        // The marker sits in row B and marks B3, the front-most ship of that row.
+        const marker = debuffer('marker', 'B1', 'Concentrate Fire');
+        const attacker = rowAttacker('row-most', 'T1');
+        const { input, id } = boardInput(placement, attacker, [marker], opponents, 1);
+        const { hits } = runRound1(input, id(attacker));
+        expect([...hits.keys()].sort()).toEqual(
+            opponents
+                .filter((u) => u.position.startsWith('B'))
+                .map(id)
+                .sort()
+        );
+    });
+
+    it('validity: unforced, the same board strikes row M', () => {
+        const opponents = board(dummy('t4', 'T4'));
+        const attacker = rowAttacker('row-most', 'T1');
+        const { input, id } = boardInput(placement, attacker, [], opponents, 1);
+        const { hits } = runRound1(input, id(attacker));
+        expect([...hits.keys()].sort()).toEqual(
+            opponents
+                .filter((u) => u.position.startsWith('M'))
+                .map(id)
+                .sort()
+        );
+    });
+});
+
+describe.each(SIDES)('stealthed ships in the row count, attacker on the %s side', (placement) => {
+    it('row-most: a stealthed ship counts toward its row and is struck with it', () => {
+        // M holds two; B holds two plus one stealthed. Without the stealthed ship the M/B tie
+        // goes to M.
+        const opponents = [
+            dummy('m4', 'M4'),
+            dummy('m2', 'M2'),
+            selfBuffer('ghost', 'B4', 'Stealth'),
+            dummy('b3', 'B3'),
+            dummy('b1', 'B1'),
+        ];
+        const attacker = rowAttacker('row-most', 'T1');
+        const { input, id } = boardInput(placement, attacker, [], opponents, 1);
+        const { hits } = runRound1(input, id(attacker));
+        const bRow = opponents.filter((u) => u.position.startsWith('B')).map(id);
+        expect([...hits.keys()].sort()).toEqual([...bRow].sort());
+        for (const victim of bRow) expect(hits.get(victim)!.taken).toBe(10_000);
+    });
+
+    it('row-least: a stealthed ship counts toward its row', () => {
+        // T holds one plus one stealthed, M two, B three; the caster sits in B. Counting the
+        // stealthed ship ties T with M, and M wins (after the caster's own row B, which is full).
+        // Without it T alone is the emptiest.
+        const opponents = [
+            dummy('t4', 'T4'),
+            selfBuffer('ghost', 'T2', 'Stealth'),
+            dummy('m4', 'M4'),
+            dummy('m3', 'M3'),
+            dummy('b4', 'B4'),
+            dummy('b3', 'B3'),
+            dummy('b2', 'B2'),
+        ];
+        const attacker = rowAttacker('row-least', 'B1');
+        const { input, id } = boardInput(placement, attacker, [], opponents, 1);
+        const { hits } = runRound1(input, id(attacker));
+        expect([...hits.keys()].sort()).toEqual(
+            opponents
+                .filter((u) => u.position.startsWith('M'))
+                .map(id)
+                .sort()
+        );
+    });
+
+    it('validity: the stealthed ship is untargetable to a single-target cast', () => {
+        const opponents = [selfBuffer('ghost', 'B4', 'Stealth'), dummy('b3', 'B3')];
+        const attacker: BoardUnit = {
+            ...rowAttacker('row-most', 'B1'),
+            target: parseTarget('front'),
+            pattern: parsePattern('Pattern-Base'),
+        };
+        const { input, id } = boardInput(placement, attacker, [], opponents, 1);
+        const { hits } = runRound1(input, id(attacker));
+        expect([...hits.keys()]).toEqual([id(opponents[1])]);
+    });
+});
+
 describe.each(SIDES)('row-choice cast, attacker on the %s side', (placement) => {
     it('row-most strikes every unit of the fullest row at full damage, each as a primary target', () => {
         const kit: ShipSkills = {
@@ -160,6 +300,20 @@ describe.each(SIDES)('row-choice cast, attacker on the %s side', (placement) => 
         const t4 = id(opponents.find((u) => u.id === 't4')!);
         expect([...hits.keys()]).toEqual([t4]);
         expect(hits.get(t4)).toEqual({ taken: 10_000, primary: [true] });
+    });
+
+    it("row-least: a B-row caster's own row wins a B/M tie that M → B → T would give to M", () => {
+        const opponents = [
+            dummy('m3', 'M3'),
+            dummy('b4', 'B4'),
+            dummy('t4', 'T4'),
+            dummy('t3', 'T3'),
+            dummy('t2', 'T2'),
+        ];
+        const attacker = rowAttacker('row-least', 'B1');
+        const { input, id } = boardInput(placement, attacker, [], opponents, 1);
+        const { hits } = runRound1(input, id(attacker));
+        expect([...hits.keys()]).toEqual([id(opponents[1])]);
     });
 
     it("a taunted row-most caster strikes the taunter's whole row instead", () => {
