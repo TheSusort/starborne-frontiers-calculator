@@ -107,6 +107,20 @@ describe('incomingReductionPartsForHit (#672 buckets)', () => {
             separatePcts: [],
         });
     });
+    it('a detonation reads only detonation-scoped reductions', () => {
+        const kit = [
+            red(50, { scope: 'detonation' }),
+            red(30, { scope: 'dot' }),
+            red(20, { scope: 'direct' }),
+        ];
+        expect(incomingReductionPartsForHit(kit, ctx({ detonation: true }))).toEqual({
+            passivePct: 50,
+            separatePcts: [],
+        });
+        expect(
+            incomingReductionPartsForHit(kit, ctx({ detonation: true, dotType: 'inferno' }))
+        ).toEqual({ passivePct: 50, separatePcts: [] });
+    });
     it('ship passives sum into passivePct', () => {
         const p = incomingReductionPartsForHit(
             [red(25, { condition: 'self-stealth' }), red(10, { condition: 'self-stealth' })],

@@ -6037,7 +6037,7 @@ const RECURRING_RE = /every\s+turn/i;
 const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
 // "twice" right AFTER the tag ("inflicting <Inferno II> twice for 12 turns each") — two
 // applications of the status, read as 2 stacks.
-const TWICE_RE = /^\s*twice\b/i;
+const TWICE_RE = /^\s*twice\s+for\b/i;
 // A durationless "after attacking, gains <X>" grant (Mamma Maglienza's Enrage Attack III) is
 // kept: each attack banks another stack rather than opening a 1-turn window.
 const AFTER_ATTACKING_GAIN_RE = /\bafter\s+attacking,\s*(?:this\s+unit\s+)?gains\s*$/i;

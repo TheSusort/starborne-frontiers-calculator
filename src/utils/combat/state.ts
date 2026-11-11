@@ -611,6 +611,10 @@ export interface CombatActor {
     /** Every attack of this actor crits at a 100% rate, whatever its affinity matchup or crit
      *  debuffs (ShipSkills.alwaysCrits). Absent → the ordinary capped crit rate. */
     alwaysCrits?: boolean;
+    /** Every debuff, DoT and purge this actor casts lands, whatever the victim's security or
+     *  affinity matchup (ShipSkills.alwaysLandsDebuffs, "infinite Hacking" — #519). Block Debuff
+     *  and control immunity still stop it. Absent → the ordinary landing rules. */
+    alwaysLandsDebuffs?: boolean;
     /** Pre-fight combat-modifier baseline: squad-leader modifier
      *  channels accumulated BEFORE combat (additive pct points). Hidden, permanent,
      *  non-purgeable — deliberately NOT statuses (they would leak into logs/purge/cleanse).
@@ -635,6 +639,7 @@ export function createActor(
         chargeLossImmune?: boolean;
         controlImmune?: boolean;
         alwaysCrits?: boolean;
+        alwaysLandsDebuffs?: boolean;
         preFight?: PreFightCombatModifiers;
     }
 ): CombatActor {

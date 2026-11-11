@@ -732,6 +732,9 @@ export interface IncomingHitContext {
      *  every other construction site omits it (→ undefined → treated as false in conditionMet),
      *  keeping those sites byte-identical. */
     viaProtectionRedirect?: boolean;
+    /** True for a detonation: a Bomb or Echoing Burst burst, or a detonate-DoT burst. Only
+     *  `scope: 'detonation'` reductions apply to it. Absent → a direct hit or a DoT tick. */
+    detonation?: boolean;
 }
 
 /**

@@ -68,6 +68,7 @@ import {
     effectiveStatsOf,
     effectiveOutgoingStatsOf,
     separateOutgoingModifiersOf,
+    landsDespiteAffinity,
     liveDebuffLandingChance,
 } from './effectiveStats';
 import {
@@ -1091,6 +1092,7 @@ export function buildEnemyPlayerActorRuntime(
         stasisBreakExemptWhen: e.stasisBreakExemptWhen,
         chargeLossImmune: e.chargeLossImmune,
         alwaysCrits: e.shipSkills?.alwaysCrits,
+        alwaysLandsDebuffs: e.shipSkills?.alwaysLandsDebuffs,
         controlImmune: e.shipSkills?.controlImmune,
         affinity: e.affinity,
         preFight: e.preFight,
@@ -1164,7 +1166,8 @@ export function buildEnemyPlayerActorRuntime(
                   // (DPS/unit mode, single representative opponent) → the static flag, which
                   // equals the target-aware result there.
                   targetAffinity !== undefined
-                    ? getAffinityMatchup(e.affinity, targetAffinity) !== 'disadvantage'
+                    ? getAffinityMatchup(e.affinity, targetAffinity) !== 'disadvantage' ||
+                      landsDespiteAffinity(actor)
                     : !affinityDisadvantage
                 : // `targetLandingChance` is THIS victim's own hacking-vs-security chance,
                   // supplied by the reactive path (which knows the victim it is inflicting on).
@@ -2544,6 +2547,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         stasisBreakExemptWhen: input.stasisBreakExemptWhen,
         chargeLossImmune: input.chargeLossImmune,
         alwaysCrits: input.shipSkills.alwaysCrits,
+        alwaysLandsDebuffs: input.shipSkills.alwaysLandsDebuffs,
         controlImmune: input.shipSkills.controlImmune,
         affinity: input.affinity,
         preFight: input.preFight,
@@ -2668,6 +2672,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             stasisBreakExemptWhen: t.stasisBreakExemptWhen,
             chargeLossImmune: t.chargeLossImmune,
             alwaysCrits: t.walk?.shipSkills.alwaysCrits,
+            alwaysLandsDebuffs: t.walk?.shipSkills.alwaysLandsDebuffs,
             controlImmune: t.walk?.shipSkills.controlImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
@@ -2786,7 +2791,8 @@ export function runCombat(rawInput: CombatEngineInput): {
               // target — an 'apply' lands UNLESS the applier is at a disadvantage. Absent
               // (DPS/unit mode, single representative opponent) → the static flag.
               targetAffinity !== undefined
-                ? getAffinityMatchup(input.affinity, targetAffinity) !== 'disadvantage'
+                ? getAffinityMatchup(input.affinity, targetAffinity) !== 'disadvantage' ||
+                  landsDespiteAffinity(attacker)
                 : !affinityDisadvantage
             : // Per-victim chance when the caller knows its victim (the reactive path);
               // the cached turn-target chance otherwise (the cast path).
@@ -3001,7 +3007,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                   // target — an 'apply' lands UNLESS this actor is at a disadvantage. Absent
                   // (DPS/unit mode, single representative opponent) → the static flag.
                   targetAffinity !== undefined
-                    ? getAffinityMatchup(w.affinity, targetAffinity) !== 'disadvantage'
+                    ? getAffinityMatchup(w.affinity, targetAffinity) !== 'disadvantage' ||
+                      landsDespiteAffinity(teamActor)
                     : !teamAffinityDisadvantage
                 : // Mirrors the attacker closure — per-victim chance from the reactive
                   // path, cached turn-target chance for the cast path.
@@ -5338,6 +5345,34 @@ export function runCombat(rawInput: CombatEngineInput): {
                 selfHpPct: selfHpPctOf(victimId),
                 attackerTauntedOrProvoked: false,
             })
+        );
+    /** The victim's factor on a detonation's damage: its `scope: 'detonation'` reductions alone
+     *  (Mamma Maglienza, "50% less damage from DoTs and Detonations"). A Bomb or Echoing Burst
+     *  burst takes this factor; a detonate-DoT burst takes the stronger of it and the victim's DoT
+     *  reduction for that family, never both (`detonatedDotFactor`). Bomb splash is not a
+     *  detonation and keeps its own path. */
+    const incomingDetonationReductionFor = (victimId: string): number =>
+        composeDotReductionFactor(
+            incomingReductionPartsForHit(incomingAbilitiesOf(victimId), {
+                didCrit: false,
+                attackerStealthed: false,
+                victimStealthed: isStealthed(victimId),
+                victimTurnBlocked: isTurnBlocked(victimId),
+                hitIndexThisRound: 0,
+                attackerHasDot: false,
+                victimHasBarrierRecharging: hasBarrierRecharging(victimId),
+                victimHasShield: hasShield(victimId),
+                selfHpPct: selfHpPctOf(victimId),
+                attackerTauntedOrProvoked: false,
+                detonation: true,
+            })
+        );
+    /** A detonated DoT is both a DoT and a detonation; one "less damage from DoTs and
+     *  Detonations" clause reduces it once, so the stronger of the two factors applies. */
+    const detonatedDotFactor = (victimId: string, dotType: TickableDoTType): number =>
+        Math.min(
+            incomingDotReductionFor(victimId, dotType),
+            incomingDetonationReductionFor(victimId)
         );
     // Orel: does the given actor (the ATTACKER of an incoming hit) currently carry Taunt
     // (a self-buff it granted itself) or Provoke (a debuff placed on it by someone else)? Sibling
@@ -10011,7 +10046,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ...recipe,
                     dotFactorFor: (dotType) =>
                         victimDotMult(recipe, victim, dotType) *
-                        incomingDotReductionFor(victim.id, dotType),
+                        detonatedDotFactor(victim.id, dotType),
                 };
                 const result = detonateContainers(victimRecipe, {
                     corrosionEntries: victim.corrosionEntries,
@@ -10039,11 +10074,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // the bomb was worth, the same way `attacked` reports a hit's pre-transfer
                         // value. Only the numeric channels below move to the delivered amount.
                     });
-                    const bombOutcome = applyVictimDamage(result.bomb, victim, sink, {
+                    const bombIntake = result.bomb * incomingDetonationReductionFor(victim.id);
+                    const bombOutcome = applyVictimDamage(bombIntake, victim, sink, {
                         killerId: actorId,
                         byDirectDamage: true,
-                        bombPortion: result.bomb, // full shield drain, no pen
+                        bombPortion: bombIntake, // full shield drain, no pen
                         shieldPenetrationPct: 0,
+                        preMitigationDamage: result.bomb,
                     });
                     bombDelivered = detonationDelivered(bombOutcome);
                     // #355 B1: the victim's own row gets its OWN booked intake — a Protection
@@ -10114,11 +10151,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             sourceId: string,
             damage: number
         ): void => {
-            const outcome = applyVictimDamage(damage, victim, sink, {
+            const intake = damage * incomingDetonationReductionFor(victim.id);
+            const outcome = applyVictimDamage(intake, victim, sink, {
                 killerId: sourceId,
                 byDirectDamage: true,
-                bombPortion: damage, // full shield drain, no pen — bomb-burst precedent
+                bombPortion: intake, // full shield drain, no pen — bomb-burst precedent
                 shieldPenetrationPct: 0,
+                preMitigationDamage: damage,
             });
             // #355 B1: book what the funnel RECORDED, not the burst we passed in — see
             // `detonationDelivered`. Per-victim rows take `incomingBooked`; the whole-attack tally
@@ -10173,11 +10212,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 damage,
                             }),
                         creditDetonation: (sourceId, damage) => {
-                            const outcome = applyVictimDamage(damage, actor, sink, {
+                            const intake = damage * incomingDetonationReductionFor(actor.id);
+                            const outcome = applyVictimDamage(intake, actor, sink, {
                                 killerId: sourceId,
                                 byDirectDamage: true,
-                                bombPortion: damage, // full shield drain, no pen
+                                bombPortion: intake, // full shield drain, no pen
                                 shieldPenetrationPct: 0,
+                                preMitigationDamage: damage,
                             });
                             // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
                             const delivered = detonationDelivered(outcome);
@@ -10228,11 +10269,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 damage,
                             }),
                         creditDetonation: (sourceId, damage) => {
-                            const outcome = applyVictimDamage(damage, actor, sink, {
+                            const intake = damage * incomingDetonationReductionFor(actor.id);
+                            const outcome = applyVictimDamage(intake, actor, sink, {
                                 killerId: sourceId,
                                 byDirectDamage: true,
-                                bombPortion: damage, // full shield drain, no pen (bomb-style)
+                                bombPortion: intake, // full shield drain, no pen (bomb-style)
                                 shieldPenetrationPct: 0,
+                                preMitigationDamage: damage,
                             });
                             // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
                             const delivered = detonationDelivered(outcome);
