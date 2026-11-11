@@ -114,8 +114,9 @@ const takenFrom = (events: CombatEvent[], attackerId: string, targetId: string):
 /** A unit with `defence` and no status, hit by the same opponent. */
 const controlTaken = (placement: Placement, defence: number): number => {
     const target = plain('plain', 'M4', defence);
-    const { events, id } = run(placement, target, [], [opponent()], 1);
-    return takenFrom(events, id(opponent()), id(target));
+    const attacker = opponent();
+    const { events, id } = run(placement, target, [], [attacker], 1);
+    return takenFrom(events, id(attacker), id(target));
 };
 
 describe('Nifo parses to his kit', () => {
@@ -193,14 +194,17 @@ describe.each<Placement>(['player', 'enemy'])('Nifo on the %s side', (placement)
     describe('Defense Surge adds 20% of NIFO’s defence', () => {
         it('Nifo at 5000 defence: an ally at 1000 takes a 2000-defence hit', () => {
             const ally = plain('ally', 'M4', 1000);
+            const attacker = opponent();
             const { events, id } = run(
                 placement,
                 nifo({ kit: slotsOf(realKit('Nifo'), ['active']), defence: 5000 }),
                 [ally],
-                [opponent()],
+                [attacker],
                 1
             );
-            expect(takenFrom(events, id(opponent()), id(ally))).toBe(controlTaken(placement, 2000));
+            const taken = takenFrom(events, id(attacker), id(ally));
+            expect(taken).toBeGreaterThan(0);
+            expect(taken).toBe(controlTaken(placement, 2000));
         });
 
         it('Nifo on himself, recasting every round: 6000 both rounds (no compounding)', () => {
@@ -209,7 +213,8 @@ describe.each<Placement>(['player', 'enemy'])('Nifo on the %s side', (placement)
                 position: 'M4',
                 defence: 5000,
             });
-            const { events, id } = run(placement, self, [], [opponent()], 2);
+            const attacker = opponent();
+            const { events, id } = run(placement, self, [], [attacker], 2);
             const perRound = (round: number) =>
                 events
                     .filter(
@@ -217,10 +222,11 @@ describe.each<Placement>(['player', 'enemy'])('Nifo on the %s side', (placement)
                             e.type === 'attacked' &&
                             e.round === round &&
                             e.targetId === id(self) &&
-                            e.attackerId === id(opponent())
+                            e.attackerId === id(attacker)
                     )
                     .reduce((sum, e) => sum + Math.round(e.takenDamage ?? 0), 0);
             const control = controlTaken(placement, 6000);
+            expect(control).toBeGreaterThan(0);
             expect([perRound(1), perRound(2)]).toEqual([control, control]);
         });
     });

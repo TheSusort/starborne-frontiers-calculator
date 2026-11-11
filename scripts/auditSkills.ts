@@ -250,10 +250,11 @@ const RULES: Rule[] = [
         // or grants produces a phantom Taunt and a self-Taunt gate instead, which the
         // ungated-effect rule cannot see (the phantom gate counts as a gate).
         keyword: (t) => /\bwhen\s+an?\s+(?:ally|enemy)\b[^.]*?\bgains?\s+taunt\b/i.test(t),
-        handled: (a) =>
-            a.some(
-                (x) => x.trigger === 'on-ally-taunt-gained' || x.trigger === 'on-enemy-taunt-gained'
-            ) &&
+        handled: (a, t) =>
+            (!/\bwhen\s+an?\s+ally\b[^.]*?\bgains?\s+taunt\b/i.test(t) ||
+                a.some((x) => x.trigger === 'on-ally-taunt-gained')) &&
+            (!/\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\s+taunt\b/i.test(t) ||
+                a.some((x) => x.trigger === 'on-enemy-taunt-gained')) &&
             !a.some(
                 (x) =>
                     (x.config.type === 'control' && x.config.effect === 'taunt') ||
