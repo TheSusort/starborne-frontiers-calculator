@@ -221,6 +221,11 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                     rarity={rarity}
                                     roleIconUrl={roleIconUrl}
                                     sortOrder={shipPosition?.sortOrder}
+                                    aria-label={
+                                        isSecondary && ship
+                                            ? `${ship.name} (also covers ${pos})`
+                                            : undefined
+                                    }
                                 >
                                     {isSecondary ? null : ship ? (
                                         <div

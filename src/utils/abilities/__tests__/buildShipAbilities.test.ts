@@ -2,8 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, Skill } from '../../../types/abilities';
-import { bossShip } from '../../../constants/bountyBosses';
-import { canonicaliseSkillSubject, parseSkillEffects } from '../../skillTextParser';
+import { bossShip, bossShipId } from '../../../constants/bountyBosses';
+import {
+    canonicaliseSkillSubject,
+    parseSkillEffects,
+    withCanonicalSkillText,
+} from '../../skillTextParser';
 
 function ship(over: Partial<Ship>): Ship {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -5761,6 +5765,7 @@ describe('bounty boss subject: "The Boss" reads as "This Unit"', () => {
         const passive = slot(
             buildShipAbilities(
                 ship({
+                    id: bossShipId('fenri', 32),
                     refits: [],
                     firstPassiveSkillText:
                         'Every turn, The Boss gains <unit-skill>Pressing Onslaught</unit-skill>.',
@@ -5772,6 +5777,16 @@ describe('bounty boss subject: "The Boss" reads as "This Unit"', () => {
             stackTrigger: 'per-round',
             duration: 'recurring',
         });
+    });
+
+    it('leaves a non-boss ship\'s "the boss" text as written', () => {
+        const text = 'Every turn, The Boss gains <unit-skill>Pressing Onslaught</unit-skill>.';
+        const regular = ship({ id: 'regular-ship', refits: [], firstPassiveSkillText: text });
+        expect(withCanonicalSkillText(regular)).toBe(regular);
+        const boss = withCanonicalSkillText({ ...regular, id: bossShipId('fenri', 32) });
+        expect(boss.firstPassiveSkillText).toBe(
+            'Every turn, This Unit gains <unit-skill>Pressing Onslaught</unit-skill>.'
+        );
     });
 });
 

@@ -3391,8 +3391,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // turnsRemaining) already drew their landing roll at application — fold them
     // unconditionally. RECURRING/always/accumulating statuses ('recurring') are
     // conceptually re-applied each round — re-roll them via resolveEnemyDebuffs.
+    // A status the victim is control-immune to is never re-applied: no roll, no resist, no landing
+    // (`controlImmunityBlocks`).
     const recurringEnemySnap = entry.activeEnemyDebuffs.filter(
-        (ab) => ab.turnsRemaining === 'recurring'
+        (ab) =>
+            ab.turnsRemaining === 'recurring' &&
+            !(
+                hasVictim &&
+                immuneToEnemyStatus(
+                    enemy,
+                    ab.buffName,
+                    enemyDebuffLookup.get(ab.buffName)?.[0]?.parsedEffects
+                )
+            )
     );
     const timedEnemySnap = entry.activeEnemyDebuffs.filter(
         (ab) => ab.turnsRemaining !== 'recurring'

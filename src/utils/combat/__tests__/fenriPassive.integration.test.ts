@@ -362,6 +362,45 @@ describe('Fenri control immunity — scheduled (picker) debuffs', () => {
         expect(scheduled(VULNERABLE_KIT).applied).toBeGreaterThan(0);
         expect(scheduled(FENRI_KIT)).toEqual({ applied: 0, resisted: 0, controlled: 0 });
     });
+
+    // A pick with no skill source is re-applied every round and re-rolls its landing each time.
+    it("the player's recurring Speed Down II neither lands on nor is resisted by Fenri", () => {
+        const picker: BoardUnit = { id: 'picker', kit: hitKit(1), position: 'M4', speed: 300 };
+        const recurring = (kit: ShipSkills, hacking: number) => {
+            const fenri = fenriUnit(kit);
+            const { input, id } = boardInput('enemy', fenri, [], [picker], 2);
+            const bus = createEventBus();
+            const resisted: CombatEvent[] = [];
+            bus.on('debuff-resisted', (e) => {
+                if (e.targetId === id(fenri) && e.buffName === 'Speed Down II') resisted.push(e);
+            });
+            const { rounds } = runCombat({
+                ...input,
+                bus,
+                hacking,
+                enemyDebuffs: [
+                    {
+                        id: 'sd',
+                        buffName: 'Speed Down II',
+                        stacks: 1,
+                        parsedEffects: { speed: -30 },
+                        isStackable: false,
+                        application: 'inflict',
+                    },
+                ],
+            });
+            const named = (list: { buffName: string }[] | undefined) =>
+                (list ?? []).filter((b) => b.buffName === 'Speed Down II').length;
+            return {
+                landed: rounds.reduce((n, r) => n + named(r.activeEnemyDebuffs), 0),
+                resisted: resisted.length,
+            };
+        };
+        expect(recurring(VULNERABLE_KIT, 1e6).landed).toBeGreaterThan(0);
+        expect(recurring(VULNERABLE_KIT, 0).resisted).toBeGreaterThan(0);
+        expect(recurring(FENRI_KIT, 1e6)).toEqual({ landed: 0, resisted: 0 });
+        expect(recurring(FENRI_KIT, 0)).toEqual({ landed: 0, resisted: 0 });
+    });
 });
 
 describe.each<FenriSeat>(SEATS)('Fenri ignores forced targeting (Fenri seated %s)', (seat) => {

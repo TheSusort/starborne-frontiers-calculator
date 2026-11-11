@@ -3639,13 +3639,14 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     }
 
     // Merge ship-level DoTs into their slots (creating the slot entry if needed).
-    // Position anchor: index of the DoT's name in the row text — its family for a named DoT
-    // ("White Phosphorus"), else its type ("Corrosion", "Inferno").
+    // Position anchor: the case-insensitive whole-word index of the DoT's name in the row text —
+    // its family for a named DoT ("White Phosphorus"), else its type ("Corrosion", "Inferno").
     for (const slot of ['active', 'charged'] as const) {
         const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
+        const lowerRowText = rowText.toLowerCase();
         const hpOverrides = parseDotDurationHpOverrides(rowText);
         const dots = dotsForSlot(slot).flatMap((entry) => {
-            const pos = rowText.search(new RegExp(entry.family ?? entry.type, 'i'));
+            const pos = findBuffNamePos(lowerRowText, (entry.family ?? entry.type).toLowerCase());
             const ability = dotAbility(entry);
             // Crit-inflicted DoT form ("When this Unit critically hits an enemy it inflicts
             // Corrosion …"): route through the reactive machinery. Anchor on the DoT type name,

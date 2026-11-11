@@ -40,4 +40,15 @@ describe('FormationGrid multi-hex units', () => {
         fireEvent.click(secondary, { shiftKey: true });
         expect(onEditStats).toHaveBeenCalledWith('M1');
     });
+
+    it('names the secondary cell after the unit that covers it', () => {
+        renderGrid();
+        const m3 = screen.getByText('M3').closest('button')!;
+        const hexes = screen.getAllByRole('button');
+        const secondary = hexes[hexes.indexOf(m3) - 1];
+        expect(secondary.getAttribute('aria-label')).toBe(`${boss.name} (also covers M2)`);
+        expect(screen.getByRole('button', { name: `${boss.name} (also covers M2)` })).toBe(
+            secondary
+        );
+    });
 });

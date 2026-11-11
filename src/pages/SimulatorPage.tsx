@@ -253,6 +253,9 @@ const SimulatorPage: React.FC = () => {
     };
 
     const enemyHasBoss = loadedBossShipId(enemyBoard) !== undefined;
+    // A boss board has no squad leader: the picker is hidden and the stored selection neither
+    // runs nor saves, but stays in state for when the boss is taken off.
+    const activeEnemySquadLeader = enemyHasBoss ? undefined : enemySquadLeader;
     const playerCount = Object.keys(playerBoard).length;
     const enemyCount = Object.keys(enemyBoard).length;
 
@@ -284,7 +287,7 @@ const SimulatorPage: React.FC = () => {
         enemyBoard,
         statsDeps,
         playerSquadLeader,
-        enemySquadLeader,
+        enemySquadLeader: activeEnemySquadLeader,
         getGearPiece,
         seed,
         runCount,
@@ -304,7 +307,9 @@ const SimulatorPage: React.FC = () => {
         // Leaders route through the change handler: it is what write-throughs to
         // SQUAD_LEADER_STORAGE_KEYS, so the live selection and the stored one cannot diverge.
         handleSquadLeaderChange('player', result.playerSquadLeader);
-        handleSquadLeaderChange('enemy', result.enemySquadLeader);
+        // A setup holding a boss saves no enemy leader, so loading it keeps the current one.
+        if (loadedBossShipId(result.enemyBoard) === undefined)
+            handleSquadLeaderChange('enemy', result.enemySquadLeader);
         // A displayed result describes the boards that produced it and is never re-derived from
         // live state, so replacing the boards has to discard it.
         handleClearRunState();
@@ -350,7 +355,7 @@ const SimulatorPage: React.FC = () => {
                     playerBoard,
                     enemyBoard,
                     playerSquadLeader,
-                    enemySquadLeader,
+                    enemySquadLeader: activeEnemySquadLeader,
                     seed,
                     runCount,
                     gridMode,
@@ -363,7 +368,7 @@ const SimulatorPage: React.FC = () => {
         playerBoard,
         enemyBoard,
         playerSquadLeader,
-        enemySquadLeader,
+        activeEnemySquadLeader,
         seed,
         runCount,
         gridMode,
@@ -408,7 +413,7 @@ const SimulatorPage: React.FC = () => {
             playerBoard,
             enemyBoard,
             playerSquadLeader,
-            enemySquadLeader,
+            enemySquadLeader: activeEnemySquadLeader,
             seed,
             runCount,
             gridMode,

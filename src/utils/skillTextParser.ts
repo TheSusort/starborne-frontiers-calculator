@@ -22,6 +22,7 @@ import {
 } from '../types/abilities';
 import type { ShipRoleCategory } from '../constants/shipTypes';
 import { FACTION_NAMES, factionSpellings, type FactionName } from '../constants/factions';
+import { parseBossShipId } from '../constants/bountyBosses';
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 import { EXPOSED } from './combat/exposedStatus';
@@ -6103,14 +6104,16 @@ export function canonicaliseSkillSubject(text: string): string {
     );
 }
 
-/** `ship` with `canonicaliseStatusNames` and `canonicaliseSkillSubject` applied to every skill
- *  text; the same object when no text changes. */
+/** `ship` with `canonicaliseStatusNames` applied to every skill text, and on a bounty boss also
+ *  `canonicaliseSkillSubject`; the same object when no text changes. */
 export function withCanonicalSkillText(ship: Ship): Ship {
+    const isBoss = typeof ship.id === 'string' && parseBossShipId(ship.id) !== null;
     let out: Ship | undefined;
     for (const field of SHIP_SKILL_TEXT_FIELDS) {
         const text = ship[field];
         if (!text) continue;
-        const canonical = canonicaliseSkillSubject(canonicaliseStatusNames(text));
+        const statusCanonical = canonicaliseStatusNames(text);
+        const canonical = isBoss ? canonicaliseSkillSubject(statusCanonical) : statusCanonical;
         if (canonical === text) continue;
         out ??= { ...ship };
         out[field] = canonical;
