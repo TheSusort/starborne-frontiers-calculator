@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as basisDerivation from '../autogear/offFormula/basisDerivation';
+import * as offFormulaStats from '../autogear/offFormula/offFormulaStats';
 import { makeShip } from '../gear/fastPotential/__tests__/fixtures';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { STATS } from '../../constants/stats';
@@ -10,6 +12,7 @@ import {
     wantedStats,
 } from './buildEntriesFromAutogearConfig';
 
+/** `shipRole: null` is autogear's Custom mode; a role-based config names its role. */
 const config = (overrides: Partial<SavedAutogearConfig> = {}): SavedAutogearConfig => ({
     shipId: 's1',
     shipRole: null,
@@ -51,13 +54,50 @@ describe('wantedStats', () => {
                 },
             })
         );
-        expect(stats).toEqual(['hp', 'defence', 'hacking', 'security']);
+        // The basis replaces effectiveHp's primary factor (hp); defence still counts.
+        expect(stats).toEqual(['defence', 'hacking', 'security']);
+    });
+
+    it("keeps a derived row's other factors when its basis replaces the primary", () => {
+        const stats = wantedStats(
+            attacker,
+            config({
+                customFormula: {
+                    rows: [
+                        {
+                            stat: 'directDamage',
+                            kind: 'core',
+                            direction: 'max',
+                            basis: [{ stat: 'hp', weight: 0.5 }],
+                        },
+                    ],
+                },
+            })
+        );
+        expect(stats).toEqual(['hp', 'crit', 'critDamage']);
+    });
+
+    it('skips a stored basis the scorer would reject', () => {
+        const rows = [
+            {
+                stat: 'attack',
+                kind: 'core',
+                direction: 'max',
+                basis: 'not-an-array',
+            },
+            { stat: 'speed', kind: 'bonus', direction: 'max', basis: [{ stat: 'hp', weight: 1 }] },
+        ] as unknown as NonNullable<SavedAutogearConfig['customFormula']>['rows'];
+        expect(wantedStats(attacker, config({ customFormula: { rows } }))).toEqual([
+            'attack',
+            'speed',
+        ]);
     });
 
     it('adds stat priorities and bonuses, expanded, and drops stats no substat rolls', () => {
         const stats = wantedStats(
             defender,
             config({
+                shipRole: 'DEFENDER',
                 statPriorities: [{ stat: 'speed' }, { stat: 'hpRegen' }],
                 statBonuses: [{ stat: 'critMultiplier', percentage: 50 }],
             })
@@ -67,6 +107,96 @@ describe('wantedStats', () => {
 
     it('uses the config role when it has no custom formula', () => {
         expect(wantedStats(attacker, config({ shipRole: 'DEFENDER' }))).toEqual(['hp', 'defence']);
+    });
+
+    it('ignores a custom formula while a role is set, as autogear scoring does', () => {
+        const stats = wantedStats(
+            attacker,
+            config({
+                shipRole: 'ATTACKER',
+                customFormula: { rows: [{ stat: 'hacking', kind: 'core', direction: 'max' }] },
+            })
+        );
+        expect(stats).toEqual(['attack', 'crit', 'critDamage']);
+    });
+
+    it("swaps the role's primary stat for an applied kit basis", () => {
+        const withHp = wantedStats(
+            attacker,
+            config({
+                shipRole: 'ATTACKER',
+                roleBasis: {
+                    produces: 'damage',
+                    terms: [
+                        { stat: 'attack', weight: 2.333 },
+                        { stat: 'hp', weight: 0.125 },
+                    ],
+                },
+            })
+        );
+        expect(withHp).toEqual(['attack', 'hp', 'crit', 'critDamage']);
+
+        const hpOnly = wantedStats(
+            attacker,
+            config({
+                shipRole: 'ATTACKER',
+                roleBasis: { produces: 'damage', terms: [{ stat: 'hp', weight: 0.5 }] },
+            })
+        );
+        expect(hpOnly).toEqual(['hp', 'crit', 'critDamage']);
+    });
+
+    describe('a kit equation the player has not applied', () => {
+        afterEach(() => vi.restoreAllMocks());
+
+        const hpScaling = () => {
+            vi.spyOn(offFormulaStats, 'detectOffFormulaStats').mockReturnValue([
+                { stat: 'hp', produces: 'damage', severity: 'substitution', trigger: 'active' },
+            ]);
+            vi.spyOn(basisDerivation, 'deriveBasis').mockReturnValue({
+                terms: [
+                    { stat: 'attack', weight: 2.575 },
+                    { stat: 'hp', weight: 0.1 },
+                ],
+                excluded: [],
+                period: 0,
+            });
+        };
+
+        it('still adds its stats and sets', () => {
+            hpScaling();
+            const cfg = config({ shipRole: 'ATTACKER' });
+            expect(wantedStats(attacker, cfg)).toEqual(['attack', 'hp', 'crit', 'critDamage']);
+            expect(wantedSets(attacker, cfg)).toContain('FORTITUDE');
+        });
+
+        it('yields to an applied one', () => {
+            hpScaling();
+            const stats = wantedStats(
+                attacker,
+                config({
+                    shipRole: 'ATTACKER',
+                    roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2 }] },
+                })
+            );
+            expect(stats).toEqual(['attack', 'crit', 'critDamage']);
+        });
+
+        it('is not read in Custom mode', () => {
+            hpScaling();
+            expect(wantedStats(attacker, config({ customFormula: { rows: [] } }))).toEqual([]);
+        });
+    });
+
+    it('ignores a kit basis the role does not host', () => {
+        const stats = wantedStats(
+            defender,
+            config({
+                shipRole: 'DEFENDER',
+                roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 1 }] },
+            })
+        );
+        expect(stats).toEqual(['hp', 'defence']);
     });
 });
 
@@ -95,9 +225,33 @@ describe('wantedSets', () => {
         expect(sets).not.toContain('NOT_A_SET');
     });
 
-    it('does not add sets for stat priorities or bonuses', () => {
-        const sets = wantedSets(defender, config({ statPriorities: [{ stat: 'speed' }] }));
-        expect(sets).not.toContain('SPEED');
+    it('adds sets for stats named by stat priorities and bonuses', () => {
+        const fromPriority = wantedSets(defender, config({ statPriorities: [{ stat: 'speed' }] }));
+        expect(fromPriority).toContain('SPEED');
+        expect(fromPriority).toContain('SWIFTNESS');
+        const fromBonus = wantedSets(
+            defender,
+            config({ shipRole: 'DEFENDER', statBonuses: [{ stat: 'hacking', percentage: 50 }] })
+        );
+        expect(fromBonus).toContain('HACKING');
+        // Custom mode: the scorer applies no stat bonuses, so they add nothing.
+        const custom = config({
+            customFormula: { rows: [{ stat: 'hp', kind: 'core', direction: 'max' }] },
+            statBonuses: [{ stat: 'hacking', percentage: 50 }],
+        });
+        expect(wantedSets(defender, custom)).not.toContain('HACKING');
+        expect(wantedStats(defender, custom)).toEqual(['hp']);
+    });
+
+    it('adds sets for kit-basis stats', () => {
+        const sets = wantedSets(
+            attacker,
+            config({
+                shipRole: 'ATTACKER',
+                roleBasis: { produces: 'damage', terms: [{ stat: 'hp', weight: 0.5 }] },
+            })
+        );
+        expect(sets).toContain('FORTITUDE');
     });
 
     it('drops a set whose priority count is 0, from either path', () => {
@@ -105,6 +259,7 @@ describe('wantedSets', () => {
         const sets = wantedSets(
             attacker,
             config({
+                shipRole: 'ATTACKER',
                 setPriorities: [
                     { setName: 'ATTACK', count: 0 },
                     { setName: 'BOOST', count: 0 },
@@ -138,7 +293,10 @@ describe('buildEntriesFromAutogearConfig', () => {
     it('limits bottom-row main stats to stats those slots can roll', () => {
         const { bottom } = buildEntriesFromAutogearConfig(
             attacker,
-            config({ statPriorities: [{ stat: 'hacking' }, { stat: 'speed' }] })
+            config({
+                shipRole: 'ATTACKER',
+                statPriorities: [{ stat: 'hacking' }, { stat: 'speed' }],
+            })
         );
         const bottomRollable = new Set(
             (['sensor', 'software', 'thrusters'] as const).flatMap(
@@ -189,6 +347,14 @@ describe('buildEntriesFromAutogearConfig', () => {
         expect(all.top.filters.subStatsMin).toBeUndefined();
         const zero = buildEntriesFromAutogearConfig(attacker, null, { subStatsMin: 0 });
         expect(zero.top.filters.subStatsMin).toBe(1);
+        // A piece rolls at most 4 substats, so five wanted stats cap at 4.
+        const five = buildEntriesFromAutogearConfig(
+            attacker,
+            config({ shipRole: 'ATTACKER', statPriorities: [{ stat: 'speed' }, { stat: 'hp' }] }),
+            { subStatsMin: 5 }
+        );
+        expect(five.top.filters.subStats).toHaveLength(5);
+        expect(five.top.filters.subStatsMin).toBe(4);
     });
 
     it('uses the chosen sets, and no set filter when none are chosen', () => {

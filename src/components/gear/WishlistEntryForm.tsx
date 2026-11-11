@@ -10,6 +10,7 @@ import { GEAR_SETS, getGearSet, type GearSetName } from '../../constants/gearSet
 import { STATS } from '../../constants/stats';
 import { StatName, StatType } from '../../types/stats';
 import { filterMainStatKeys, getAllowedMainStatNames } from '../../utils/wishlist/allowedMainStats';
+import { MAX_GEAR_SUBSTATS, requiredSubStats } from '../../utils/wishlist/matchWishlistEntry';
 import {
     describeWishlistEntry,
     WISHLIST_NAME_MAX_LENGTH,
@@ -142,7 +143,7 @@ export const WishlistEntryForm: React.FC<Props> = ({
     );
     const [setFilter, setSetFilter] = useState('');
     const [subStatsMin, setSubStatsMin] = useState<number>(
-        initial?.filters.subStatsMin ?? initial?.filters.subStats?.length ?? 1
+        initial?.filters.subStats?.length ? requiredSubStats(initial.filters) : 1
     );
 
     const targetIncomplete = (targetKind === 'role' && !role) || (targetKind === 'ship' && !shipId);
@@ -331,14 +332,18 @@ export const WishlistEntryForm: React.FC<Props> = ({
                             <Input
                                 type="number"
                                 min={1}
-                                max={subStats.length}
+                                max={Math.min(subStats.length, MAX_GEAR_SUBSTATS)}
                                 value={subStatsMin}
                                 aria-label="Minimum matching substats"
                                 onChange={(e) =>
                                     setSubStatsMin(
                                         Math.max(
                                             1,
-                                            Math.min(subStats.length, Number(e.target.value))
+                                            Math.min(
+                                                subStats.length,
+                                                MAX_GEAR_SUBSTATS,
+                                                Number(e.target.value)
+                                            )
                                         )
                                     )
                                 }

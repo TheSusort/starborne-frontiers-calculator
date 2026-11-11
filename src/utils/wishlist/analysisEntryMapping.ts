@@ -3,6 +3,7 @@ import type { RarityName } from '../../constants/rarities';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import type { StatName } from '../../types/stats';
 import type { WishlistEntry } from '../../types/wishlist';
+import { requiredSubStats } from './matchWishlistEntry';
 
 const ANALYSIS_RARITIES = ['rare', 'epic', 'legendary'] as const satisfies readonly RarityName[];
 
@@ -59,7 +60,7 @@ export function wishlistEntryToAnalysisLink(
     const { target, filters } = entry;
     if (!target) return null;
     const stats = filters.subStats?.map((s) => s.name);
-    const needsAll = (filters.subStatsMin ?? stats?.length ?? 0) >= (stats?.length ?? 0);
+    const needsAll = requiredSubStats(filters) >= (stats?.length ?? 0);
     return {
         ...(target.kind === 'ship'
             ? { shipId: target.shipId, ...(shipType ? { role: shipType } : {}) }

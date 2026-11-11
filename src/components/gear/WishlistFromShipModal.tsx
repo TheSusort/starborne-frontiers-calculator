@@ -12,6 +12,7 @@ import {
     wantedStats,
     type WishlistDraft,
 } from '../../utils/wishlist/buildEntriesFromAutogearConfig';
+import { MAX_GEAR_SUBSTATS } from '../../utils/wishlist/matchWishlistEntry';
 import { WISHLIST_NAME_MAX_LENGTH } from '../../utils/wishlist/describeWishlistEntry';
 import { wishlistGroupName } from '../../utils/wishlist/groupWishlistEntries';
 import { ShipSelector } from '../ship/ShipSelector';
@@ -120,7 +121,7 @@ function ShipEntriesPreview({
                     label="At least N of these substats"
                     value={String(subStatsMin)}
                     onChange={(value) => setSubStatsMin(Number(value))}
-                    options={stats.map((_, i) => ({
+                    options={stats.slice(0, MAX_GEAR_SUBSTATS).map((_, i) => ({
                         value: String(i + 1),
                         label: `${i + 1} of ${stats.length}`,
                     }))}

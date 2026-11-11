@@ -4,6 +4,7 @@ import { getGearSet } from '../../constants/gearSets';
 import { STATS } from '../../constants/stats';
 import { StatName, StatType } from '../../types/stats';
 import { WishlistEntry } from '../../types/wishlist';
+import { requiredSubStats } from './matchWishlistEntry';
 
 export const WISHLIST_NAME_MAX_LENGTH = 64;
 
@@ -37,7 +38,7 @@ export function describeWishlistEntry(filters: WishlistEntry['filters']): string
     }
     if (filters.subStats?.length) {
         const names = filters.subStats.map(wishlistStatLabel).join(' + ');
-        const min = filters.subStatsMin ?? filters.subStats.length;
+        const min = requiredSubStats(filters);
         parts.push(min < filters.subStats.length ? `${min} of ${names}` : names);
     }
 

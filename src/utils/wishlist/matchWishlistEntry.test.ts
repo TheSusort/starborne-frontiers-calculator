@@ -19,6 +19,34 @@ const baseGear: GearPiece = {
 };
 
 describe('matchesWishlistEntry', () => {
+    it('never asks for more substats than a piece can roll', () => {
+        const four: GearPiece = {
+            ...baseGear,
+            subStats: [
+                { name: 'crit', value: 10, type: 'percentage' },
+                { name: 'speed', value: 5, type: 'flat' },
+                { name: 'critDamage', value: 10, type: 'percentage' },
+                { name: 'attack', value: 5, type: 'percentage' },
+            ],
+        };
+        const subStats = [
+            { name: 'crit' as const },
+            { name: 'speed' as const },
+            { name: 'critDamage' as const },
+            { name: 'attack' as const },
+            { name: 'hp' as const },
+        ];
+        const all: WishlistEntry = { id: '1', name: 'five', filters: { subStats } };
+        expect(matchesWishlistEntry(four, all)).toBe(true);
+        const five: WishlistEntry = {
+            id: '2',
+            name: 'five',
+            filters: { subStats, subStatsMin: 5 },
+        };
+        expect(matchesWishlistEntry(four, five)).toBe(true);
+        expect(matchesWishlistEntry(baseGear, all)).toBe(false);
+    });
+
     it('matches when no filters are set', () => {
         const entry: WishlistEntry = { id: '1', name: 'Any', filters: {} };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);

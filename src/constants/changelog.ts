@@ -21,6 +21,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Gear wishlist: entries can target a ship or role and rank their matches.',
     'Gear wishlist: Upgrade Analysis can save its settings as a wishlist entry.',
     'Gear wishlist: targeted entries open in Upgrade Analysis with one click.',
+    'Gear wishlist: entries with five or more substats now match four-substat pieces.',
     'Import summary: wishlist hits for targeted entries show upgrade value, best first.',
     'Import summary: Notable Gear and Wishlist Hits now both show after an import.',
     'Import summary: a piece matching several wishlist entries now appears once.',
