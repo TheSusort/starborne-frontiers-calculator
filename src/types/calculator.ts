@@ -171,6 +171,10 @@ export interface ParsedBuffEffects {
     /** Flat defence = this multiple of the HOLDER's live security (Magnetized Shielding, "10x
      *  Unit Security"). Resolved at every defence fold, so a Security Down moves it. */
     defencePerSecurity?: number;
+    /** Reflect status (Reflect I/II/III): the holder reflects this percentage of a direct hit it
+     *  takes as a primary target. Read by the engine's reflection block, never folded into a
+     *  stat. */
+    reflectPct?: number;
 }
 
 export interface SelectedGameBuff {

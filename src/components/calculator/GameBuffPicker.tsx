@@ -43,6 +43,7 @@ const STAT_LABELS: Record<keyof ParsedBuffEffects, string> = {
     defenceFlat: 'Def (flat)',
     defenceFlatPctOfCaster: 'of applier Def',
     defencePerSecurity: 'x Sec as Def',
+    reflectPct: 'Reflect',
 };
 
 // Stats stored as flat values, not percentages

@@ -385,6 +385,23 @@ export function parseDamageReflection(
 }
 
 /**
+ * Parses "When an ally reflects damage increase that damage by N%" (Nifo R2+): the percentage by
+ * which every reflected hit of the carrier's allies (the carrier included) grows. Returns the
+ * percentage, or null when the clause is absent.
+ */
+export function parseReflectAmplification(text: string | null | undefined): number | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const m =
+        /\bwhen\s+an?\s+ally\s+reflects\s+damage\b[^.;]*?\bincrease\s+that\s+damage\s+by\s+(\d+(?:\.\d+)?)%/i.exec(
+            plain
+        );
+    if (!m) return null;
+    const pct = parseFloat(m[1]);
+    return isNaN(pct) ? null : pct;
+}
+
+/**
  * Returns the secondary stat-based damage from a skill, e.g.
  * "additional damage equal to <unit-damage>80%</unit-damage> of its Defense".
  * Captures only the BASE percentage — conditional extras
@@ -1499,11 +1516,14 @@ export function detectGrantConditions(
     // this Unit inflicts Exposed" (Amartya): "an enemy ... gains Taunt" is the
     // on-enemy-taunt-gained REACTIVE TRIGGER (ENEMY_GAINS_TAUNT_RE), not a self-status gate, and
     // reading its bare "Taunt" here would gate the whole grant behind the caster itself having
-    // Taunt.
+    // Taunt. The same-side "When an ally gains Taunt" (Nifo, ALLY_GAINS_TAUNT_RE) is skipped for
+    // the same reason.
     const enemyStatusAttributed =
         /\benem(?:y|ies)\s+(?:affected|effected)\s+by\s+(?:<[^>]+>)?(?:taunt|provoke)\b/i.test(
             low
-        ) || ENEMY_GAINS_TAUNT_RE.test(clause);
+        ) ||
+        ENEMY_GAINS_TAUNT_RE.test(clause) ||
+        ALLY_GAINS_TAUNT_RE.test(clause);
     const statuses: string[] = [];
     if (!enemyStatusAttributed) {
         if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
@@ -1789,6 +1809,11 @@ const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bde
 // self-grants all use "this Unit gains", not "an enemy... gains"). Corpus-verified (docs/ship-skills.csv, grep
 // "enemy[^.]*gains[^.]*taunt"): only Amartya's two passive rows match.
 const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaunt\b/i;
+// "When an ally gains Taunt" — Nifo's Core Charge grant ("When an ally gains Taunt, this Unit
+// grants all allies within the active pattern N stacks of Core Charge I"). The same-side mirror of
+// ENEMY_GAINS_TAUNT_RE: the ally (the owner included — "an ally" includes self) GAINING Taunt is
+// the trigger, never a Taunt this Unit grants or holds.
+const ALLY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+ally\b[^.]*?\bgains?\b[^.]*?\btaunt\b/i;
 
 // Mamma Maglienza: "Whenever any ship dies, the Boss gains …" — owner-ruled to count only deaths
 // on the owner's own side (2026-11-11), so it resolves to on-ally-destroyed.
@@ -1829,6 +1854,7 @@ const AFTER_ATTACKING_RE = /\bafter\s+attacking\b/i;
  *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained'. Narrow and
  *    name-specific to Taunt — distinct from the broad, unfiltered on-enemy-buffed
  *    (ENEMY_BUFFED_RE).
+ *  - "when an ally gains Taunt" → 'on-ally-taunt-gained' (Nifo), its same-side mirror.
  *
  * A phrasing no rule matches returns undefined (modelled manually). Reference data:
  * docs/ship-skills.csv.
@@ -1913,6 +1939,8 @@ export function detectReactiveTrigger(
     // "when an enemy [defender] gains Taunt" → on-enemy-taunt-gained. Checked AFTER the broad
     // ENEMY_BUFFED_RE, whose "gains a buff" phrasing never matches "gains Taunt".
     if (ENEMY_GAINS_TAUNT_RE.test(clause)) return 'on-enemy-taunt-gained';
+    // "when an ally gains Taunt" → on-ally-taunt-gained (Nifo), the same-side mirror.
+    if (ALLY_GAINS_TAUNT_RE.test(clause)) return 'on-ally-taunt-gained';
     // REPAIR is checked BEFORE KILL: Ruiner's Overload grant and its kill-removal share one
     // comma-joined sentence ("gains 1 stack of Overload when an enemy preforms a repair, upon
     // destroying an enemy, this Unit removes Overload") — the grant must resolve to
@@ -2666,7 +2694,8 @@ export function detectEnemyDebuffedTrigger(
 // lookbehind rejecting an `enemy` subject within a short window before the verb, so Amartya's
 // CONDITION clause "When an enemy defender gains <unit-skill>Taunt" (an enemy gaining Taunt, not a
 // self-grant) does not emit a phantom self `taunt` ability, while "This Unit gains/grants Taunt"
-// and "and grants Taunt" still match.
+// and "and grants Taunt" still match. An `ally` subject is rejected the same way: Nifo's trigger
+// clause "When an ally gains <unit-skill>Taunt" is an ally gaining Taunt, not a grant.
 //
 // Shared list-prefix between the verb and the target tag (zero-or-more coordinated items).
 const CONTROL_LIST_PREFIX =
@@ -2713,7 +2742,7 @@ const CONTROL_INFLICTS: {
         effect: 'taunt',
         tag: 'Taunt',
         side: 'self',
-        re: /(?<!\benemy\b[\s\w]{1,20})\b(?:gains?|grants?)\s+<unit-skill>\s*Taunt\b/i,
+        re: /(?<!\b(?:enemy|ally)\b[\s\w]{1,20})\b(?:gains?|grants?)\s+<unit-skill>\s*Taunt\b/i,
     },
 ];
 
@@ -6303,6 +6332,21 @@ function hasEnemySubject(words: string[], verbIndex: number): boolean {
 }
 
 /**
+ * True when the self-grant verb at `words[verbIndex]` is the verb of an ally-subject TRIGGER
+ * clause — "when an ally gains <Buff>, …" (Nifo's "When an ally gains Taunt"). The buff it names
+ * is what the ally receives from elsewhere, so it is not a grant by this Unit. Matches only the
+ * literal "when/whenever an/any ally <verb>" shape; "this Unit grants an ally X" never matches
+ * because "ally" follows the verb there.
+ */
+function isAllyTriggerVerb(words: string[], verbIndex: number): boolean {
+    return (
+        words[verbIndex - 1] === 'ally' &&
+        (words[verbIndex - 2] === 'an' || words[verbIndex - 2] === 'any') &&
+        (words[verbIndex - 3] === 'when' || words[verbIndex - 3] === 'whenever')
+    );
+}
+
+/**
  * Scans backward through preceding text segments to find the nearest application verb,
  * stopping at sentence boundaries (. ; <br>) or MAX_SCAN_CHARS.
  * Returns the verb string, null if a skip verb was found first, or undefined if none found.
@@ -6347,7 +6391,11 @@ function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null
             // phantom self-buff regardless of subject (Amartya: "gains Taunt" read as
             // This-Unit-gains-Taunt). Keep scanning past it for an earlier governing verb (or
             // none) instead of returning it.
-            if (SELF_VERBS.has(words[i]) && hasEnemySubject(words, i)) continue;
+            if (
+                SELF_VERBS.has(words[i]) &&
+                (hasEnemySubject(words, i) || isAllyTriggerVerb(words, i))
+            )
+                continue;
             return words[i];
         }
         if (SKIP_VERBS.has(words[i])) return null;

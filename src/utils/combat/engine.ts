@@ -70,6 +70,7 @@ import {
     separateOutgoingModifiersOf,
     landsDespiteAffinity,
     liveDebuffLandingChance,
+    heldReflectPct,
 } from './effectiveStats';
 import {
     ActiveDoTStack,
@@ -4984,7 +4985,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         for (const slot of rt.castSkills.slots) {
             if (slot.slot !== 'passive') continue;
             for (const a of slot.abilities) {
-                if (a.config.type !== 'incoming-reduction') continue;
+                // A reflect amplification (Nifo) rides the same fan-out: it answers to its
+                // carrier's liveness and turn-block exactly as the reduction aura does.
+                if (
+                    a.config.type !== 'incoming-reduction' &&
+                    a.config.type !== 'reflect-amplification'
+                )
+                    continue;
                 if (a.target !== 'all-allies') continue; // self-scoped → handled by the pass above
                 const ownerSide = rt.actor.side;
                 const recipients = allyScopedIncomingRecipients({
@@ -6736,7 +6743,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !cause?.isSplashCopy &&
                 (cause?.bombPortion ?? 0) === 0 &&
                 cause?.reflectBase === undefined &&
-                incomingAbilitiesOf(victim.id).some((a) => a.config.type === 'damage-reflection')
+                (incomingAbilitiesOf(victim.id).some(
+                    (a) => a.config.type === 'damage-reflection'
+                ) ||
+                    heldReflectPct(statusEngine, selfBuffLookup, victim.id) > 0)
             ) {
                 throw new Error(
                     'reflect: direct hit reached a reflector without cause.reflectBase (#678)'
@@ -7768,12 +7778,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // have to pass isPrimaryTarget explicitly, or a covered victim would wrongly reflect.
                 //
                 // Counters and procs pass the answer `aimReactiveHit` gave.
-                const reflectAbilities = incomingAbilitiesOf(victim.id).filter(
+                const victimIncomingAbilities = incomingAbilitiesOf(victim.id);
+                const reflectAbilities = victimIncomingAbilities.filter(
                     (a) =>
                         a.config.type === 'damage-reflection' &&
                         (!a.config.requirePrimaryTarget || cause?.isPrimaryTarget !== false)
                 );
-                if (reflectAbilities.length > 0) {
+                // A held Reflect status (Reflect I/II/III — Nifo's charged grant) reflects only
+                // as a primary target, per its own definition, and lands its own bounce.
+                const statusReflectPct =
+                    cause?.isPrimaryTarget !== false
+                        ? heldReflectPct(statusEngine, selfBuffLookup, victim.id)
+                        : 0;
+                if (reflectAbilities.length > 0 || statusReflectPct > 0) {
                     const reflectPctOf = (fromEquipment: boolean): number =>
                         reflectAbilities.reduce(
                             (sum, a) =>
@@ -7784,10 +7801,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     : 0),
                             0
                         );
-                    // A wearer carrying both bounces each share separately off the same hit: the
-                    // ship's share first, then the set's.
-                    const shares = [reflectPctOf(false), reflectPctOf(true)].filter(
-                        (reflectPct) => reflectPct > 0
+                    // Each reflect source bounces its own share off the same hit, in this order: the
+                    // ship's own reflect, the Reflect gear set, then a held Reflect status.
+                    const shares = [
+                        reflectPctOf(false),
+                        reflectPctOf(true),
+                        statusReflectPct,
+                    ].filter((reflectPct) => reflectPct > 0);
+                    // "When an ally reflects damage increase that damage by N%" (Nifo): every
+                    // amplifier fanned onto the reflector's list scales each of its bounces.
+                    const reflectAmplificationPct = victimIncomingAbilities.reduce(
+                        (sum, a) =>
+                            sum + (a.config.type === 'reflect-amplification' ? a.config.pct : 0),
+                        0
                     );
                     const attacker = allActorsById.get(cause?.killerId ?? '');
                     // Skip a missing attacker, self-damage (victim === attacker), and an
@@ -7840,6 +7866,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // mitigated amount and its pre-defence twin from a single walk.
                             const bounce = reflectedDamageParts({
                                 reflectPct,
+                                reflectAmplificationPct,
                                 reflectBase,
                                 reflectorOutgoingPct,
                                 reflectorOutgoingSeparateFactor,

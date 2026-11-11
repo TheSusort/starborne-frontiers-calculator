@@ -691,6 +691,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    grant and, at refit 2, her Core Charge I stack, "when an enemy gains a buff"). actorId is
  *    the buff RECIPIENT (events.ts), so this fires once per opposing-side buff application.
  *    Self-target — no eventCtx capture needed.
+ *  - on-ally-taunt-gained → buff-applied where !isOpposing(actorId) and buffName === 'Taunt'
+ *    (Nifo's Core Charge grant). Owner included. No eventCtx capture: the grant reaches its own
+ *    pattern-scoped target.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
  *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
  *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time
@@ -2626,6 +2629,14 @@ export function registerReactiveListeners(args: {
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, counterTargetId: e.actorId },
                             });
+                    });
+                    break;
+                case 'on-ally-taunt-gained':
+                    bus.on('buff-applied', (e) => {
+                        // Same-side, owner included ("an ally" includes self), and filtered on
+                        // the Taunt name — Nifo's "When an ally gains Taunt". The grant's
+                        // recipients come from its own target, so no eventCtx is stamped.
+                        if (!isOpposing(e.actorId) && e.buffName === 'Taunt') enqueue(intent);
                     });
                     break;
                 case 'on-own-cleanse':

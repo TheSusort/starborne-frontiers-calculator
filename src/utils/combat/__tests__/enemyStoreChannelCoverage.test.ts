@@ -63,6 +63,8 @@ const DEAD_CHANNELS: Record<string, string> = {
         "Read from the ATTACKER's own self/attacker list only (Out. Detonation Damage Up), feeding the applier's bomb snapshot and the detonating actor's live multiplier. No enemy-store read.",
     defensePenetration:
         "Read from the ATTACKER's own list only and folded through toDotAndPenModifiers rather than the buff totals, so it never meets an enemy-store read (the #396 channel audit).",
+    reflectPct:
+        "Read only by the engine's reflection block, off the struck holder's own self-side statuses. A friendly grant (Reflect I/II/III); no enemy-applied status carries it.",
     incomingDotDamage:
         "Read from the ENEMY list ONLY (toDotAndPenModifiers' `enemy` argument) and never from a self list. Having no SELF-side read, it has no cross-store meeting point and needs no shadowing — the inverse of the #398 shape, not an instance of it.",
 };
@@ -96,6 +98,7 @@ const ALL_CHANNELS: Record<keyof ParsedBuffEffects, true> = {
     defenceFlat: true,
     defenceFlatPctOfCaster: true,
     defencePerSecurity: true,
+    reflectPct: true,
 };
 
 /** `defense` and `incomingDamage` meet on the per-VICTIM path in engine.ts's
