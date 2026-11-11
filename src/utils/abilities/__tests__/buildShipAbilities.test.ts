@@ -3285,19 +3285,13 @@ describe('buildShipAbilities', () => {
             expect(passive?.abilities.find((a) => a.type === 'modifier')).toBeUndefined();
         });
 
-        it('Grif SECOND (refit) passive: standing +20% self defense modifier AND on-enemy-cleansed 75% noCrit damage proc', () => {
+        it('Grif SECOND (refit) passive: on-enemy-cleansed 75% noCrit damage proc; the standing +20% defense mints nothing (#784)', () => {
             const s = ship({
                 secondPassiveSkillText:
                     'This Unit increases its Defense by 20%. When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit deals <unit-damage>75% Damage</unit-damage> that cannot critically hit.',
             });
             const passive = passiveOf(s);
-            const mod = passive?.abilities.find((a) => a.type === 'modifier');
-            expect(mod).toMatchObject({
-                type: 'modifier',
-                target: 'self',
-                trigger: 'on-cast',
-                config: { type: 'modifier', channel: 'defense', value: 20, isMultiplicative: true },
-            });
+            expect(passive?.abilities.find((a) => a.type === 'modifier')).toBeUndefined();
             const dmg = passive?.abilities.find((a) => a.type === 'damage');
             expect(dmg).toMatchObject({
                 type: 'damage',
@@ -3305,53 +3299,6 @@ describe('buildShipAbilities', () => {
                 trigger: 'on-enemy-cleansed',
                 config: { type: 'damage', multiplier: 75, noCrit: true },
             });
-        });
-
-        // CodeRabbit #99 FIX #2: the standing "+N% Defense" modifier must only emit when its
-        // containing sentence is a STANDALONE/standing clause — a finite-duration or
-        // trigger-gated clause with the same wording must NOT be promoted to a permanent buff.
-        it('does NOT emit a standing defense modifier for a finite-duration "for N turns" clause', () => {
-            const s = ship({
-                secondPassiveSkillText: 'This Unit increases its Defense by 20% for 2 turns.',
-            });
-            const passive = passiveOf(s);
-            const mod = passive?.abilities.find(
-                (a) =>
-                    a.type === 'modifier' &&
-                    a.config.type === 'modifier' &&
-                    a.config.channel === 'defense'
-            );
-            expect(mod).toBeUndefined();
-        });
-
-        it('does NOT emit a standing defense modifier when a non-trigger "and" sits before "for N turns"', () => {
-            const s = ship({
-                secondPassiveSkillText:
-                    'This Unit increases its Defense by 20% and Attack by 10% for 2 turns.',
-            });
-            const passive = passiveOf(s);
-            const mod = passive?.abilities.find(
-                (a) =>
-                    a.type === 'modifier' &&
-                    a.config.type === 'modifier' &&
-                    a.config.channel === 'defense'
-            );
-            expect(mod).toBeUndefined();
-        });
-
-        it('does NOT emit a standing defense modifier for a trigger-gated "When an enemy cleanses" clause', () => {
-            const s = ship({
-                secondPassiveSkillText:
-                    'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit increases its Defense by 20%.',
-            });
-            const passive = passiveOf(s);
-            const mod = passive?.abilities.find(
-                (a) =>
-                    a.type === 'modifier' &&
-                    a.config.type === 'modifier' &&
-                    a.config.channel === 'defense'
-            );
-            expect(mod).toBeUndefined();
         });
     });
 });

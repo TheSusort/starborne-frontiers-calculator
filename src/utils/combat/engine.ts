@@ -4789,10 +4789,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         ...runtimesById,
     ]);
 
-    // Standing "+N% defense" passives (Grif, Hermes) per owner: unconditional, self-scoped
-    // `defense` modifiers on a passive slot. They join the victim's percentage defence channel
-    // (`victimIncomingModifiers`), so every hit the owner takes mitigates on the raised defence.
-    // A ship passive stops contributing while its holder is turn-blocked (`livePassiveEntries`).
+    // User-authored standing "+N% defense" passives per owner: unconditional, self-scoped
+    // `defense` modifiers on a passive slot, added in the skill editor. They join the victim's
+    // percentage defence channel (`victimIncomingModifiers`), so every hit the owner takes
+    // mitigates on the raised defence. A parser-filled one (`autoFilled`) is skipped: the parser
+    // mints none for a ship's own "+N% defense" text because the ship's stats already carry it
+    // (#784), and a kit saved before that still holds one. A ship passive stops contributing
+    // while its holder is turn-blocked (`livePassiveEntries`).
     interface StandingDefence {
         pct: number;
         source?: 'equipment';
@@ -4809,7 +4812,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     c.channel === 'defense' &&
                     a.target === 'self' &&
                     a.conditions.length === 0 &&
-                    !a.scaling
+                    !a.scaling &&
+                    a.autoFilled !== true
                 ) {
                     entries.push({ pct: c.value, ...(a.source ? { source: a.source } : {}) });
                 }
