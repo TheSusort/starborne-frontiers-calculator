@@ -430,7 +430,7 @@ describe.each(SIDES)('infinite hacking on reactions, carrier on the %s side', (p
             hacking: 0,
             affinity: 'electric',
         };
-        // Row-most: T and M hold one ship each, the tie goes to M — the carrier's row.
+        // Row-most: T and M hold one ship each, the tie goes to M (row-most ties go M → B → T).
         const hitter: BoardUnit = {
             ...attacker(),
             target: parseTarget('row-most'),
@@ -513,6 +513,25 @@ describe.each(SIDES)('whenever any ship dies, carrier on the %s side', (placemen
         const deaths = ofType(events, 'ship-destroyed').map((e) => e.actorId);
         expect(deaths.sort()).toEqual([id(opponents[0]), id(opponents[1])].sort());
         expect(grantsOf(events, id(c), 'Repair Self Over Time I')).toHaveLength(2);
+    });
+
+    it('the granted Repair Self Over Time I heals the carrier 10% of its max HP per live copy per tick', () => {
+        const maxHp = 1_000_000;
+        const c: BoardUnit = { ...carrier(), position: 'M2', hp: maxHp };
+        // A weak enemy hitter keeps the carrier below max HP so no tick is lost to overheal.
+        const chip: BoardUnit = { ...rowKiller('chip', 'T1'), attack: 300_000 };
+        const opponents = [fodder('e1', 'M3'), fodder('e2', 'M4'), chip];
+        const { input, id } = boardInput(placement, c, [rowKiller('killer', 'M1')], opponents, 3);
+        const events = runEvents(input);
+        const carrierId = id(c);
+        expect(grantsOf(events, carrierId, 'Repair Self Over Time I')).toHaveLength(2);
+        const ticks = ofType(events, 'hot-ticked').filter((e) => e.holderId === carrierId);
+        expect(ticks.length).toBeGreaterThan(0);
+        for (const t of ticks) {
+            const copies = t.amount / (maxHp * 0.1);
+            expect(copies).toBeCloseTo(Math.round(copies), 5);
+            expect(copies).toBeGreaterThanOrEqual(1);
+        }
     });
 
     it("an ally's death grants a copy too", () => {
