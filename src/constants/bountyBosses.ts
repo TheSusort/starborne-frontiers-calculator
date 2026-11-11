@@ -81,8 +81,8 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
         statsByLevel: {
             32: {
                 hp: 225450,
+                // Attack, defence and crit damage are fitted to measured in-game hits (#519).
                 attack: 21958,
-                // Placeholder until fitted to measured hits.
                 defence: 14675,
                 hacking: 270,
                 security: 160,
