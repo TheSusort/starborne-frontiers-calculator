@@ -229,6 +229,8 @@ export type AbilityTrigger =
     | 'on-ally-destroyed'
     | 'on-destroyed'
     | 'on-enemy-destroyed'
+    // Any ship on either side dies, by any cause (Mamma Maglienza: "Whenever any ship dies").
+    | 'on-any-destroyed'
     | 'on-cheat-death-activated'
     // Fired by the engine when the owner's HP crosses below a watched threshold
     // (downward only — heals/upward changes emit nothing). The buff executor uses this
@@ -252,6 +254,9 @@ export type AbilityTrigger =
     // event's slot discriminator). Self-scoped: the listener matches actorId === ownerId
     // && slot === 'charged'. Used by the Spearhead implant (all-allies Attack Up grant).
     | 'on-charged-cast'
+    // After the owner's own attack cast, active or charged (Mamma Maglienza: "after attacking").
+    // Self-scoped: once per cast, however many enemies the cast hit.
+    | 'on-attack-cast'
     // Warpstrike: owner dealt direct damage on its turn. Rides the `ability-performed` event,
     // which since the multi-hit full-walk epic (PR2) is emitted once per SUB-ATTACK, not once per
     // turn: a `hits: N` skill is N consecutive full-walk attacks and fires this N times. An AoE
@@ -401,6 +406,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-destroyed',
     'on-ally-destroyed',
     'on-enemy-destroyed',
+    'on-any-destroyed',
     'on-cheat-death-activated',
     'on-hp-threshold-crossed',
     'on-enemy-repaired',
@@ -412,6 +418,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-purged',
     // Spearhead: all-allies buff grant after the owner's charged skill.
     'on-charged-cast',
+    'on-attack-cast',
     // Phase 4: opposing-scoped mirror — reaction to an ENEMY's charged cast.
     'on-enemy-charged-cast',
     // Font of Power: buff grant to allies the owner repairs.
@@ -1146,7 +1153,9 @@ export type AbilityConfig =
     // D-PR3 victim-side incoming-damage reduction (folded at the crit-aware computation sites).
     | {
           type: 'incoming-reduction';
-          scope: 'direct' | 'dot';
+          /** Which incoming damage the reduction applies to: a direct hit, a DoT tick, or a
+           *  detonation (a Bomb or Echoing Burst detonation, or a detonate-DoT burst). */
+          scope: 'direct' | 'dot' | 'detonation';
           condition: IncomingCondition;
           /** Positive magnitude (percentage points); folded as a reduction into the incoming channel.
            *  IGNORED when `hpScaling` is set (Tormenter) — the effective reduction is computed
@@ -1616,6 +1625,10 @@ export interface ShipSkills {
     /** True when the ship's passive text declares immunity to control debuffs (Fenri). Read
      *  onto `CombatActor.controlImmune`, whose doc holds what the immunity does. */
     controlImmune?: boolean;
+    /** True when the ship's passive text says it "has infinite Hacking" (Mamma Maglienza, #519):
+     *  every debuff it inflicts lands, with no landing roll, whatever the victim's security or
+     *  affinity (owner ruling 2026-11-11). */
+    alwaysLandsDebuffs?: boolean;
     /** True when the ship's refit-active text says "This Unit's attacks always critically hit"
      *  (Tormenter, Asphodel R2+). Read by the engine onto CombatActor.alwaysCrits: every attack
      *  then rolls at a 100% crit rate, which no affinity disadvantage or Crit Rate Down lowers

@@ -69,9 +69,11 @@ describe('fetch-buffs manual additions', () => {
         }
     );
 
-    it('carries Pressing Onslaught and the three White Phosphorus tiers', () => {
+    it('carries the bounty-boss statuses and the three White Phosphorus tiers', () => {
         expect(MANUAL_BUFF_ADDITIONS.map((b) => b.name)).toEqual([
             'Pressing Onslaught',
+            'Repair Self Over Time I',
+            'Enrage Attack III',
             'White Phosphorus I',
             'White Phosphorus II',
             'White Phosphorus III',

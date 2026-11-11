@@ -901,6 +901,16 @@ export const BUFFS: Buff[] = [
         type: 'buff',
     },
     {
+        name: 'Repair Self Over Time I',
+        description: '10% Applying Unit HP%',
+        type: 'buff',
+    },
+    {
+        name: 'Enrage Attack III',
+        description: '+6% Attack, Stackable',
+        type: 'buff',
+    },
+    {
         name: 'White Phosphorus I',
         description:
             "Deals Damage equal to 15% of this units's attack, ignores defense and shield. Cannot be cleansed.",

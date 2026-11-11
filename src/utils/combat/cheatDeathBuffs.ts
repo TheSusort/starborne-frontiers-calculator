@@ -51,4 +51,6 @@ export const UNREMOVABLE_STATUSES: ReadonlySet<string> = new Set<string>([
     // "Unremovable except by the unit affected by it" (#519): only its holder's own
     // remove-self-buff clears it.
     'Pressing Onslaught',
+    // Mamma Maglienza's stackable attack grant (#519): "is stackable and unremovable".
+    'Enrage Attack III',
 ]);
