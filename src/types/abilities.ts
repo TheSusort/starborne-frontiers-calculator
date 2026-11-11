@@ -229,8 +229,6 @@ export type AbilityTrigger =
     | 'on-ally-destroyed'
     | 'on-destroyed'
     | 'on-enemy-destroyed'
-    // Any ship on either side dies, by any cause (Mamma Maglienza: "Whenever any ship dies").
-    | 'on-any-destroyed'
     | 'on-cheat-death-activated'
     // Fired by the engine when the owner's HP crosses below a watched threshold
     // (downward only — heals/upward changes emit nothing). The buff executor uses this
@@ -406,7 +404,6 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-destroyed',
     'on-ally-destroyed',
     'on-enemy-destroyed',
-    'on-any-destroyed',
     'on-cheat-death-activated',
     'on-hp-threshold-crossed',
     'on-enemy-repaired',

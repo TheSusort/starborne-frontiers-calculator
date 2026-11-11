@@ -75,12 +75,12 @@ describe('Mamma Maglienza kit (bounty boss)', () => {
         for (const r of reductions) expect(r.target).toBe('self');
     });
 
-    it('gains Repair Self Over Time I for 6 turns whenever any ship dies', () => {
+    it('gains Repair Self Over Time I for 6 turns whenever a ship on its own side dies', () => {
         const grants = passive.filter(
             (a) => a.config.type === 'buff' && a.config.buffName === 'Repair Self Over Time I'
         );
         expect(grants).toHaveLength(1);
-        expect(grants[0]).toMatchObject({ target: 'self', trigger: 'on-any-destroyed' });
+        expect(grants[0]).toMatchObject({ target: 'self', trigger: 'on-ally-destroyed' });
         expect(grants[0].config).toMatchObject({ duration: 6, isStackable: false });
         expect(grants[0].triggerRequiresDirectDeath).toBeUndefined();
         expect(grants[0].triggerKillerScope).toBeUndefined();
@@ -173,8 +173,8 @@ describe('Mamma passive statuses', () => {
         expect(MANUAL_BUFF_ADDITIONS.find((b) => b.name === def.name)).toEqual(def);
     });
 
-    it('both new triggers are live', () => {
-        expect(LIVE_TRIGGERS.has('on-any-destroyed')).toBe(true);
+    it('both passive triggers are live', () => {
+        expect(LIVE_TRIGGERS.has('on-ally-destroyed')).toBe(true);
         expect(LIVE_TRIGGERS.has('on-attack-cast')).toBe(true);
     });
 });

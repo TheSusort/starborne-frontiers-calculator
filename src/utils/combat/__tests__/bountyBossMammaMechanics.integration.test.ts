@@ -2,7 +2,8 @@
  * Mamma Maglienza's and the Capo's engine mechanics (#519). Owner rulings 2026-11-11:
  *   - infinite hacking: every debuff Mamma casts lands, including on a ship with affinity
  *     advantage over her; Block Debuff and control immunity still stop it;
- *   - "Whenever any ship dies": any death on either side, any cause, never the owner's own;
+ *   - "Whenever any ship dies": a death on the owner's own side only, any cause, never the
+ *     owner's own;
  *   - "after attacking": once after each of the owner's own attack casts;
  *   - "50% less damage from DoTs and Detonations": Bomb and Echoing Burst detonations,
  *     detonate-DoT bursts (once per burst) and Bomb splash;
@@ -505,23 +506,34 @@ describe.each(SIDES)('whenever any ship dies, carrier on the %s side', (placemen
         speed: 1,
     });
 
-    it('two enemies killed by one ally cast grant two Repair Self Over Time I copies', () => {
+    it('two allies killed by one opposing cast grant two Repair Self Over Time I copies', () => {
+        const c = carrier();
+        const allies = [fodder('a1', 'M3'), fodder('a2', 'M4')];
+        const { input, id } = boardInput(placement, c, allies, [rowKiller('killer', 'M1')], 1);
+        const events = runEvents(input);
+        const deaths = ofType(events, 'ship-destroyed').map((e) => e.actorId);
+        expect(deaths.sort()).toEqual([id(allies[0]), id(allies[1])].sort());
+        expect(grantsOf(events, id(c), 'Repair Self Over Time I')).toHaveLength(2);
+    });
+
+    it('opposing-side deaths grant nothing', () => {
         const c = carrier();
         const opponents = [fodder('e1', 'M3'), fodder('e2', 'M4'), dummyAt('e3', 'T4')];
         const { input, id } = boardInput(placement, c, [rowKiller('killer', 'M1')], opponents, 1);
         const events = runEvents(input);
         const deaths = ofType(events, 'ship-destroyed').map((e) => e.actorId);
         expect(deaths.sort()).toEqual([id(opponents[0]), id(opponents[1])].sort());
-        expect(grantsOf(events, id(c), 'Repair Self Over Time I')).toHaveLength(2);
+        expect(grantsOf(events, id(c), 'Repair Self Over Time I')).toEqual([]);
     });
 
     it('the granted Repair Self Over Time I heals the carrier 10% of its max HP per live copy per tick', () => {
         const maxHp = 1_000_000;
-        const c: BoardUnit = { ...carrier(), position: 'M2', hp: maxHp };
-        // A weak enemy hitter keeps the carrier below max HP so no tick is lost to overheal.
-        const chip: BoardUnit = { ...rowKiller('chip', 'T1'), attack: 300_000 };
-        const opponents = [fodder('e1', 'M3'), fodder('e2', 'M4'), chip];
-        const { input, id } = boardInput(placement, c, [rowKiller('killer', 'M1')], opponents, 3);
+        const c: BoardUnit = { ...carrier(), hp: maxHp };
+        // The opposing hitter kills the carrier's two allies, then keeps hitting the carrier so
+        // it stays below max HP and no tick is lost to overheal.
+        const chip: BoardUnit = { ...rowKiller('chip', 'M1'), attack: 300_000 };
+        const allies = [fodder('a1', 'T3'), fodder('a2', 'T4')];
+        const { input, id } = boardInput(placement, c, allies, [chip], 3);
         const events = runEvents(input);
         const carrierId = id(c);
         expect(grantsOf(events, carrierId, 'Repair Self Over Time I')).toHaveLength(2);
@@ -549,8 +561,8 @@ describe.each(SIDES)('whenever any ship dies, carrier on the %s side', (placemen
         expect(grantsOf(events, id(c), 'Repair Self Over Time I')).toHaveLength(1);
     });
 
-    it('a DoT-tick death grants a copy', () => {
-        const c = carrier();
+    it("an ally's DoT-tick death grants a copy", () => {
+        const c: BoardUnit = { ...carrier(), position: 'T4' };
         const burner: BoardUnit = {
             id: 'burner',
             kit: {
@@ -569,7 +581,7 @@ describe.each(SIDES)('whenever any ship dies, carrier on the %s side', (placemen
             hacking: 10_000,
         };
         const victim = fodder('victim', 'M1');
-        const { input, id } = boardInput(placement, c, [burner], [victim, dummyAt('e2', 'T4')], 2);
+        const { input, id } = boardInput(placement, c, [victim], [burner], 2);
         const events = runEvents(input);
         const death = ofType(events, 'ship-destroyed').find((e) => e.actorId === id(victim));
         expect(death?.byDirectDamage).toBe(false);
@@ -600,7 +612,7 @@ describe.each(SIDES)('whenever any ship dies, carrier on the %s side', (placemen
         expect(grantsOf(events, id(ally), 'Repair Self Over Time I')).toEqual([]);
     });
 
-    it('validity: the same all-allies grant reaches the ally when another ship dies', () => {
+    it('validity: the same all-allies grant reaches the ally when another ally dies', () => {
         const toAllies: Ability = {
             ...passiveOf(mammaKit(), 'Repair Self Over Time I'),
             target: 'all-allies',
@@ -612,14 +624,16 @@ describe.each(SIDES)('whenever any ship dies, carrier on the %s side', (placemen
             speed: 1,
         };
         const ally = dummyAt('ally', 'T3');
+        const victim = fodder('victim', 'M3');
         const { input, id } = boardInput(
             placement,
             c,
-            [ally, rowKiller('killer', 'M1')],
-            [fodder('e1', 'M3'), dummyAt('e3', 'T4')],
+            [ally, victim],
+            [rowKiller('killer', 'M1')],
             1
         );
         const events = runEvents(input);
+        expect(ofType(events, 'ship-destroyed').map((e) => e.actorId)).toEqual([id(victim)]);
         expect(grantsOf(events, id(ally), 'Repair Self Over Time I')).toHaveLength(1);
     });
 
@@ -628,8 +642,8 @@ describe.each(SIDES)('whenever any ship dies, carrier on the %s side', (placemen
         const { input, id } = boardInput(
             placement,
             c,
+            [fodder('a1', 'M3')],
             [{ ...rowKiller('killer', 'M1'), attack: 1 }],
-            [fodder('e1', 'M3'), dummyAt('e3', 'T4')],
             1
         );
         const events = runEvents(input);

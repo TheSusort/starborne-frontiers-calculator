@@ -1790,7 +1790,8 @@ const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bde
 // "enemy[^.]*gains[^.]*taunt"): only Amartya's two passive rows match.
 const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaunt\b/i;
 
-// Mamma Maglienza: "Whenever any ship dies, the Boss gains …" — a death on either side.
+// Mamma Maglienza: "Whenever any ship dies, the Boss gains …" — owner-ruled to count only deaths
+// on the owner's own side (2026-11-11), so it resolves to on-ally-destroyed.
 const ANY_SHIP_DIES_RE = /\bwhenever\s+any\s+ship\s+dies\b/i;
 // Mamma Maglienza: "… and after attacking, gains …" — after each of the owner's attack casts.
 const AFTER_ATTACKING_RE = /\bafter\s+attacking\b/i;
@@ -1823,8 +1824,8 @@ const AFTER_ATTACKING_RE = /\bafter\s+attacking\b/i;
  *    it to the family with detectInflictedStatusFilter.
  *  - "if this Unit's debuff is resisted" → 'on-own-debuff-resisted' (the inflictor-scoped
  *    mirror of the resister-side on-debuff-resisted).
- *  - "after attacking" → 'on-attack-cast'; "whenever any ship dies" → 'on-any-destroyed'
- *    (Mamma Maglienza). Checked first, after-attacking before the death phrase.
+ *  - "after attacking" → 'on-attack-cast'; "whenever any ship dies" → 'on-ally-destroyed'
+ *    (Mamma Maglienza; owner-ruled same-side only). Checked first, after-attacking before the death phrase.
  *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained'. Narrow and
  *    name-specific to Taunt — distinct from the broad, unfiltered on-enemy-buffed
  *    (ENEMY_BUFFED_RE).
@@ -1850,7 +1851,7 @@ export function detectReactiveTrigger(
     // "after attacking" before "whenever any ship dies": a grant after "…, and after attacking,"
     // keeps the sentence-leading death trigger in its clause, and the later trigger governs it.
     if (AFTER_ATTACKING_RE.test(clause)) return 'on-attack-cast';
-    if (ANY_SHIP_DIES_RE.test(clause)) return 'on-any-destroyed';
+    if (ANY_SHIP_DIES_RE.test(clause)) return 'on-ally-destroyed';
     // "when an ally critically hits" → on-ally-crit (Hermes's Everliving Regeneration buff grant).
     // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.

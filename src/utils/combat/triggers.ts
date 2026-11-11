@@ -667,7 +667,6 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-destroyed → ship-destroyed where the actor is a same-side ally (not opposing, not
  *    self) — carved out of the ruling above, see there (Harvester's text carries no "another"
  *    qualifier, but a destroyed ship cannot take the extra-action grant regardless).
- *  - on-any-destroyed → ship-destroyed of any actor but the owner, either side, any cause.
  *  - on-attack-cast → the owner's own cast that dealt damage, enqueued at its turn-ended (see the
  *    listener).
  *  - on-enemy-destroyed → ship-destroyed where isOpposing(actorId)
@@ -2399,14 +2398,6 @@ export function registerReactiveListeners(args: {
                                 eventCtx: { ...intent.eventCtx, fromOwnDeath: true },
                             });
                         }
-                    });
-                    break;
-                case 'on-any-destroyed':
-                    bus.on('ship-destroyed', (e) => {
-                        // Any ship on either side, any cause (direct hit, DoT tick, Bomb), never
-                        // the owner's own death (Mamma Maglienza: "Whenever any ship dies").
-                        // One enqueue per death.
-                        if (e.actorId !== ownerId) enqueue(intent);
                     });
                     break;
                 case 'on-ally-destroyed':
