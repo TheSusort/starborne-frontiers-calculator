@@ -112,9 +112,10 @@ import { immuneToEnemyStatus } from './controlImmunity';
  *  AbilityTrigger doc note). */
 export { LIVE_TRIGGERS };
 
-/** A kill by DIRECT damage: neither a DoT tick (`byDirectDamage: false`) nor a bomb burst or
- *  splash, which arrives stamped `byDirectDamage: true` with `byDetonation`. What
- *  `Ability.triggerRequiresDirectDeath` asks of an `on-enemy-destroyed` kill (#519). */
+/** A death by DIRECT damage: neither a DoT tick (`byDirectDamage: false`) nor a bomb burst or
+ *  splash, which arrives stamped `byDirectDamage: true` with `byDetonation`. The one rule behind
+ *  `Ability.triggerRequiresDirectDeath` on `on-destroyed` and `on-enemy-destroyed`, and behind the
+ *  killer-targeted `on-destroyed` reactions (#519). */
 const isDirectDeath = (e: { byDirectDamage?: boolean; byDetonation?: boolean }): boolean =>
     e.byDirectDamage === true && e.byDetonation !== true;
 
@@ -2334,14 +2335,14 @@ export function registerReactiveListeners(args: {
                     bus.on('ship-destroyed', (e) => {
                         // Self-scoped: THIS owner was destroyed (mirrors on-crit's own-id scoping).
                         // Killer-targeted reactions (Faust's PURGE, Martyrdom's DEBUFF, Paracelsus's
-                        // HP-scaled retaliation DAMAGE) fire only when killed by DIRECT damage
-                        // and route to the killer (counterTargetId = e.killerId). Salvation's
+                        // HP-scaled retaliation DAMAGE) fire only on a direct death
+                        // (`isDirectDeath`) and route to the killer (counterTargetId = e.killerId). Salvation's
                         // self-destruct HEAL (and any other on-destroyed reaction) fires on ANY
                         // death, unchanged.
                         if (e.actorId !== ownerId) return;
                         // "Upon being destroyed by direct damage" on any payload (Paracelsus's
-                        // Everliving Regeneration II grant): a DoT-tick death fires nothing.
-                        if (ra.ability.triggerRequiresDirectDeath && !e.byDirectDamage) return;
+                        // Everliving Regeneration II grant): see `isDirectDeath`.
+                        if (ra.ability.triggerRequiresDirectDeath && !isDirectDeath(e)) return;
                         // fromOwnDeath: marks this as the owner's OWN death reaction so the
                         // dead-owner drain gate (executeIntent) lets it through even though the
                         // owner is now destroyed (Martyrdom's killer-Disable, Salvation's heal,
@@ -2351,7 +2352,7 @@ export function registerReactiveListeners(args: {
                             ra.ability.config.type === 'debuff' ||
                             ra.ability.config.type === 'damage'
                         ) {
-                            if (!e.byDirectDamage) return;
+                            if (!isDirectDeath(e)) return;
                             enqueue({
                                 ...intent,
                                 eventCtx: {

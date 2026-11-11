@@ -1,8 +1,7 @@
 /**
  * Paracelsus: "Upon being destroyed by direct damage, this Unit deals damage equal to 50% of its
  * max HP and grants all allies Everliving Regeneration II for 4 turns." One condition heads the
- * whole sentence: a death to a damage-over-time tick fires neither half. A Bomb burst is direct
- * damage here: it fires both (only Fenri's on-kill clause treats a bomb as not direct, #519).
+ * whole sentence: a death to a damage-over-time tick or a Bomb burst fires neither half.
  * Salvation's unqualified "When this Unit is destroyed" still fires on any death.
  *
  * Real parsed passives (buildTraceShip, refit 4), mounted on both sides. The dying ship sits at M4
@@ -127,11 +126,11 @@ describe("Paracelsus: 'Upon being destroyed by direct damage' gates both halves"
             expect(r.retaliation).toBe(1);
             expect(r.grants).toBeGreaterThan(0);
         });
-        it(`${side}-side: killed by a Bomb burst → retaliation and Everliving Regeneration II`, () => {
+        it(`${side}-side: killed by a Bomb burst → neither half`, () => {
             const r = run('Paracelsus', 'bomb', side);
             expect(r.death).toEqual({ direct: true, detonation: true });
-            expect(r.retaliation).toBe(1);
-            expect(r.grants).toBeGreaterThan(0);
+            expect(r.retaliation).toBe(0);
+            expect(r.grants).toBe(0);
         });
         it(`${side}-side: killed by a Corrosion tick → neither half`, () => {
             expect(run('Paracelsus', 'corrosion', side)).toEqual({

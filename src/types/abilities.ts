@@ -1347,14 +1347,11 @@ export interface Ability {
      *  this Unit is directly damaged as a primary target, … gains Legion Discipline II"
      *  (Stalwart). Absent → any hit. */
     triggerPrimaryTargetOnly?: boolean;
-    /** Fire only on a death by DIRECT damage. The exclusions differ per trigger:
-     *  - on-destroyed: a damage-over-time tick death is excluded; a bomb burst counts as direct.
-     *    "Upon being destroyed by direct damage, … grants all allies Everliving Regeneration II"
-     *    (Paracelsus, the owner's own death).
-     *  - on-enemy-destroyed: DoT-tick and bomb-detonation kills are both excluded
-     *    (`isDirectDeath`, triggers.ts). "On kill, the Boss clears Pressing Onslaught" (Fenri,
-     *    #519).
-     *  Absent → the listener's per-type rule. */
+    /** Fire only on a death by DIRECT damage: a damage-over-time tick death and a bomb
+     *  detonation death are both excluded (`isDirectDeath`, triggers.ts), for on-destroyed and
+     *  on-enemy-destroyed alike. "Upon being destroyed by direct damage, … grants all allies
+     *  Everliving Regeneration II" (Paracelsus); "On kill, the Boss clears Pressing Onslaught"
+     *  (Fenri, #519). Absent → the listener's per-type rule. */
     triggerRequiresDirectDeath?: boolean;
     /** Landing-verb filter for the debuff-inflicted trigger family (on-debuff-inflicted,
      *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-enemy-debuff-inflicted,
