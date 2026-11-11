@@ -613,7 +613,9 @@ export interface CombatActor {
     alwaysCrits?: boolean;
     /** Every debuff, DoT and purge this actor casts lands, whatever the victim's security or
      *  affinity matchup (ShipSkills.alwaysLandsDebuffs, "infinite Hacking" — #519). Block Debuff
-     *  and control immunity still stop it. Absent → the ordinary landing rules. */
+     *  and control immunity still stop it. Absent → the ordinary landing rules. Read by the
+     *  positional engine only: the non-positional DPS fallbacks still apply the affinity
+     *  matchup. */
     alwaysLandsDebuffs?: boolean;
     /** Pre-fight combat-modifier baseline: squad-leader modifier
      *  channels accumulated BEFORE combat (additive pct points). Hidden, permanent,

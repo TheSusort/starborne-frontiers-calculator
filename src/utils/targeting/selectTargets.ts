@@ -51,11 +51,14 @@ function chooseRow(
             ? ROW_TIE_ORDER
             : [casterRow, ...ROW_TIE_ORDER.filter((r) => r !== casterRow)];
     let best: BoardRow | undefined;
+    let bestCount = 0;
     for (const row of order) {
         const n = count(row);
         if (n === 0) continue;
-        if (best === undefined) best = row;
-        else if (selection === 'row-most' ? n > count(best) : n < count(best)) best = row;
+        if (best === undefined || (selection === 'row-most' ? n > bestCount : n < bestCount)) {
+            best = row;
+            bestCount = n;
+        }
     }
     return best!;
 }

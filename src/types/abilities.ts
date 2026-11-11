@@ -716,21 +716,20 @@ export interface IncomingHitContext {
     victimHasBarrierRecharging: boolean;
     /** Victim currently holds an active shield pool (shieldPool > 0) — gates self-shielded. */
     victimHasShield: boolean;
-    /** SP-E (Orel): the ATTACKER currently carries Taunt (self-buff) or Provoke (debuff).
+    /** Orel: the ATTACKER currently carries Taunt (self-buff) or Provoke (debuff).
      *  Live-derived by the engine off the real attacker id where one exists (the block-step ctx,
      *  the positional per-hit reduction ctx, the aggregate enemy-path ctx); defaults false at
      *  sites with no single real attacker (reflect ping-back, DoT-tick reduction) — inert unless
      *  an ability's config carries `condition:'attacker-taunted-or-provoke'`. */
     attackerTauntedOrProvoked: boolean;
-    /** Epic PR12 (C): the VICTIM's own live HP% (0..100) at hit time, for HP-proportional
+    /** The VICTIM's own live HP% (0..100) at hit time, for HP-proportional
      *  incoming-reduction scaling (Tormenter's `hpScaling`). Live-derived by the engine;
      *  defaults 100 (full HP) where unused/inapplicable — inert unless an ability's config
      *  carries `hpScaling`. */
     selfHpPct: number;
     /** Meatshield: true when THIS hit is a chunk redirected onto the victim via Protection
-     *  (engine sets it from `cause.isProtectionTransfer` at the transform block). OPTIONAL —
-     *  every other construction site omits it (→ undefined → treated as false in conditionMet),
-     *  keeping those sites byte-identical. */
+     *  (engine sets it from `cause.isProtectionTransfer` at the transform block). Absent →
+     *  false in conditionMet. */
     viaProtectionRedirect?: boolean;
     /** True for a detonation: a Bomb or Echoing Burst burst, or a detonate-DoT burst. Only
      *  `scope: 'detonation'` reductions apply to it. Absent → a direct hit or a DoT tick. */

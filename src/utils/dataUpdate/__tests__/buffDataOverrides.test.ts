@@ -69,7 +69,7 @@ describe('fetch-buffs manual additions', () => {
         }
     );
 
-    it('carries the bounty-boss statuses and the three White Phosphorus tiers', () => {
+    it("carries Pressing Onslaught, Mamma's two grants and the three White Phosphorus tiers", () => {
         expect(MANUAL_BUFF_ADDITIONS.map((b) => b.name)).toEqual([
             'Pressing Onslaught',
             'Repair Self Over Time I',

@@ -100,15 +100,13 @@ describe('Mamma Maglienza encounter', () => {
 });
 
 describe('boss-death win condition', () => {
-    // Laika alone in row B draws every Capo's row-least cast (and its Disable), leaving the
-    // three row-M ships free to act.
     const playerBoard = (): BoardState => {
         const board: BoardState = {};
         for (const [pos, name] of [
-            ['M2', 'Butcher'],
-            ['M3', 'Nuqtu'],
-            ['M4', 'Larkspur'],
-            ['B4', 'Laika'],
+            ['M1', 'Butcher'],
+            ['M2', 'Nuqtu'],
+            ['M3', 'Larkspur'],
+            ['M4', 'Laika'],
         ] as Array<[Position, string]>)
             board[pos] = { ship: reference(name), overrides: { hp: 1e9 } };
         return board;
