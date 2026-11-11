@@ -667,6 +667,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-destroyed → ship-destroyed where the actor is a same-side ally (not opposing, not
  *    self) — carved out of the ruling above, see there (Harvester's text carries no "another"
  *    qualifier, but a destroyed ship cannot take the extra-action grant regardless).
+ *  - on-attack-cast → the owner's own cast that dealt damage, enqueued at its turn-ended (see the
+ *    listener).
  *  - on-enemy-destroyed → ship-destroyed where isOpposing(actorId)
  *    (any opposing-side actor — for players: the enemy attackers; for enemy owners: any player
  *    actor).
@@ -1205,6 +1207,35 @@ export function registerReactiveListeners(args: {
                         if (e.actorId === ownerId && e.slot === 'charged') enqueue(intent);
                     });
                     break;
+                case 'on-attack-cast': {
+                    // Self-scoped, once per OWN cast that is an attack, after the cast resolves
+                    // (Mamma Maglienza: "after attacking"). `skill-fired` opens the cast before
+                    // anything resolves, so it only arms the bracket; an `ability-performed` of
+                    // the owner carrying damage marks the cast as an attack (a non-damage cast
+                    // emits none with damage > 0; a hit a Barrier or shield soaks still counts —
+                    // it was thrown); `turn-ended` closes the bracket and enqueues. An extra
+                    // action is its own turn bracket, so it is its own cast. Reactive damage
+                    // (counters, procs) rides `reactive-damage-performed` and never marks it.
+                    let castOpen = false;
+                    let castAttacked = false;
+                    bus.on('skill-fired', (e) => {
+                        if (e.actorId !== ownerId) return;
+                        castOpen = true;
+                        castAttacked = false;
+                    });
+                    bus.on('ability-performed', (e) => {
+                        if (castOpen && e.actorId === ownerId && (e.damage ?? 0) > 0)
+                            castAttacked = true;
+                    });
+                    bus.on('turn-ended', (e) => {
+                        if (e.actorId !== ownerId) return;
+                        const fire = castOpen && castAttacked;
+                        castOpen = false;
+                        castAttacked = false;
+                        if (fire) enqueue(intent);
+                    });
+                    break;
+                }
                 case 'on-enemy-charged-cast':
                     bus.on('skill-fired', (e) => {
                         // Opposing-scoped mirror of on-charged-cast. Team-agnostic: player
@@ -7553,11 +7584,11 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             if (!perVictimOk(targetId)) continue;
             if (!victimRoleMatches(roleConditions, targetId, ctx)) continue;
             // A purge lands like an 'apply' debuff: nothing at an affinity disadvantage.
+            // An `alwaysLandsDebuffs` owner purges whatever the matchup (`landsDespiteAffinity`).
+            const purger = ctx.actorById?.(intent.ownerId);
             const disadvantaged =
-                getAffinityMatchup(
-                    ctx.actorById?.(intent.ownerId)?.affinity,
-                    ctx.affinityOf?.(targetId)
-                ) === 'disadvantage';
+                purger?.alwaysLandsDebuffs !== true &&
+                getAffinityMatchup(purger?.affinity, ctx.affinityOf?.(targetId)) === 'disadvantage';
             removals.push({
                 targetId,
                 removed: disadvantaged ? 0 : ctx.statusEngine.purge(targetId, cfg.count),

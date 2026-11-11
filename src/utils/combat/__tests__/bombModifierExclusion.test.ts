@@ -9,6 +9,12 @@
  * / `detonationDamageModifier`) that never reads `incomingDamageModifierPct`. DoT ticks likewise
  * honour only `incomingDotFactor` (Vortex Veil). This is BY DESIGN, not a deferral.
  *
+ * The one carve-out: an `incoming-reduction` ability with `scope: 'detonation'` (Mamma Maglienza,
+ * "50% less damage from DoTs and Detonations", #519) DOES reduce a bomb burst — it is written for
+ * detonations and is applied at the burst sites themselves (`incomingDetonationReductionFor`).
+ * Pinned in `bountyBossMammaMechanics.integration.test.ts`. Every modifier this suite names still
+ * leaves bombs untouched.
+ *
  * This suite is a REGRESSION LOCK: bombs already bypass the modifier on current code, so every
  * assertion below should PASS as-is. If any FAILS, a modifier has leaked into the bomb path —
  * that is a real bug and the minimal exclusion fix must restore the raw bomb value.

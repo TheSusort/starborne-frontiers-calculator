@@ -1,5 +1,5 @@
 import type { Position } from '../../types/encounters';
-import { bossFootprint } from '../../constants/bountyBosses';
+import { bossFootprint, isBossShipId } from '../../constants/bountyBosses';
 import type { BoardState } from '../../components/simulator/PlacementBoard';
 import type { BattlePlacement } from '../calculators/battleSimulator';
 import { combatStatsFromShip, shipFinalStats, type CombatStatsDeps } from '../ship/combatStats';
@@ -46,6 +46,7 @@ export function buildTeam(board: BoardState, deps: CombatStatsDeps): BattlePlace
                 ship: placement.ship,
                 position,
                 ...(footprint ? { footprint } : {}),
+                ...(isBossShipId(placement.ship.id) ? { isBoss: true } : {}),
                 statOverrides: applyStatOverrides(
                     combatStatsFromShip(shipFinalStats(placement.ship, deps)),
                     placement.overrides

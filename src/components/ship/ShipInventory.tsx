@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
-import { TARGETING_RULES, PATTERN_SHAPES } from '../../constants/targetingRules';
+import { SHIP_FILTER_TARGETING_RULES, PATTERN_SHAPES } from '../../constants/targetingRules';
 import { PatternShape } from '../../utils/targetingParser';
 import {
     getShipTargetingFacets,
@@ -413,7 +413,7 @@ export const ShipInventory: React.FC<Props> = ({
             label: 'Target',
             values: state.filters.targetSelections ?? [],
             onChange: setSelectedTargetSelections,
-            options: Object.values(TARGETING_RULES).map((rule) => ({
+            options: SHIP_FILTER_TARGETING_RULES.map((rule) => ({
                 value: rule.id,
                 label: rule.label,
             })),

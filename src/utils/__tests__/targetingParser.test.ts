@@ -302,3 +302,26 @@ describe.skipIf(!csvAvailable)('ship-targeting.csv corpus coverage', () => {
         }
     });
 });
+
+describe('row-choice targeting tokens', () => {
+    it('parses the row selections as enemy-side', () => {
+        expect(parseTarget('row-most')).toEqual({
+            raw: 'row-most',
+            side: 'enemy',
+            selection: 'row-most',
+        });
+        expect(parseTarget('row-least')).toEqual({
+            raw: 'row-least',
+            side: 'enemy',
+            selection: 'row-least',
+        });
+    });
+    it('parses Pattern-Row as the whole-row shape with no modifiers', () => {
+        expect(parsePattern('Pattern-Row')).toEqual({
+            raw: 'Pattern-Row',
+            shape: 'row',
+            range: 0,
+            modifiers: {},
+        });
+    });
+});

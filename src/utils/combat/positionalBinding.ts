@@ -1,7 +1,7 @@
 import { selectTargets } from '../targeting/selectTargets';
-import { colOf } from '../targeting/board';
+import { colOf, rowOf } from '../targeting/board';
 import type { Position } from '../../types/encounters';
-import type { ParsedTarget } from '../targetingParser';
+import type { ParsedTarget, TargetSelection } from '../targetingParser';
 import { drawKeyed } from '../calculators/rateAccumulator';
 import type { CombatActor } from './state';
 import { buildCellIndex, cellsOf, hitCellOf, representativeCells } from './cellIndex';
@@ -15,6 +15,20 @@ export interface ActorTargetingStatus {
     taunting: boolean;
     /** Enemy-debuff 'Concentrate Fire' on this actor — force-targeted, bypasses stealth. */
     concentrated: boolean;
+}
+
+const isRowChoice = (selection: TargetSelection): boolean =>
+    selection === 'row-most' || selection === 'row-least';
+
+/** `hit` re-aimed at the front-most visible unit in `hit`'s row; `hit` itself when the row holds
+ *  no visible unit. */
+function aimAtVisibleInRow(hit: PositionalTargetHit, visible: CombatActor[]): PositionalTargetHit {
+    const row = rowOf(hit.cell);
+    const cells = representativeCells(visible, 'front')
+        .filter((c) => rowOf(c) === row)
+        .sort((a, b) => colOf(b) - colOf(a));
+    const actor = cells.length ? buildCellIndex(visible).get(cells[0]) : undefined;
+    return actor ? { actor, cell: cells[0] } : hit;
 }
 
 /**
@@ -135,7 +149,8 @@ export interface PositionalActing {
  *      Skipped when `acting.ignoresForcedTargeting` is true.
  *   4. Stealth filter — drop stealthed cells; if that empties the set, restore all. Skipped
  *      entirely when the acting attacker (ship-level `acting.ignoresStealth`) or this cast's
- *      target (per-ability `target.ignoresStealth`) ignores Stealth.
+ *      target (per-ability `target.ignoresStealth`) ignores Stealth. A `row-most` / `row-least`
+ *      cast counts stealthed ships toward each row's size and only aims at a visible one.
  * `statusOf(id)` returning `undefined` is treated as all-false (never throws/skips).
  *
  * @param acting - Optional context for the acting attacker. `provokedBy` is the id of the
@@ -248,6 +263,13 @@ export function resolvePositionalTargetCell(
         //    the acting attacker (ship-level) OR this cast's target (per-ability) ignores Stealth.
         if (!acting?.ignoresStealth && !target.ignoresStealth) {
             const visible = candidates.filter((a) => !statusOf(a.id)?.stealthed);
+            if (visible.length && isRowChoice(target.selection)) {
+                // A stealthed ship still counts toward its row's size (owner ruling, #519): the
+                // row is chosen over every candidate, then aimed at a visible ship of that row
+                // when it holds one.
+                const hit = selectAmong(candidates);
+                return hit ? aimAtVisibleInRow(hit, visible) : null;
+            }
             if (visible.length) {
                 candidates = visible;
             }

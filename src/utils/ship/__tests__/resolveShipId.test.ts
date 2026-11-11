@@ -56,4 +56,16 @@ describe('resolveShipId', () => {
         expect(resolveShipId('boss:fenri:32', throwing)?.baseStats.hp).toBe(327000);
         expect(resolveShipId('boss:fenri:31', throwing)).toBeNull();
     });
+
+    it('resolves an npc id without consulting the owned roster, and drops an unknown one', () => {
+        const throwing: ShipIdResolverDeps = {
+            ...deps,
+            getShipById: () => {
+                throw new Error('owned lookup must not run');
+            },
+        };
+        expect(resolveShipId('npc:capo:124', throwing)?.baseStats.hp).toBe(60170);
+        expect(resolveShipId('npc:capo:60', throwing)).toBeNull();
+        expect(resolveShipId('npc:nope:124', deps)).toBeNull();
+    });
 });

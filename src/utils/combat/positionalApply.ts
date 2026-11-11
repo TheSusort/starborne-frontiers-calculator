@@ -227,8 +227,8 @@ export interface SubAttackOutcome {
     victimIds: string[];
     /**
      * The victims that are this sub-attack's PRIMARY TARGETS, in footprint order (owner ruling
-     * R110: an attack can have several). The anchor alone for every pattern except a whole-
-     * battlefield one ({@link isWholeBattlefieldPattern}), where every victim struck is primary.
+     * R110: an attack can have several). The anchor alone, except for a pattern where
+     * {@link everyVictimIsPrimary} holds, where every victim struck is primary.
      * Empty on a whiff. Every "as a primary target" reaction reads this set, never `isAnchor`.
      */
     primaryVictimIds: string[];
@@ -252,6 +252,16 @@ export interface SubAttackOutcome {
  */
 export function isWholeBattlefieldPattern(pattern: ParsedPattern): boolean {
     return pattern.shape === 'all' && !pattern.modifiers.support;
+}
+
+/**
+ * True for a firing pattern whose every victim is a PRIMARY target: a whole-battlefield attack
+ * (R110) and a whole-row attack (`Pattern-Row`, #519: every enemy in the chosen row is a main
+ * target). Primary-ness only — the Protection exemption is whole-battlefield alone
+ * ({@link isWholeBattlefieldPattern}), so a row hit is still redirected.
+ */
+export function everyVictimIsPrimary(pattern: ParsedPattern): boolean {
+    return isWholeBattlefieldPattern(pattern) || pattern.shape === 'row';
 }
 
 /** The payload of `applyPositionalDamage`'s sub-attack boundary hooks. */
@@ -549,7 +559,7 @@ export function applyPositionalDamage(args: {
     const critVictims = new Set<string>();
     const subAttacks: SubAttackOutcome[] = [];
     // One answer per cast: the firing pattern decides whether every victim is a primary target.
-    const wholeBattlefield = isWholeBattlefieldPattern(pattern);
+    const allPrimary = everyVictimIsPrimary(pattern);
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
     // truth that victimHitDamage also reads), avoiding silent under/over-application from a
@@ -606,7 +616,7 @@ export function applyPositionalDamage(args: {
         const anchorActor = resolved.actor;
         const footprint = footprintVictims(pattern, resolved.cell, opposingLiving);
         const subVictimIdsForHooks = footprint.map((f) => f.victim.id);
-        const primaryVictimIds = wholeBattlefield
+        const primaryVictimIds = allPrimary
             ? subVictimIdsForHooks
             : subVictimIdsForHooks.filter((id) => id === anchorActor.id);
         onSubAttackStart?.({
@@ -619,7 +629,7 @@ export function applyPositionalDamage(args: {
             // Anchor reuses the pre-rolled hitCrits[h]; covered victims resolve via callback.
             const isAnchor = victim.id === anchorActor.id;
             // `isAnchor` drives crit reuse; `isPrimary` is what "as a primary target" reads.
-            const isPrimary = isAnchor || wholeBattlefield;
+            const isPrimary = isAnchor || allPrimary;
             const didCrit = isAnchor ? anchorCrit : (rollVictimCrit?.(victim, h) ?? anchorCrit);
             if (didCrit) {
                 anyCrit = true;

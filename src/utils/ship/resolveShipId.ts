@@ -1,5 +1,5 @@
 import type { Ship } from '../../types/ship';
-import { bossShip, parseBossShipId } from '../../constants/bountyBosses';
+import { bossShip, npcShip, parseBossShipId, parseNpcShipId } from '../../constants/bountyBosses';
 import { parseReferenceShipId, referenceShip, type AscensionStat } from './referenceShip';
 
 export interface ShipIdResolverDeps {
@@ -13,7 +13,7 @@ export interface ShipIdResolverDeps {
  *
  * A reference id (`template:<templateId>:<variant>`) names a unit nobody owns, so it is rebuilt
  * from the unit catalogue; looking one up among owned ships finds nothing and silently drops the
- * cell. A boss id (`boss:<bountyId>:<level>`) is rebuilt from the bounty boss data. Anything
+ * cell. A boss id (`boss:<bountyId>:<level>`) and an encounter add id (`npc:<addId>:<level>`) are rebuilt from the bounty data. Anything
  * else is an owned ship's id.
  *
  * `null` means the id no longer resolves — a deleted ship, a re-imported roster, or a different
@@ -22,6 +22,8 @@ export interface ShipIdResolverDeps {
 export function resolveShipId(shipId: string, deps: ShipIdResolverDeps): Ship | null {
     const boss = parseBossShipId(shipId);
     if (boss) return bossShip(boss.id, boss.level);
+    const npc = parseNpcShipId(shipId);
+    if (npc) return npcShip(npc.id, npc.level);
     const reference = parseReferenceShipId(shipId);
     if (!reference) return deps.getShipById(shipId) ?? null;
     const template = deps.units.find((unit) => unit.id === reference.templateId);

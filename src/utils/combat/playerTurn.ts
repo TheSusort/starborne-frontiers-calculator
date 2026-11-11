@@ -113,6 +113,7 @@ import {
     effectiveDamageStatsOf,
     effectiveStatsOf,
     foldActorBuffTotals,
+    landsDespiteAffinity,
     liveDebuffLandingChance,
 } from './effectiveStats';
 import {
@@ -2995,7 +2996,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             opposingVictimById?.get(vid) ?? (hasVictim && vid === enemy.id ? enemy : undefined);
         // `blocked`: the affinity disadvantage alone stopped a purge that had buffs to take.
         const removals = recipients.map((vid) => {
-            const immune = extensionImmune(vid);
+            const immune = extensionImmune(vid) && !landsDespiteAffinity(actor);
             return {
                 vid,
                 victim: victimOf(vid),
@@ -3212,7 +3213,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // defensive override) before falling back to the real matchup.
         const victimAffinityMod = affinityModsVsVictim(victim).damageModifier;
         if (application === 'apply') {
-            return { landed: victimAffinityMod >= 0, viaRoll: false };
+            return {
+                landed: victimAffinityMod >= 0 || landsDespiteAffinity(actor),
+                viaRoll: false,
+            };
         }
         const chance = liveDebuffLandingChance(
             statusEngine,

@@ -1,6 +1,15 @@
 import type { Position } from '../../types/encounters';
 import type { BoardState, Placement } from '../../components/simulator/PlacementBoard';
-import { BOUNTY_BOSSES, bossFootprint, parseBossShipId } from '../../constants/bountyBosses';
+import {
+    BOUNTY_ADDS,
+    BOUNTY_BOSSES,
+    BOUNTY_ENCOUNTERS,
+    bossFootprint,
+    bossShip,
+    npcShip,
+    parseBossShipId,
+} from '../../constants/bountyBosses';
+import type { BountyId } from '../../constants/bounties';
 
 /** The cells a placement's unit occupies when it is a multi-hex unit, otherwise `undefined`. */
 export const placementFootprint = (placement: Placement): readonly Position[] | undefined =>
@@ -34,3 +43,20 @@ export const loadedBossShipId = (board: BoardState): string | undefined => {
     }
     return undefined;
 };
+
+/** The board an encounter loads: the boss at its anchor and each add on its cell; `null` for an unknown encounter. */
+export function encounterBoard(bountyId: BountyId, level: number): BoardState | null {
+    const boss = BOUNTY_BOSSES.find((candidate) => candidate.id === bountyId);
+    const encounter = BOUNTY_ENCOUNTERS.find(
+        (candidate) => candidate.bountyId === bountyId && candidate.level === level
+    );
+    const ship = bossShip(bountyId, level);
+    if (!boss || !encounter || !ship) return null;
+    const board: BoardState = { [boss.footprint[0]]: { ship } };
+    for (const add of encounter.adds) {
+        const addDef = BOUNTY_ADDS.find((candidate) => candidate.id === add.addId);
+        const addShip = addDef && npcShip(addDef.id, addDef.level);
+        if (addShip) board[add.position] = { ship: addShip };
+    }
+    return board;
+}

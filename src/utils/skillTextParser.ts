@@ -1790,6 +1790,12 @@ const ALLY_SHIELD_DESTROYED_RE = /\bwhen\s+an\s+ally\b[^.]*?\bshield\b[^.]*?\bde
 // "enemy[^.]*gains[^.]*taunt"): only Amartya's two passive rows match.
 const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaunt\b/i;
 
+// Mamma Maglienza: "Whenever any ship dies, the Boss gains …" — owner-ruled to count only deaths
+// on the owner's own side (2026-11-11), so it resolves to on-ally-destroyed.
+const ANY_SHIP_DIES_RE = /\bwhenever\s+any\s+ship\s+dies\b/i;
+// Mamma Maglienza: "… and after attacking, gains …" — after each of the owner's attack casts.
+const AFTER_ATTACKING_RE = /\bafter\s+attacking\b/i;
+
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
  * buff's own clause (using the SAME shared clause resolution + abbreviation masking as
@@ -1818,6 +1824,8 @@ const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaun
  *    it to the family with detectInflictedStatusFilter.
  *  - "if this Unit's debuff is resisted" → 'on-own-debuff-resisted' (the inflictor-scoped
  *    mirror of the resister-side on-debuff-resisted).
+ *  - "after attacking" → 'on-attack-cast'; "whenever any ship dies" → 'on-ally-destroyed'
+ *    (Mamma Maglienza; owner-ruled same-side only). Checked first, after-attacking before the death phrase.
  *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained'. Narrow and
  *    name-specific to Taunt — distinct from the broad, unfiltered on-enemy-buffed
  *    (ENEMY_BUFFED_RE).
@@ -1840,6 +1848,10 @@ export function detectReactiveTrigger(
     // A trigger opening a LATER "and upon/when/after/if …" clause does not govern this grant
     // (clauseUpToTrailingTrigger) — the same scoping detectExtraActionCoTrigger applies.
     const clause = buffPos >= 0 ? clauseUpToTrailingTrigger(at.clause, buffPos) : at.clause;
+    // "after attacking" before "whenever any ship dies": a grant after "…, and after attacking,"
+    // keeps the sentence-leading death trigger in its clause, and the later trigger governs it.
+    if (AFTER_ATTACKING_RE.test(clause)) return 'on-attack-cast';
+    if (ANY_SHIP_DIES_RE.test(clause)) return 'on-ally-destroyed';
     // "when an ally critically hits" → on-ally-crit (Hermes's Everliving Regeneration buff grant).
     // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
@@ -3049,9 +3061,10 @@ export function detectRoundStartContinuationTrigger(
         : undefined;
 }
 
-// SELF death by direct damage → on-destroyed: "when/upon being destroyed by direct damage".
-// Crosses tags; "direct" guards against a DoT-kill phrasing.
-const KILLED_BY_DIRECT_RE = /\b(?:when|upon\s+being)\s+destroyed\s+by\s+direct\b[^.;]*\bdamage\b/i;
+// SELF death by direct damage → on-destroyed: "when/upon being destroyed by direct damage", or
+// "when killed by direct Damage" (Capo). Crosses tags; "direct" guards against a DoT-kill phrasing.
+const KILLED_BY_DIRECT_RE =
+    /\b(?:when|upon\s+being)\s+(?:destroyed|killed)\s+by\s+direct\b[^.;]*\bdamage\b/i;
 
 /**
  * Returns 'on-destroyed' when `anchorPos` falls inside a sentence carrying a phrase matching
@@ -3932,6 +3945,13 @@ export function parseChargeLossImmune(text: string | null | undefined): boolean 
 const CONTROL_IMMUNE_RE = /\bimmune to control\b/i;
 export function parseControlImmune(text: string | null | undefined): boolean {
     return !!text && CONTROL_IMMUNE_RE.test(stripUnitTags(text));
+}
+
+/** True iff this skill text says the unit "has infinite Hacking" (Mamma Maglienza): its debuffs
+ *  always land (`ShipSkills.alwaysLandsDebuffs`). */
+const INFINITE_HACKING_RE = /\bhas infinite hacking\b/i;
+export function parseInfiniteHacking(text: string | null | undefined): boolean {
+    return !!text && INFINITE_HACKING_RE.test(stripUnitTags(text));
 }
 
 // SP-F F5 (Meatshield, R4 refit-active passive) — "Any direct damage dealt to a non-defender
@@ -6016,6 +6036,12 @@ const DURATION_RE = /for\s+(\d+)\s*turns?/i;
 const RECURRING_RE = /every\s+turn/i;
 // Matches "N stacks of" at the END of a text segment (immediately before the tag)
 const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
+// "twice" right AFTER the tag ("inflicting <Inferno II> twice for 12 turns each") — two
+// applications of the status, read as 2 stacks.
+const TWICE_RE = /^\s*twice\s+for\b/i;
+// A durationless "after attacking, gains <X>" grant (Mamma Maglienza's Enrage Attack III) is
+// kept: each attack banks another stack rather than opening a 1-turn window.
+const AFTER_ATTACKING_GAIN_RE = /\bafter\s+attacking,\s*(?:this\s+unit\s+)?gains\s*$/i;
 // A sentence that opens "Every turn, this Unit gains" and ends at the tag (Fenri's Pressing
 // Onslaught). Sentence-opening only: "At the start of combat and every turn, …" is not it.
 const LEADING_EVERY_TURN_GAIN_RE =
@@ -6924,6 +6950,9 @@ export function parseSkillEffects(
             if (duration === null) {
                 duration = findLeadingDuration(segments, i);
             }
+            if (duration === null && AFTER_ATTACKING_GAIN_RE.test(prevText)) {
+                duration = 'recurring';
+            }
         }
 
         // Step 4: Stack detection from immediately preceding text segment. A passive's leading
@@ -6938,9 +6967,11 @@ export function parseSkillEffects(
             LEADING_EVERY_TURN_GAIN_RE.test(prevText);
         const stacks = stackMatch
             ? parseInt(stackMatch[1], 10)
-            : leadingEveryTurnStack
-              ? 1
-              : undefined;
+            : TWICE_RE.test(nextText)
+              ? 2
+              : leadingEveryTurnStack
+                ? 1
+                : undefined;
         // Only use 'recurring' from stacks if no finite duration was found — except a CAST's
         // durationless stack grant of a round-scoped status (ROUND_SCOPED_STATUSES), which lasts
         // the 1-turn window its own definition gives it.

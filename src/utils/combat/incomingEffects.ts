@@ -148,8 +148,9 @@ export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): 
  * `critFamily` entries (Iridium's passive, Hardened, Hyperion Gaze) do not stack with each other:
  * of those that apply to this hit only the largest counts, and it is its own entry in
  * `separatePcts` whatever its source (#673; an owner ruling, not measured in game).
- * `scope` must match the hit: 'dot' entries apply only when ctx.dotType is set; 'direct'
- * entries only when it is not.
+ * `scope` must match the hit: on a detonation (`ctx.detonation`) only 'detonation' entries
+ * apply; otherwise 'dot' entries apply only when ctx.dotType is set and 'direct' entries only when
+ * it is not.
  */
 export function incomingReductionPartsForHit(
     victimAbilities: Ability[],
@@ -162,7 +163,8 @@ export function incomingReductionPartsForHit(
     for (const a of victimAbilities) {
         if (a.config.type !== 'incoming-reduction') continue;
         const { scope, condition, pct, hpScaling } = a.config;
-        if ((scope === 'dot') !== isDot) continue;
+        if ((scope === 'detonation') !== (ctx.detonation === true)) continue;
+        if (scope !== 'detonation' && (scope === 'dot') !== isDot) continue;
         if (!conditionMet(condition, ctx)) continue;
         // hpScaling REPLACES the flat pct with a continuous HP-proportional value (Tormenter).
         const effectivePct = hpScaling

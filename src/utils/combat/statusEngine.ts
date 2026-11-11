@@ -674,7 +674,12 @@ export function isStackingFamily(name: string): boolean {
 
 /** Buffs whose every application is its own instance rather than overwriting another (owner
  *  ruling 2026-10-11): Repair Over Time (every tier) and Power Infused Nanobots. */
-const INDEPENDENT_BUFF_PREFIXES = ['Repair Over Time', 'Power Infused Nanobots'];
+const INDEPENDENT_BUFF_PREFIXES = [
+    'Repair Over Time',
+    // A boss's self-only Repair Over Time (Mamma Maglienza, #519).
+    'Repair Self Over Time',
+    'Power Infused Nanobots',
+];
 
 /** A status every application of which is its own store entry with its own timer — never contested,
  *  refreshed or shadowed by another copy (owner ruling 2026-10-11, #670): heal-over-time and

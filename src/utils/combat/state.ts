@@ -559,6 +559,8 @@ export interface CombatActor {
     /** Every board cell this actor occupies, anchor (`position`) first — a multi-hex bounty boss.
      *  Absent → the actor occupies `position` only. Targeting reads it through `cellsOf`. */
     footprint?: readonly Position[];
+    /** A bounty boss: its destruction defeats its whole side (see `sideIsWiped`). */
+    isBoss?: boolean;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
      *  plumbing — set at construction, consumed by resolvePositionalTarget. engine.ts's
      *  `targetingBypassesOf` ORs it with the timed `Rogue's Liberty` buff (rogueLiberty.ts) and
@@ -609,6 +611,12 @@ export interface CombatActor {
     /** Every attack of this actor crits at a 100% rate, whatever its affinity matchup or crit
      *  debuffs (ShipSkills.alwaysCrits). Absent → the ordinary capped crit rate. */
     alwaysCrits?: boolean;
+    /** Every debuff, DoT and purge this actor casts lands, whatever the victim's security or
+     *  affinity matchup (ShipSkills.alwaysLandsDebuffs, "infinite Hacking" — #519). Block Debuff
+     *  and control immunity still stop it. Absent → the ordinary landing rules. Read by the
+     *  positional engine only: the non-positional DPS fallbacks still apply the affinity
+     *  matchup. */
+    alwaysLandsDebuffs?: boolean;
     /** Pre-fight combat-modifier baseline: squad-leader modifier
      *  channels accumulated BEFORE combat (additive pct points). Hidden, permanent,
      *  non-purgeable — deliberately NOT statuses (they would leak into logs/purge/cleanse).
@@ -624,6 +632,7 @@ export function createActor(
         startCharged?: boolean;
         position?: Position;
         footprint?: readonly Position[];
+        isBoss?: boolean;
         ignoresForcedTargeting?: boolean;
         ignoresStealth?: boolean;
         doesntBreakStasis?: boolean;
@@ -632,6 +641,7 @@ export function createActor(
         chargeLossImmune?: boolean;
         controlImmune?: boolean;
         alwaysCrits?: boolean;
+        alwaysLandsDebuffs?: boolean;
         preFight?: PreFightCombatModifiers;
     }
 ): CombatActor {
@@ -660,6 +670,7 @@ export function createActor(
         pendingAccumulators: [],
         position: partial.position,
         footprint: partial.footprint,
+        isBoss: partial.isBoss,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
         ignoresStealth: partial.ignoresStealth,
         doesntBreakStasis: partial.doesntBreakStasis,

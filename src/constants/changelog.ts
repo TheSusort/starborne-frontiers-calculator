@@ -5,7 +5,9 @@ import { ChangelogEntry } from '../types/changelog';
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: killing a bounty boss now wins the fight.',
     'Combat simulator: Paracelsus and Faust death effects no longer trigger from bomb kills.',
+    'Bounty bosses: Mamma Maglienza and her Capo escorts can now be fought.',
     'Bounty bosses: Fenri Khaliriz can now be fought in the combat simulator.',
     'Gear wishlist: entries show their match count; click one to see its gear.',
     'Gear wishlist: entry names are optional and generated from the filters.',
