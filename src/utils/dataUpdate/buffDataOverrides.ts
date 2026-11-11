@@ -49,6 +49,16 @@ export const MANUAL_BUFF_ADDITIONS: Array<{
         description: '+10% Outgoing Direct Damage, Stackable',
         type: 'buff',
     },
+    {
+        name: 'Repair Self Over Time I',
+        description: '10% Applying Unit HP%',
+        type: 'buff',
+    },
+    {
+        name: 'Enrage Attack III',
+        description: '+6% Attack, Stackable',
+        type: 'buff',
+    },
     ...(
         [
             ['I', 15],

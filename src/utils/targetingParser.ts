@@ -5,7 +5,18 @@ import { Ship } from '../types/ship';
 // ---------------------------------------------------------------------------
 
 export type TargetSide = 'enemy' | 'ally';
-export type TargetSelection = 'front' | 'back' | 'skip' | 'all' | 'team' | 'others' | 'self';
+export type TargetSelection =
+    | 'front'
+    | 'back'
+    | 'skip'
+    | 'all'
+    | 'team'
+    | 'others'
+    | 'self'
+    /** The opposing row holding the most living units (`selectTargets`). */
+    | 'row-most'
+    /** The opposing row holding the fewest living units, never an empty one (`selectTargets`). */
+    | 'row-least';
 
 export interface ParsedTarget {
     raw: string;
@@ -32,7 +43,10 @@ export type PatternShape =
     | 'wings'
     | 'range'
     | 'pickaxe'
-    | 'all';
+    | 'all'
+    /** Every cell of the anchor's row (`Pattern-Row`), all origin: every unit in it is struck as a
+     *  primary target at full damage. */
+    | 'row';
 
 export interface PatternModifiers {
     support?: boolean;
@@ -106,6 +120,8 @@ const TARGET_MAP: Record<string, { side: TargetSide; selection: TargetSelection 
     back: { side: 'enemy', selection: 'back' },
     skip: { side: 'enemy', selection: 'skip' },
     all: { side: 'enemy', selection: 'all' },
+    'row-most': { side: 'enemy', selection: 'row-most' },
+    'row-least': { side: 'enemy', selection: 'row-least' },
     allies: { side: 'ally', selection: 'team' },
     'all-allies': { side: 'ally', selection: 'all' },
     'other-allies': { side: 'ally', selection: 'others' },
@@ -162,6 +178,7 @@ function detectShape(lower: string): PatternShape {
     if (/burst/.test(lower)) return 'burst';
     if (/line/.test(lower)) return 'line';
     if (/base/.test(lower)) return 'base';
+    if (/(^|-)row($|-)/.test(lower)) return 'row';
     // standalone "all" shape (Pattern-All, Pattern-Support-All) with no other shape token
     if (/(^|-)all($|-)/.test(lower)) return 'all';
     // pure range shape (Pattern-Range-N): only when all remaining tokens are known

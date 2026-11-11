@@ -252,6 +252,9 @@ export type AbilityTrigger =
     // event's slot discriminator). Self-scoped: the listener matches actorId === ownerId
     // && slot === 'charged'. Used by the Spearhead implant (all-allies Attack Up grant).
     | 'on-charged-cast'
+    // After the owner's own attack cast, active or charged (Mamma Maglienza: "after attacking").
+    // Self-scoped: once per cast, however many enemies the cast hit.
+    | 'on-attack-cast'
     // Warpstrike: owner dealt direct damage on its turn. Rides the `ability-performed` event,
     // which since the multi-hit full-walk epic (PR2) is emitted once per SUB-ATTACK, not once per
     // turn: a `hits: N` skill is N consecutive full-walk attacks and fires this N times. An AoE
@@ -418,6 +421,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-purged',
     // Spearhead: all-allies buff grant after the owner's charged skill.
     'on-charged-cast',
+    'on-attack-cast',
     // Phase 4: opposing-scoped mirror — reaction to an ENEMY's charged cast.
     'on-enemy-charged-cast',
     // Font of Power: buff grant to allies the owner repairs.
@@ -717,22 +721,24 @@ export interface IncomingHitContext {
     victimHasBarrierRecharging: boolean;
     /** Victim currently holds an active shield pool (shieldPool > 0) — gates self-shielded. */
     victimHasShield: boolean;
-    /** SP-E (Orel): the ATTACKER currently carries Taunt (self-buff) or Provoke (debuff).
+    /** Orel: the ATTACKER currently carries Taunt (self-buff) or Provoke (debuff).
      *  Live-derived by the engine off the real attacker id where one exists (the block-step ctx,
      *  the positional per-hit reduction ctx, the aggregate enemy-path ctx); defaults false at
      *  sites with no single real attacker (reflect ping-back, DoT-tick reduction) — inert unless
      *  an ability's config carries `condition:'attacker-taunted-or-provoke'`. */
     attackerTauntedOrProvoked: boolean;
-    /** Epic PR12 (C): the VICTIM's own live HP% (0..100) at hit time, for HP-proportional
+    /** The VICTIM's own live HP% (0..100) at hit time, for HP-proportional
      *  incoming-reduction scaling (Tormenter's `hpScaling`). Live-derived by the engine;
      *  defaults 100 (full HP) where unused/inapplicable — inert unless an ability's config
      *  carries `hpScaling`. */
     selfHpPct: number;
     /** Meatshield: true when THIS hit is a chunk redirected onto the victim via Protection
-     *  (engine sets it from `cause.isProtectionTransfer` at the transform block). OPTIONAL —
-     *  every other construction site omits it (→ undefined → treated as false in conditionMet),
-     *  keeping those sites byte-identical. */
+     *  (engine sets it from `cause.isProtectionTransfer` at the transform block). Absent →
+     *  false in conditionMet. */
     viaProtectionRedirect?: boolean;
+    /** True for a detonation: a Bomb or Echoing Burst burst, or a detonate-DoT burst. Only
+     *  `scope: 'detonation'` reductions apply to it. Absent → a direct hit or a DoT tick. */
+    detonation?: boolean;
 }
 
 /**
@@ -1154,7 +1160,9 @@ export type AbilityConfig =
     // D-PR3 victim-side incoming-damage reduction (folded at the crit-aware computation sites).
     | {
           type: 'incoming-reduction';
-          scope: 'direct' | 'dot';
+          /** Which incoming damage the reduction applies to: a direct hit, a DoT tick, or a
+           *  detonation (a Bomb or Echoing Burst detonation, or a detonate-DoT burst). */
+          scope: 'direct' | 'dot' | 'detonation';
           condition: IncomingCondition;
           /** Positive magnitude (percentage points); folded as a reduction into the incoming channel.
            *  IGNORED when `hpScaling` is set (Tormenter) — the effective reduction is computed
@@ -1636,6 +1644,10 @@ export interface ShipSkills {
     /** True when the ship's passive text declares immunity to control debuffs (Fenri). Read
      *  onto `CombatActor.controlImmune`, whose doc holds what the immunity does. */
     controlImmune?: boolean;
+    /** True when the ship's passive text says it "has infinite Hacking" (Mamma Maglienza, #519):
+     *  every debuff it inflicts lands, with no landing roll, whatever the victim's security or
+     *  affinity (owner ruling 2026-11-11). */
+    alwaysLandsDebuffs?: boolean;
     /** True when the ship's refit-active text says "This Unit's attacks always critically hit"
      *  (Tormenter, Asphodel R2+). Read by the engine onto CombatActor.alwaysCrits: every attack
      *  then rolls at a 100% crit rate, which no affinity disadvantage or Crit Rate Down lowers

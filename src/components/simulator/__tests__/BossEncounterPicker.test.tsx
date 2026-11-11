@@ -29,4 +29,15 @@ describe('BossEncounterPicker', () => {
         fireEvent.click(screen.getByRole('option', { name: 'None' }));
         expect(onChange).toHaveBeenCalledWith({});
     });
+
+    it('selecting Mamma loads the boss and all three Capos', () => {
+        const onChange = vi.fn();
+        render(<BossEncounterPicker board={{}} onChange={onChange} />);
+        fireEvent.click(trigger());
+        fireEvent.click(screen.getByRole('option', { name: 'Mamma Maglienza — Lv 32' }));
+        const board = onChange.mock.calls[0][0] as BoardState;
+        expect(Object.keys(board).sort()).toEqual(['B2', 'M4', 'T1', 'T2']);
+        expect(board.T1?.ship.id).toBe('boss:maglienza:32');
+        expect(board.T2?.ship.id).toBe('npc:capo:124');
+    });
 });

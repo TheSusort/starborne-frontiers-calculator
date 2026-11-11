@@ -69,9 +69,11 @@ describe('fetch-buffs manual additions', () => {
         }
     );
 
-    it('carries Pressing Onslaught, the White Phosphorus tiers, Defense Surge and the Reflect tiers', () => {
+    it("carries Pressing Onslaught, Mamma's two grants, the White Phosphorus tiers, Defense Surge and the Reflect tiers", () => {
         expect(MANUAL_BUFF_ADDITIONS.map((b) => b.name)).toEqual([
             'Pressing Onslaught',
+            'Repair Self Over Time I',
+            'Enrage Attack III',
             'White Phosphorus I',
             'White Phosphorus II',
             'White Phosphorus III',

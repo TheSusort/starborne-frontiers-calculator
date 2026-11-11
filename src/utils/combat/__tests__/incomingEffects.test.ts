@@ -76,7 +76,7 @@ const red = (
         condition?: IncomingCondition;
         critFamily?: boolean;
         equipment?: boolean;
-        scope?: 'direct' | 'dot';
+        scope?: 'direct' | 'dot' | 'detonation';
     } = {}
 ): Ability => ({
     id: `r-${pct}-${opts.condition ?? 'always'}-${opts.equipment ? 'eq' : 'kit'}`,
@@ -96,6 +96,31 @@ const red = (
 });
 
 describe('incomingReductionPartsForHit (#672 buckets)', () => {
+    it('a detonation-scoped reduction reduces neither a direct hit nor a DoT tick', () => {
+        const kit = [red(50, { scope: 'detonation' })];
+        expect(incomingReductionPartsForHit(kit, ctx())).toEqual({
+            passivePct: 0,
+            separatePcts: [],
+        });
+        expect(incomingReductionPartsForHit(kit, ctx({ dotType: 'inferno' }))).toEqual({
+            passivePct: 0,
+            separatePcts: [],
+        });
+    });
+    it('a detonation reads only detonation-scoped reductions', () => {
+        const kit = [
+            red(50, { scope: 'detonation' }),
+            red(30, { scope: 'dot' }),
+            red(20, { scope: 'direct' }),
+        ];
+        expect(incomingReductionPartsForHit(kit, ctx({ detonation: true }))).toEqual({
+            passivePct: 50,
+            separatePcts: [],
+        });
+        expect(
+            incomingReductionPartsForHit(kit, ctx({ detonation: true, dotType: 'inferno' }))
+        ).toEqual({ passivePct: 50, separatePcts: [] });
+    });
     it('ship passives sum into passivePct', () => {
         const p = incomingReductionPartsForHit(
             [red(25, { condition: 'self-stealth' }), red(10, { condition: 'self-stealth' })],

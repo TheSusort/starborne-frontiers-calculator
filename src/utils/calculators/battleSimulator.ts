@@ -353,6 +353,7 @@ interface RosterEntry {
     name: string;
     position: Position;
     footprint?: readonly Position[];
+    isBoss?: boolean;
     maxHp: number;
 }
 
@@ -475,7 +476,8 @@ const _checkLogSuperset: _AssertLogSupersetOfAssembled = true;
  * Outcome: the first round that wipes a side decides it. A side that wipes the other while keeping a
  * ship alive wins. When both sides are wiped in the same round, the side that dealt the final
  * killing damage wins: the side whose ship was destroyed last loses (a dying ship's counter or
- * reaction that kills the last opposing ship wins it). Reaching `numRounds` with both still alive
+ * reaction that kills the last opposing ship wins it) — unless exactly one side lost a bounty boss,
+ * which loses. Reaching `numRounds` with both still alive
  * is an ENEMY win — a timeout is a defeat (docs/combat-system.md §1, "Round limit exceeded →
  * Defeat").
  */
@@ -805,26 +807,32 @@ export function assembleBattleResult(args: {
 
         rounds.push({ round, ships, turnOrder });
 
-        // Termination: first round where ALL of one side's actors are destroyed.
-        // A side counts as wiped only if it has >=1 member AND all are destroyed
+        // Termination: first round where ALL of one side's actors are destroyed, or any of its
+        // boss actors is. A side counts as defeated only if it has >=1 member
         // ([].every(...) === true). Both sides are fielded (checked above), so this guard is
-        // belt-and-braces.
+        // belt-and-braces. The engine's `sideIsWiped` applies the same rule.
+        const destroyedBy = (r: RosterEntry): boolean => {
+            const d = destroyedAt.get(r.actorId);
+            return d !== undefined && d <= round;
+        };
+        const lostBoss = (side: 'player' | 'enemy'): boolean =>
+            roster.some((r) => r.side === side && r.isBoss === true && destroyedBy(r));
         const isWiped = (side: 'player' | 'enemy'): boolean => {
             const members = roster.filter((r) => r.side === side);
-            return (
-                members.length > 0 &&
-                members.every((r) => {
-                    const d = destroyedAt.get(r.actorId);
-                    return d !== undefined && d <= round;
-                })
-            );
+            return members.length > 0 && (members.every(destroyedBy) || lostBoss(side));
         };
         const playerWiped = isWiped('player');
         const enemyWiped = isWiped('enemy');
 
         if (playerWiped || enemyWiped) {
             lastRound = round;
-            if (playerWiped && enemyWiped) {
+            const playerLostBoss = lostBoss('player');
+            const enemyLostBoss = lostBoss('enemy');
+            if (playerWiped && enemyWiped && playerLostBoss !== enemyLostBoss) {
+                // A destroyed boss defeats its side at the end of that turn (the engine's
+                // `bossDestroyed`), so the side that lost its boss loses whatever else fell.
+                winner = playerLostBoss ? 'enemy' : 'player';
+            } else if (playerWiped && enemyWiped) {
                 // Both wiped this round: the side that dealt the final killing damage wins, so
                 // the side whose ship was destroyed LAST loses.
                 let lastSide: 'player' | 'enemy' | undefined;
@@ -887,6 +895,9 @@ export interface BattlePlacement {
     /** Every cell the ship occupies, `position` first (a multi-hex bounty boss). Absent →
      *  `position` only. */
     footprint?: readonly Position[];
+    /** A bounty boss: its side is defeated the moment this unit is destroyed, even with other
+     *  units alive. */
+    isBoss?: boolean;
 }
 
 export interface BattleSimulationInput {
@@ -1022,6 +1033,7 @@ interface PlacementPlan {
     name: string;
     position: Position;
     footprint: readonly Position[] | undefined;
+    isBoss: boolean;
     /** Raw `Ship.faction` — drives the pre-fight squad-leader aura's faction gating.
      *  Narrowed to the real union via `asFactionName` only at the engine-input boundary
      *  (`EnemyActorInput.faction` etc.), not here. */
@@ -1073,6 +1085,7 @@ function planPlacement(
         name: p.ship.name,
         position: p.position,
         footprint: p.footprint,
+        isBoss: p.isBoss === true,
         faction: p.ship.faction,
         role: p.ship.type,
         stats: resolveStats(p),
@@ -1246,6 +1259,7 @@ export function simulateBattle(
             ...preFightModifiersFor(plan.id),
             position: plan.position,
             footprint: plan.footprint,
+            isBoss: plan.isBoss,
             target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
             pattern: plan.targeting?.pattern,
             chargedPattern: plan.chargedTargeting?.pattern,
@@ -1324,6 +1338,7 @@ export function simulateBattle(
                 affinityCritPenalty: aff.critPenalty,
                 position: plan.position,
                 footprint: plan.footprint,
+                isBoss: plan.isBoss,
                 target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
                 pattern: plan.targeting?.pattern,
                 chargedPattern: plan.chargedTargeting?.pattern,
@@ -1387,6 +1402,7 @@ export function simulateBattle(
         /* eslint-enable no-restricted-syntax */
         position: focus.position,
         footprint: focus.footprint,
+        isBoss: focus.isBoss,
         target: withStealthBypass(focus.targeting?.target, focus.activeIgnoresStealth),
         pattern: focus.targeting?.pattern,
         chargedPattern: focus.chargedTargeting?.pattern,
@@ -1480,6 +1496,7 @@ export function simulateBattle(
             name: plan.name,
             position: plan.position,
             footprint: plan.footprint,
+            isBoss: plan.isBoss,
             maxHp: plan.stats.hp,
         })),
         ...enemyPlans.map((plan) => ({
@@ -1488,6 +1505,7 @@ export function simulateBattle(
             name: plan.name,
             position: plan.position,
             footprint: plan.footprint,
+            isBoss: plan.isBoss,
             maxHp: plan.stats.hp,
         })),
     ];

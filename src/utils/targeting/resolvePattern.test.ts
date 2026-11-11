@@ -605,3 +605,14 @@ describe.skipIf(!existsSync(CSV_PATH))('ship-targeting.csv drift check (dev-only
         }
     });
 });
+
+describe('resolveCells — whole row', () => {
+    it('Pattern-Row covers every cell of the anchor row, all origin', () => {
+        const p = parsePattern('Pattern-Row');
+        expect(p.shape).toBe('row');
+        expect(resolveCells(p, 'M3')).toEqual(
+            ['M1', 'M2', 'M3', 'M4'].map((position) => ({ position, role: 'origin' }))
+        );
+        expect(resolveCells(p, 'B1').map((c) => c.position)).toEqual(['B1', 'B2', 'B3', 'B4']);
+    });
+});

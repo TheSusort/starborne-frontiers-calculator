@@ -4823,10 +4823,17 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         The Encounter option on the enemy board loads a bounty boss
-                                        (Fenri Khaliriz, level 32) in place of a team. He fills two
-                                        cells, so the rest of the enemy board stays closed while he
-                                        is loaded, and the enemy squad leader is hidden. Encounters
-                                        need the normal board; None brings the empty board back
+                                        fight in place of a team: Fenri Khaliriz (level 32) alone,
+                                        or Mamma Maglienza (level 32) with three level 124 Capo
+                                        escorts. Mamma fills four cells and each Capo one, so the
+                                        rest of the enemy board stays closed and none of them can be
+                                        moved or removed alone. Shift+Click still opens the stat
+                                        editor on each. The enemy squad leader is hidden. Killing
+                                        the boss wins the fight even with escorts left standing.
+                                        Mamma and the Capos hit a whole row of your team: the
+                                        fullest row for Mamma, the emptiest for the Capos.
+                                        Encounters need the normal board; None brings the empty
+                                        board back
                                     </li>
                                 </ul>
                             </div>

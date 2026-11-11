@@ -57,9 +57,10 @@
  *   8. per-victim DoT tick batch  `tickDoTs` → `applyVictimDamage`  (the ALLY branch)
  *
  * The remaining paths (bomb splash, bomb/accumulator burst, forced detonation, DoT-detonation
- * bypass) fold no defence and meet no other victim-side reduction, so raw === post there by
- * construction — the `?? rawDamage` default in the funnel, and the suite-health test at the bottom.
- * The DoT tick batch is NOT in that group: `incomingDotFactor`
+ * bypass) fold no defence. The victim's own DoT and detonation reductions (`incoming-reduction`
+ * with `scope: 'dot' | 'detonation'`) do reach them, so each passes its unreduced amount as
+ * `preMitigationDamage`; a victim without one has raw === post there by construction. The DoT
+ * tick batch also has two axes: `incomingDotFactor`
  * (Vortex Veil) is a victim-side reduction, so a tick on a veil carrier has two distinct axes. Both
  * tick sites carry a `preMitigationDamage` write; only the heal-target one had a test.
  *

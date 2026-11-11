@@ -98,3 +98,45 @@ describe('selectTargets — enemy all spans every row in scan order (caster M2)'
         expect(r.anchor).toBe('M4');
     });
 });
+
+describe('selectTargets — row with the most enemies', () => {
+    const most = (casterPosition: 'T1' | 'M2' | 'B1', enemyOccupied: string[]) =>
+        selectTargets(enemy('row-most'), {
+            casterPosition,
+            enemyOccupied: enemyOccupied as never,
+        });
+    it('picks the row holding the most enemies, front-most cell as anchor', () => {
+        expect(most('T1', ['T4', 'B1', 'B3', 'M2'])).toEqual({
+            ordered: ['B3', 'B1'],
+            anchor: 'B3',
+        });
+    });
+    it('a three-way tie goes to M, whatever the caster row', () => {
+        expect(most('T1', ['T4', 'M1', 'B2']).anchor).toBe('M1');
+    });
+    it('a B/T tie goes to B, from a T-row caster', () => {
+        expect(most('T1', ['T4', 'T2', 'B2', 'B1']).anchor).toBe('B2');
+    });
+});
+
+describe('selectTargets — row with the least enemies', () => {
+    const least = (casterPosition: 'T1' | 'M2' | 'B1', enemyOccupied: string[]) =>
+        selectTargets(enemy('row-least'), {
+            casterPosition,
+            enemyOccupied: enemyOccupied as never,
+        });
+    it('never picks an empty row', () => {
+        // M is empty; B (1) beats T (2).
+        expect(least('T1', ['T4', 'T3', 'B2'])).toEqual({ ordered: ['B2'], anchor: 'B2' });
+    });
+    it("a tie goes to the caster's own row first", () => {
+        expect(least('T1', ['T4', 'M3', 'B2']).anchor).toBe('T4');
+        expect(least('B1', ['T4', 'M3', 'B2']).anchor).toBe('B2');
+    });
+    it("without the caster's row in the tie, M then B then T", () => {
+        // Caster row T holds 2; M, B tie on 1 → M.
+        expect(least('T1', ['T4', 'T3', 'M3', 'B2']).anchor).toBe('M3');
+        // Caster row M holds 2; B, T tie on 1 → B.
+        expect(least('M2', ['T4', 'M3', 'M1', 'B2']).anchor).toBe('B2');
+    });
+});

@@ -113,6 +113,7 @@ import {
     parseStasisBreakExemption,
     parseChargeLossImmune,
     parseControlImmune,
+    parseInfiniteHacking,
     parseAlwaysCrits,
     detectIgnoresForcedTargeting,
     detectIgnoresStealth,
@@ -329,12 +330,14 @@ function enemyHasNamesFromClause(rawText: string): string[] {
 /**
  * Effect names gating a "deals N% damage to enemies (with|afflicted with) <effect>" clause.
  * Scoped to the damage clause (no sentence break between) so it only gates that damage ability.
+ * The effect must be named right after "with": "to all enemies in the row with the most enemies,
+ * … inflicts <X>" (Mamma Maglienza) is a row choice, and <X> is inflicted, not required.
  */
 function damageEnemyEffectNamesFromClause(rawText: string): string[] {
     // Keep unit-skill tags but drop damage/aid tags so "deals N% damage to …" matches across them.
     const t = rawText.replace(/<\/?unit-(?:aid|damage)>/gi, '');
     const m = t.match(
-        /deals?\s+\d+(?:\.\d+)?%\s+damage\s+to\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:with|afflicted\s+with)\b([^.]*)/i
+        /deals?\s+\d+(?:\.\d+)?%\s+damage\s+to\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:with|afflicted\s+with)\s+(<unit-skill>[^.]*)/i
     );
     if (!m) return [];
     return [...m[1].matchAll(/<unit-skill>([^<]+)<\/unit-skill>/gi)].map((x) => x[1].trim());
@@ -878,7 +881,7 @@ function parseIncomingCritReduction(text: string): number | null {
  *  scope:'direct' only; "all incoming damage"/unscoped phrasings emit BOTH 'direct' and
  *  'dot'). `pct` XOR `hpScaling` — never both. */
 interface ParsedIncomingDamageReduction {
-    scopes: ('direct' | 'dot')[];
+    scopes: ('direct' | 'dot' | 'detonation')[];
     condition: IncomingCondition;
     pct?: number;
     hpScaling?: { perUnit: number; cap: number };
@@ -970,14 +973,15 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
     }
 
     // "This Unit takes N% less damage from Damage over Time effects" (Voron) / "… from DoTs"
-    // (Fenri) — a flat reduction against the unit's OWN incoming DoT ticks.
+    // (Fenri) — a flat reduction against the unit's OWN incoming DoT ticks. "… from DoTs and
+    // Detonations" (Mamma Maglienza) adds the same reduction against detonations.
     const voronM =
-        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+(?:damage\s+over\s+time\s+effects|dots?\b)/i.exec(
+        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+(?:damage\s+over\s+time\s+effects|dots?\b)(\s+and\s+detonations\b)?/i.exec(
             plain
         );
     if (voronM) {
         out.push({
-            scopes: ['dot'],
+            scopes: voronM[2] ? ['dot', 'detonation'] : ['dot'],
             condition: 'always',
             pct: parseFloat(voronM[1]),
             matchIndex: voronM.index,
@@ -4424,6 +4428,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
 
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
     const controlImmune = getShipSkillRows(ship).some((row) => parseControlImmune(row.text));
+    const alwaysLandsDebuffs = getShipSkillRows(ship).some((row) => parseInfiniteHacking(row.text));
     const alwaysCrits = getShipSkillRows(ship).some((row) => parseAlwaysCrits(row.text));
 
     // Ship-kit correctness backlog: check ALL skill rows for the "ignores Taunt and Provoke"
@@ -4441,6 +4446,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ...(!doesntBreakStasis && stasisBreakExemptWhen ? { stasisBreakExemptWhen } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
         ...(controlImmune ? { controlImmune: true } : {}),
+        ...(alwaysLandsDebuffs ? { alwaysLandsDebuffs: true } : {}),
         ...(alwaysCrits ? { alwaysCrits: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),
         ...(ignoresStealth ? { ignoresStealth: true } : {}),

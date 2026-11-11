@@ -1,6 +1,6 @@
 import { Position } from '../../types/encounters';
 import { ParsedPattern } from '../targetingParser';
-import { ALL_POSITIONS, axialToPosition, positionToAxial } from './board';
+import { ALL_POSITIONS, axialToPosition, positionToAxial, rowOf } from './board';
 import {
     CellRole,
     OFFSET_TABLES,
@@ -29,6 +29,13 @@ export function resolveCells(pattern: ParsedPattern, anchor: Position): Resolved
     // Special case: whole-team patterns ignore geometry.
     if (pattern.shape === 'all') {
         return ALL_POSITIONS.map((position) => ({ position, role: 'origin' as const }));
+    }
+    // Special case: the whole row the anchor sits in, every cell origin.
+    if (pattern.shape === 'row') {
+        return ALL_POSITIONS.filter((p) => rowOf(p) === rowOf(anchor)).map((position) => ({
+            position,
+            role: 'origin' as const,
+        }));
     }
     // Special case: support whole-lane (range 'lane') is a caster-centered line.
     if (pattern.range === 'lane') {

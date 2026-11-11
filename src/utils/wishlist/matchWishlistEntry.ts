@@ -3,6 +3,19 @@ import { GearSetName } from '../../constants/gearSets';
 import { isGearSlotName } from '../../constants/gearTypes';
 import { WishlistEntry } from '../../types/wishlist';
 
+/** A gear piece rolls at most this many substats. */
+export const MAX_GEAR_SUBSTATS = 4;
+
+/**
+ * How many of `filters.subStats` a piece must roll: `subStatsMin`, or all of them when unset,
+ * never more than a piece can hold (`MAX_GEAR_SUBSTATS`), so a list of five or more stays
+ * matchable.
+ */
+export function requiredSubStats(filters: WishlistEntry['filters']): number {
+    const count = filters.subStats?.length ?? 0;
+    return Math.min(filters.subStatsMin ?? count, count, MAX_GEAR_SUBSTATS);
+}
+
 export function matchesWishlistEntry(gear: GearPiece, entry: WishlistEntry): boolean {
     const { filters } = entry;
 
@@ -38,8 +51,7 @@ export function matchesWishlistEntry(gear: GearPiece, entry: WishlistEntry): boo
                 (s) => s.name === f.name && (f.type === undefined || f.type === s.type)
             )
         ).length;
-        const required = filters.subStatsMin ?? filters.subStats.length;
-        if (matched < required) return false;
+        if (matched < requiredSubStats(filters)) return false;
     }
 
     return true;

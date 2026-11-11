@@ -34,7 +34,7 @@ import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { Modal } from '../../components/ui/layout/Modal';
 import { BioContent } from '../../components/ship/BioContent';
 import { parseShipTargeting, PatternShape } from '../../utils/targetingParser';
-import { TARGETING_RULES, PATTERN_SHAPES } from '../../constants/targetingRules';
+import { SHIP_FILTER_TARGETING_RULES, PATTERN_SHAPES } from '../../constants/targetingRules';
 import {
     getShipTargetingFacets,
     matchesTargetingFilters,
@@ -256,7 +256,7 @@ export const ShipIndexPage: React.FC = () => {
             label: 'Target',
             values: state.filters.targetSelections ?? [],
             onChange: setSelectedTargetSelections,
-            options: Object.values(TARGETING_RULES).map((rule) => ({
+            options: SHIP_FILTER_TARGETING_RULES.map((rule) => ({
                 value: rule.id,
                 label: rule.label,
             })),

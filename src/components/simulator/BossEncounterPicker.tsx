@@ -1,7 +1,12 @@
 import React, { useMemo } from 'react';
 import { Select } from '../ui/Select';
-import { BOUNTY_BOSSES, bossShip, bossShipId, parseBossShipId } from '../../constants/bountyBosses';
-import { loadedBossShipId } from '../../utils/simulator/bossBoard';
+import {
+    BOUNTY_BOSSES,
+    BOUNTY_ENCOUNTERS,
+    bossShipId,
+    parseBossShipId,
+} from '../../constants/bountyBosses';
+import { encounterBoard, loadedBossShipId } from '../../utils/simulator/bossBoard';
 import type { BoardState } from './PlacementBoard';
 
 const NONE = '';
@@ -9,7 +14,7 @@ const NONE = '';
 interface Props {
     /** The enemy board; the selected encounter is whichever boss it holds at its anchor. */
     board: BoardState;
-    /** Replaces the whole board: the boss at its anchor, or `{}` for None. */
+    /** Replaces the whole board: the boss at its anchor and its adds, or `{}` for None. */
     onChange: (board: BoardState) => void;
     disabled?: boolean;
     helpLabel?: string;
@@ -19,12 +24,17 @@ const BossEncounterPicker: React.FC<Props> = ({ board, onChange, disabled, helpL
     const options = useMemo(
         () => [
             { value: NONE, label: 'None' },
-            ...BOUNTY_BOSSES.flatMap((boss) =>
-                Object.keys(boss.statsByLevel).map((level) => ({
-                    value: bossShipId(boss.id, Number(level)),
-                    label: `${boss.name} — Lv ${level}`,
-                }))
-            ),
+            ...BOUNTY_ENCOUNTERS.flatMap((encounter) => {
+                const boss = BOUNTY_BOSSES.find((candidate) => candidate.id === encounter.bountyId);
+                return boss
+                    ? [
+                          {
+                              value: bossShipId(boss.id, encounter.level),
+                              label: `${boss.name} — Lv ${encounter.level}`,
+                          },
+                      ]
+                    : [];
+            }),
         ],
         []
     );
@@ -35,10 +45,8 @@ const BossEncounterPicker: React.FC<Props> = ({ board, onChange, disabled, helpL
             onChange({});
             return;
         }
-        const ship = bossShip(parsed.id, parsed.level);
-        const boss = BOUNTY_BOSSES.find((candidate) => candidate.id === parsed.id);
-        if (!ship || !boss) return;
-        onChange({ [boss.footprint[0]]: { ship } });
+        const loaded = encounterBoard(parsed.id, parsed.level);
+        if (loaded) onChange(loaded);
     };
 
     return (

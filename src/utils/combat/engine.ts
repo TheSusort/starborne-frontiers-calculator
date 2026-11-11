@@ -68,6 +68,7 @@ import {
     effectiveStatsOf,
     effectiveOutgoingStatsOf,
     separateOutgoingModifiersOf,
+    landsDespiteAffinity,
     liveDebuffLandingChance,
     heldReflectPct,
 } from './effectiveStats';
@@ -931,6 +932,8 @@ export interface EnemyActorInput {
     /** Every board cell this actor occupies, anchor first (a multi-hex bounty boss). Absent →
      *  `position` only. */
     footprint?: readonly Position[];
+    /** A bounty boss: its destruction defeats its whole side. */
+    isBoss?: boolean;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1083,12 +1086,14 @@ export function buildEnemyPlayerActorRuntime(
         startCharged: e.startCharged,
         position: e.position,
         footprint: e.footprint,
+        isBoss: e.isBoss,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
         ignoresStealth: e.ignoresStealth,
         doesntBreakStasis: e.doesntBreakStasis,
         stasisBreakExemptWhen: e.stasisBreakExemptWhen,
         chargeLossImmune: e.chargeLossImmune,
         alwaysCrits: e.shipSkills?.alwaysCrits,
+        alwaysLandsDebuffs: e.shipSkills?.alwaysLandsDebuffs,
         controlImmune: e.shipSkills?.controlImmune,
         affinity: e.affinity,
         preFight: e.preFight,
@@ -1162,7 +1167,8 @@ export function buildEnemyPlayerActorRuntime(
                   // (DPS/unit mode, single representative opponent) → the static flag, which
                   // equals the target-aware result there.
                   targetAffinity !== undefined
-                    ? getAffinityMatchup(e.affinity, targetAffinity) !== 'disadvantage'
+                    ? getAffinityMatchup(e.affinity, targetAffinity) !== 'disadvantage' ||
+                      landsDespiteAffinity(actor)
                     : !affinityDisadvantage
                 : // `targetLandingChance` is THIS victim's own hacking-vs-security chance,
                   // supplied by the reactive path (which knows the victim it is inflicting on).
@@ -1581,6 +1587,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     /** Every board cell this actor occupies, anchor first (a multi-hex bounty boss). Absent →
      *  `position` only. */
     footprint?: readonly Position[];
+    /** A bounty boss: its destruction defeats its whole side. */
+    isBoss?: boolean;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1723,6 +1731,8 @@ export interface CombatEngineInput {
         /** Every board cell this actor occupies, anchor first (a multi-hex bounty boss). Absent →
          *  `position` only. */
         footprint?: readonly Position[];
+        /** A bounty boss: its destruction defeats its whole side. */
+        isBoss?: boolean;
         /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
          *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
          *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1779,6 +1789,8 @@ export interface CombatEngineInput {
     /** Every board cell this actor occupies, anchor first (a multi-hex bounty boss). Absent →
      *  `position` only. */
     footprint?: readonly Position[];
+    /** A bounty boss: its destruction defeats its whole side. */
+    isBoss?: boolean;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -2529,12 +2541,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         startCharged,
         position: input.position,
         footprint: input.footprint,
+        isBoss: input.isBoss,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
         ignoresStealth: input.ignoresStealth,
         doesntBreakStasis: input.doesntBreakStasis,
         stasisBreakExemptWhen: input.stasisBreakExemptWhen,
         chargeLossImmune: input.chargeLossImmune,
         alwaysCrits: input.shipSkills.alwaysCrits,
+        alwaysLandsDebuffs: input.shipSkills.alwaysLandsDebuffs,
         controlImmune: input.shipSkills.controlImmune,
         affinity: input.affinity,
         preFight: input.preFight,
@@ -2652,12 +2666,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             startCharged: t.startCharged,
             position: t.position,
             footprint: t.footprint,
+            isBoss: t.isBoss,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
             ignoresStealth: t.ignoresStealth,
             doesntBreakStasis: t.doesntBreakStasis,
             stasisBreakExemptWhen: t.stasisBreakExemptWhen,
             chargeLossImmune: t.chargeLossImmune,
             alwaysCrits: t.walk?.shipSkills.alwaysCrits,
+            alwaysLandsDebuffs: t.walk?.shipSkills.alwaysLandsDebuffs,
             controlImmune: t.walk?.shipSkills.controlImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
@@ -2776,7 +2792,8 @@ export function runCombat(rawInput: CombatEngineInput): {
               // target — an 'apply' lands UNLESS the applier is at a disadvantage. Absent
               // (DPS/unit mode, single representative opponent) → the static flag.
               targetAffinity !== undefined
-                ? getAffinityMatchup(input.affinity, targetAffinity) !== 'disadvantage'
+                ? getAffinityMatchup(input.affinity, targetAffinity) !== 'disadvantage' ||
+                  landsDespiteAffinity(attacker)
                 : !affinityDisadvantage
             : // Per-victim chance when the caller knows its victim (the reactive path);
               // the cached turn-target chance otherwise (the cast path).
@@ -2991,7 +3008,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                   // target — an 'apply' lands UNLESS this actor is at a disadvantage. Absent
                   // (DPS/unit mode, single representative opponent) → the static flag.
                   targetAffinity !== undefined
-                    ? getAffinityMatchup(w.affinity, targetAffinity) !== 'disadvantage'
+                    ? getAffinityMatchup(w.affinity, targetAffinity) !== 'disadvantage' ||
+                      landsDespiteAffinity(teamActor)
                     : !teamAffinityDisadvantage
                 : // Mirrors the attacker closure — per-victim chance from the reactive
                   // path, cached turn-target chance for the cast path.
@@ -5335,6 +5353,34 @@ export function runCombat(rawInput: CombatEngineInput): {
                 attackerTauntedOrProvoked: false,
             })
         );
+    /** The victim's factor on a detonation's damage: its `scope: 'detonation'` reductions alone
+     *  (Mamma Maglienza, "50% less damage from DoTs and Detonations"). A Bomb or Echoing Burst
+     *  burst and Bomb splash (a dying ship's splash, Demolisher's splash copy) take this factor; a
+     *  detonate-DoT burst takes the stronger of it and the victim's DoT reduction for that family,
+     *  never both (`detonatedDotFactor`). */
+    const incomingDetonationReductionFor = (victimId: string): number =>
+        composeDotReductionFactor(
+            incomingReductionPartsForHit(incomingAbilitiesOf(victimId), {
+                didCrit: false,
+                attackerStealthed: false,
+                victimStealthed: isStealthed(victimId),
+                victimTurnBlocked: isTurnBlocked(victimId),
+                hitIndexThisRound: 0,
+                attackerHasDot: false,
+                victimHasBarrierRecharging: hasBarrierRecharging(victimId),
+                victimHasShield: hasShield(victimId),
+                selfHpPct: selfHpPctOf(victimId),
+                attackerTauntedOrProvoked: false,
+                detonation: true,
+            })
+        );
+    /** A detonated DoT is both a DoT and a detonation; one "less damage from DoTs and
+     *  Detonations" clause reduces it once, so the stronger of the two factors applies. */
+    const detonatedDotFactor = (victimId: string, dotType: TickableDoTType): number =>
+        Math.min(
+            incomingDotReductionFor(victimId, dotType),
+            incomingDetonationReductionFor(victimId)
+        );
     // Orel: does the given actor (the ATTACKER of an incoming hit) currently carry Taunt
     // (a self-buff it granted itself) or Provoke (a debuff placed on it by someone else)? Sibling
     // to attackerHasDot — same "evaluated against the attacker" shape, different status family.
@@ -6054,9 +6100,19 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     // A never-alive side is therefore NOT a wipe, and the run continues exactly as before — which
     // is also the honest reading: nothing was killed.
+    const sideDefeated = (actors: readonly CombatActor[]): boolean =>
+        actors.every((a) => a.destroyedRound !== undefined) ||
+        actors.some((a) => a.isBoss === true && a.destroyedRound !== undefined);
     const sideIsWiped = (): boolean =>
-        enemyAttackerActors.every((a) => a.destroyedRound !== undefined) ||
-        allPlayerActors.every((a) => a.destroyedRound !== undefined);
+        sideDefeated(enemyAttackerActors) || sideDefeated(allPlayerActors);
+    // A destroyed bounty boss defeats its side at the END OF THAT TURN (owner ruling, #519): the
+    // round's remaining combat — the end-of-round reactives and the Toxic Overflow spread — does
+    // not run, so nothing after the boss's turn can wipe the other side too. An ordinary wipe
+    // keeps the round tail. `battleSimulator`'s outcome applies the same rule to the winner.
+    const bossDestroyed = (): boolean =>
+        [...enemyAttackerActors, ...allPlayerActors].some(
+            (a) => a.isBoss === true && a.destroyedRound !== undefined
+        );
     let matchOver = false;
 
     // §4.5 Stasis reductions owed by direct hits, keyed by victim id: one per hit that landed on
@@ -6081,7 +6137,7 @@ export function runCombat(rawInput: CombatEngineInput): {
      * area pattern neither counts nor spends, and nor does a hit Protection moved wholly onto
      * protectors (R139, `directlyDamagesVictim`). A cast's hit is aimed at each of its
      * sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds` — the anchor, or every
-     * victim of a whole-battlefield attack, owner ruling R110). The FIRST aimed hit on a victim in
+     * victim where `everyVictimIsPrimary` holds). The FIRST aimed hit on a victim in
      * a chain is the primary-target hit; Stalwart's counter and buff, Nosorog's reflect and
      * Malvex's damage-taken shield read that one answer. Keys are `victimId|root`; roots are
      * unique for the whole run.
@@ -6482,7 +6538,8 @@ export function runCombat(rawInput: CombatEngineInput): {
          * True while the funnel is applying a cast whose pattern is the whole battlefield
          * (`isWholeBattlefieldPattern` — `Pattern-All`, Curator). Protection skips such a hit —
          * its game text: "Damage is not redirected for skills that target the entire
-         * battlefield." Set beside
+         * battlefield." A whole-row hit (`Pattern-Row`) makes every victim primary but is NOT
+         * whole-battlefield, so Protection still redirects it (#519). Set beside
          * `currentSubAttackIndex` by `drivePositionalApply`'s `applyToVictim` wrapper, so a
          * filtered-set passive hit ("all enemies with Inferno") never sets it.
          */
@@ -6664,8 +6721,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 reflectBase?: number;
                 /** This hit is a primary-target hit (Nosorog's `requirePrimaryTarget` reflect
                  *  gate): a cast's hit on one of its sub-attack's primary targets
-                 *  (`SubAttackOutcome.primaryVictimIds` — the anchor, or every victim of a
-                 *  whole-battlefield attack), or a counter's / proc's hit that was the first aimed
+                 *  (`SubAttackOutcome.primaryVictimIds` — the anchor, or every victim where
+                 *  `everyVictimIsPrimary` holds), or a counter's / proc's hit that was the first aimed
                  *  hit on this victim in its chain (`primaryHitsSpent`). False for a covered
                  *  footprint victim and for a later hit in the chain. Undefined reads as
                  *  true — the non-positional cast sites, which bind one victim. */
@@ -7591,11 +7648,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                             for (const bomb of bombs) {
                                 const splash = splashDamageForBomb(bomb, bomb.splashModifier);
                                 if (splash <= 0) continue;
-                                const splashOutcome = applyVictimDamage(splash, ally, sink, {
+                                const splashIntake =
+                                    splash * incomingDetonationReductionFor(ally.id);
+                                const splashOutcome = applyVictimDamage(splashIntake, ally, sink, {
                                     killerId: bomb.sourceId,
                                     byDirectDamage: true,
-                                    bombPortion: splash, // full bomb → full shield drain, no penetration
+                                    bombPortion: splashIntake, // full shield drain, no penetration
                                     shieldPenetrationPct: 0,
+                                    preMitigationDamage: splash,
                                 });
                                 // perActorSplash stays the FULL splash — it reports what the dying
                                 // bomb threw out, the splash counterpart of perActorReflected.
@@ -8699,8 +8759,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
             // A Bomb splash copy is not a direct hit, so it is aimed at no one.
             const procAim = splashCopy ? undefined : aimReactiveHit(victim.id);
+            // A splash copy is Bomb damage, so the victim's detonation reductions apply to it.
+            const procIntake = splashCopy ? raw * incomingDetonationReductionFor(victim.id) : raw;
             try {
-                procOutcome = applyVictimDamage(raw, victim, sink, {
+                procOutcome = applyVictimDamage(procIntake, victim, sink, {
                     killerId: ownerId,
                     byDirectDamage: true,
                     isPrimaryTarget: procAim?.isPrimary ?? false,
@@ -8717,7 +8779,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     shieldPenetrationPct: splashCopy ? 0 : attackerShieldPenOf(ownerId),
                     // A splash copy is Bomb damage through and through: full shield drain, no
                     // reflect, no one-shot block spent.
-                    bombPortion: splashCopy ? raw : 0,
+                    bombPortion: splashCopy ? procIntake : 0,
                 });
             } finally {
                 deferConsequenceLogs = wasDeferring;
@@ -10017,14 +10079,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // scratch copy; the detonated entries leave the live container afterwards.
                 const liveBombs = victim.pendingBombs;
                 const bombsLeft = liveBombs.slice();
-                // The detonator's recipe, resolved per victim through the factors a tick on that
-                // victim reads: `victimDotMult` (both sides of `composeDotDamageFactor`, the
-                // gated dealer bonuses) and the victim's own DoT reductions.
+                // The detonator's recipe, resolved per victim through the dealer-side factors a
+                // tick on that victim reads: `victimDotMult` (both sides of
+                // `composeDotDamageFactor`, the gated dealer bonuses). The victim's own reductions
+                // (`detonatedDotFactor`) apply below, so the burst's raw intake excludes them.
                 const victimRecipe: DetonationRecipe = {
                     ...recipe,
-                    dotFactorFor: (dotType) =>
-                        victimDotMult(recipe, victim, dotType) *
-                        incomingDotReductionFor(victim.id, dotType),
+                    dotFactorFor: (dotType) => victimDotMult(recipe, victim, dotType),
                 };
                 const result = detonateContainers(victimRecipe, {
                     corrosionEntries: victim.corrosionEntries,
@@ -10052,11 +10113,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // the bomb was worth, the same way `attacked` reports a hit's pre-transfer
                         // value. Only the numeric channels below move to the delivered amount.
                     });
-                    const bombOutcome = applyVictimDamage(result.bomb, victim, sink, {
+                    const bombIntake = result.bomb * incomingDetonationReductionFor(victim.id);
+                    const bombOutcome = applyVictimDamage(bombIntake, victim, sink, {
                         killerId: actorId,
                         byDirectDamage: true,
-                        bombPortion: result.bomb, // full shield drain, no pen
+                        bombPortion: bombIntake, // full shield drain, no pen
                         shieldPenetrationPct: 0,
+                        preMitigationDamage: result.bomb,
                     });
                     bombDelivered = detonationDelivered(bombOutcome);
                     // #355 B1: the victim's own row gets its OWN booked intake — a Protection
@@ -10070,7 +10133,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     creditDealt(actorId, victim.id, bombOutcome.incomingBooked);
                 }
                 for (const b of detonatedBombs) spliceOut(liveBombs, b);
-                const bypass = result.inferno + result.corrosion;
+                const bypassRaw = result.inferno + result.corrosion;
+                const bypass =
+                    result.inferno * detonatedDotFactor(victim.id, 'inferno') +
+                    result.corrosion * detonatedDotFactor(victim.id, 'corrosion');
                 let bypassDelivered = 0;
                 if (bypass > 0) {
                     // DoT → bypass shield. `byDirectDamage: false` makes every divergence step in
@@ -10081,6 +10147,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // loosens — the reconciliation suite pins that.
                     const bypassOutcome = applyVictimDamage(bypass, victim, sink, {
                         byDirectDamage: false,
+                        preMitigationDamage: bypassRaw,
                     });
                     bypassDelivered = detonationDelivered(bypassOutcome);
                     bus.emit({
@@ -10127,11 +10194,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             sourceId: string,
             damage: number
         ): void => {
-            const outcome = applyVictimDamage(damage, victim, sink, {
+            const intake = damage * incomingDetonationReductionFor(victim.id);
+            const outcome = applyVictimDamage(intake, victim, sink, {
                 killerId: sourceId,
                 byDirectDamage: true,
-                bombPortion: damage, // full shield drain, no pen — bomb-burst precedent
+                bombPortion: intake, // full shield drain, no pen — bomb-burst precedent
                 shieldPenetrationPct: 0,
+                preMitigationDamage: damage,
             });
             // #355 B1: book what the funnel RECORDED, not the burst we passed in — see
             // `detonationDelivered`. Per-victim rows take `incomingBooked`; the whole-attack tally
@@ -10186,11 +10255,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 damage,
                             }),
                         creditDetonation: (sourceId, damage) => {
-                            const outcome = applyVictimDamage(damage, actor, sink, {
+                            const intake = damage * incomingDetonationReductionFor(actor.id);
+                            const outcome = applyVictimDamage(intake, actor, sink, {
                                 killerId: sourceId,
                                 byDirectDamage: true,
-                                bombPortion: damage, // full shield drain, no pen
+                                bombPortion: intake, // full shield drain, no pen
                                 shieldPenetrationPct: 0,
+                                preMitigationDamage: damage,
                             });
                             // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
                             const delivered = detonationDelivered(outcome);
@@ -10241,11 +10312,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 damage,
                             }),
                         creditDetonation: (sourceId, damage) => {
-                            const outcome = applyVictimDamage(damage, actor, sink, {
+                            const intake = damage * incomingDetonationReductionFor(actor.id);
+                            const outcome = applyVictimDamage(intake, actor, sink, {
                                 killerId: sourceId,
                                 byDirectDamage: true,
-                                bombPortion: damage, // full shield drain, no pen (bomb-style)
+                                bombPortion: intake, // full shield drain, no pen (bomb-style)
                                 shieldPenetrationPct: 0,
+                                preMitigationDamage: damage,
                             });
                             // #355 B1: book what the funnel RECORDED — see `detonationDelivered`.
                             const delivered = detonationDelivered(outcome);
@@ -14163,8 +14236,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         // guard against the fixed round-end state first, then applying from that snapshot, makes the
         // spread order-independent: a holder spreads this round only if it already carried Corrosion
         // when the round ended (a stack received THIS round spreads only the FOLLOWING round).
+        // A boss destroyed this round ended the match: the round tail runs no combat
+        // (`bossDestroyed`'s doc). Read without `matchOver`: a boss killed by its own turn-start
+        // tick as the round's last actor leaves the turn loop without setting it. Any destroyed
+        // boss here fell this round, since one destroyed earlier ended the run at that round's
+        // `sideIsWiped` break.
+        const bossEndedMatch = bossDestroyed();
         const toxicHolders: CombatActor[] = [];
-        for (const holder of allActors) {
+        for (const holder of bossEndedMatch ? [] : allActors) {
             if (holder.destroyedRound !== undefined) continue;
             // TIMED per-victim channel only — deliberately NOT `ownerDebuffNames`, the broad
             // three-channel name union. Toxic Overflow is a CONSUMABLE ("...and remove Toxic
@@ -14274,7 +14353,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // and before roundData assembly. This is the LAST drain of the round, and the only one
         // after the turn loop; it resolves in turn order (see `drainInTurnOrder`).
         bus.emit({ type: 'round-ended', round: r });
-        drainEndOfRound();
+        if (!bossEndedMatch) drainEndOfRound();
         // An end-of-round purge ends after the last Post Turn settle; the hangover lands now.
         settleOverclockHangovers(r);
 

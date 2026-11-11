@@ -334,6 +334,14 @@ function separateOutgoingFactor(separateModifiers: readonly Ability[], actor: Co
     ).outgoingDamageSeparateFactor;
 }
 
+/** True for an actor whose debuffs land whatever the affinity matchup (`alwaysLandsDebuffs`,
+ *  owner ruling 2026-11-11: infinite Hacking beats affinity). An `apply` debuff's
+ *  affinity-disadvantage resist and a purge's affinity spare ask this before resisting. Duration
+ *  extension, buff steals and charge manipulation keep their affinity gate. */
+export const landsDespiteAffinity = (
+    actor: { alwaysLandsDebuffs?: boolean } | undefined
+): boolean => actor?.alwaysLandsDebuffs === true;
+
 /**
  * Live debuff-LANDING chance (0..1) for one acting actor against one target, recomputed
  * from current effective stats. Mirrors the dpsSimulator setup formula exactly,
@@ -353,6 +361,10 @@ function separateOutgoingFactor(separateModifiers: readonly Ability[], actor: Co
  * Affinity is applied ONCE here, so callers must pass the RAW matchup modifier
  * (`computeAffinityModifiers().damageModifier` — one number covering the damage AND hacking
  * clauses, see its doc), never a pre-baked landing scalar.
+ *
+ * An `alwaysLandsDebuffs` attacker ("infinite Hacking") lands at 1 against anyone. Its `apply`
+ * debuffs and purges also ignore the affinity matchup; those arms read the flag at their own
+ * decision sites (`landsDespiteAffinity`).
  */
 export function liveDebuffLandingChance(
     statusEngine: StatusEngine,
@@ -361,6 +373,7 @@ export function liveDebuffLandingChance(
     defender: CombatActor,
     affinityModifier: number
 ): number {
+    if (attacker.alwaysLandsDebuffs === true) return 1;
     const atk = foldActorBuffTotals(statusEngine, selfBuffLookup, attacker.id);
     const def = foldActorBuffTotals(statusEngine, selfBuffLookup, defender.id);
     /* eslint-disable no-restricted-syntax -- base hacking/security fed into the fold: the live buff totals are added on the next lines */
