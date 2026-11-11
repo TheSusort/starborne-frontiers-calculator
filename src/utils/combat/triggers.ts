@@ -6096,7 +6096,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // only place every route has a real target in hand.
             if (!perVictimOk(applicationTargetId)) continue;
             const debuffTargetId = applicationTargetId;
-            // A control-immune target is never attempted (`isControlOrSpeedDebuff`).
+            // A control-immune target is never attempted (`controlImmunityBlocks`).
             if (
                 immuneToEnemyStatus(
                     ctx.actorById?.(debuffTargetId),

@@ -560,9 +560,9 @@ export interface CombatActor {
      *  Absent → the actor occupies `position` only. Targeting reads it through `cellsOf`. */
     footprint?: readonly Position[];
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
-     *  plumbing — set at construction, consumed by resolvePositionalTarget. ORed at the
-     *  engine.ts read sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts), so this
-     *  field alone is not the resolver's effective input. */
+     *  plumbing — set at construction, consumed by resolvePositionalTarget. engine.ts's
+     *  `targetingBypassesOf` ORs it with the timed `Rogue's Liberty` buff (rogueLiberty.ts) and
+     *  `controlImmune`, so this field alone is not the resolver's effective input. */
     ignoresForcedTargeting?: boolean;
     /** Attacker ignores the Stealth targeting filter on ALL its casts (Lodolite's "ignores
      *  Stealth effects" passive). Positional plumbing — set at construction, consumed by
@@ -597,8 +597,14 @@ export interface CombatActor {
     /** When true, enemy-sourced charge removal is a no-op against this actor
      *  ("immune to charge loss effects"). Derived from ship skill text. */
     chargeLossImmune: boolean;
-    /** Control and speed debuffs are never attempted against this actor (ShipSkills.controlImmune;
-     *  the rule lives at `isControlOrSpeedDebuff`, controlImmunity.ts). Absent → false. */
+    /** Immune to control (ShipSkills.controlImmune; #519). Two halves:
+     *   - Stasis, Disable and speed debuffs are never attempted against this actor (the set lives
+     *     at `controlImmunityBlocks`, controlImmunity.ts).
+     *   - Provoke, Taunt and Concentrate Fire land on it as ordinary debuffs, but never force its
+     *     target choice, and Stealth never hides a unit from it: the engine's targeting read
+     *     sites OR this flag into `ignoresForcedTargeting` and `ignoresStealth` and pass it as
+     *     `PositionalActing.ignoresConcentrateFire`.
+     *  Absent → false. */
     controlImmune?: boolean;
     /** Every attack of this actor crits at a 100% rate, whatever its affinity matchup or crit
      *  debuffs (ShipSkills.alwaysCrits). Absent → the ordinary capped crit rate. */

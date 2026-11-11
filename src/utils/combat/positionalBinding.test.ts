@@ -271,6 +271,15 @@ describe('resolvePositionalTarget — Provoke redirect + ignore gating', () => {
         ).toBe('back');
     });
 
+    it('ignoresConcentrateFire skips Concentrate Fire (normal selection wins)', () => {
+        const so = statusFrom({ back: { concentrated: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                ignoresConcentrateFire: true,
+            })?.id
+        ).toBe('front');
+    });
+
     it('Taunt beats Provoke when both apply (Taunt higher priority)', () => {
         // 'front' is taunting (should win), 'back' is the provoker; result must be 'front'.
         const so = statusFrom({ front: { taunting: true } });

@@ -106,6 +106,7 @@ import {
     isPositional,
     resolvePositionalTargetCell,
     resolvesPositionalVictim,
+    type PositionalActing,
 } from './positionalBinding';
 import type { CellOccupant } from './cellIndex';
 import {
@@ -2359,6 +2360,27 @@ function attackBreaksStasis(actor: CombatActor): boolean {
             selfShielded: actor.shieldPool > 0,
         })
     );
+}
+
+/**
+ * The acting attacker's targeting bypasses, read live at each targeting site: its static
+ * `ignoresForcedTargeting` or the timed `Rogue's Liberty` (rogueLiberty.ts), its static
+ * `ignoresStealth`, and a control-immune attacker's bypass of all three forced-targeting
+ * statuses and Stealth (`CombatActor.controlImmune`).
+ */
+function targetingBypassesOf(
+    statusEngine: StatusEngine,
+    actor: CombatActor
+): Pick<PositionalActing, 'ignoresForcedTargeting' | 'ignoresStealth' | 'ignoresConcentrateFire'> {
+    const controlImmune = actor.controlImmune === true;
+    return {
+        ignoresForcedTargeting:
+            actor.ignoresForcedTargeting ||
+            controlImmune ||
+            holdsRoguesLiberty(statusEngine, actor.id),
+        ignoresStealth: actor.ignoresStealth || controlImmune,
+        ignoresConcentrateFire: controlImmune,
+    };
 }
 
 /**
@@ -9181,7 +9203,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         //  - `pattern`/`target` — that actor's parsed pattern + parsed target,
         //  - `opposingLiving` — focus/team → enemyAttackerActors; enemy → allPlayerActors,
         //  - `applyToVictim` — focus/team → applyOutgoingToEnemy; enemy → applyIncomingToTarget,
-        //  - `acting` — the firing actor's position / ignoresForcedTargeting / id (for provokerOf).
+        //  - `acting` — the firing actor's position / targeting bypasses / id (for provokerOf).
         // `defenseProfileOf` is the same at every site: it is wired to
         // victimIncomingModifiers, which reads the victim's OWN per-actor enemy-debuff store AND
         // the victim's own self-buff store (both channels: scheduled + ability payload).
@@ -9205,9 +9227,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             pattern: ParsedPattern;
             target: ParsedTarget;
             actingPosition: Position;
-            ignoresForcedTargeting?: boolean;
-            /** Ship-wide stealth-targeting bypass. */
-            ignoresStealth?: boolean;
+            /** The acting actor's targeting bypasses (`targetingBypassesOf`). */
+            bypasses: ReturnType<typeof targetingBypassesOf>;
             actingId: string;
             /** The cast's turn-start target (`selectTurnTarget`): its first hit's anchor
              *  (`applyPositionalDamage`'s `firstAnchorId`) and its Concentrate Fire pick. */
@@ -9326,8 +9347,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     opposingLiving: args.opposingLiving,
                     statusOf: statusLookupFor(args.opposingLiving),
                     acting: {
-                        ignoresForcedTargeting: args.ignoresForcedTargeting,
-                        ignoresStealth: args.ignoresStealth,
+                        ...args.bypasses,
                         provokedBy: provokerOf(statusEngine, args.actingId),
                         attackerId: args.actingId,
                         concentrateFirePickId: args.castTargetId,
@@ -10249,15 +10269,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                           tb.opposingRoster,
                           statusLookupFor(tb.opposingRoster),
                           {
-                              // The static per-ship flag OR the timed, ally-granted `Rogue's
-                              // Liberty` — read live here (not baked into the actor at
-                              // construction) precisely because the buff can come and go
-                              // mid-battle. Same treatment at the positional-apply site below,
-                              // which re-resolves the anchor per hit.
-                              ignoresForcedTargeting:
-                                  a.ignoresForcedTargeting ||
-                                  holdsRoguesLiberty(statusEngine, a.id),
-                              ignoresStealth: a.ignoresStealth,
+                              // Read live: Rogue's Liberty comes and goes mid-battle. The
+                              // positional-apply site below re-resolves the anchor per hit with
+                              // the same bypasses, so the two never disagree on the victim.
+                              ...targetingBypassesOf(statusEngine, a),
                               provokedBy: provokerOf(statusEngine, a.id),
                               attackerId: a.id,
                           }
@@ -11124,13 +11139,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 pattern: sel.pattern,
                 target: sel.target,
                 actingPosition: actor.position!,
-                // Static per-ship flag OR the timed `Rogue's Liberty` (see selectTurnTarget).
                 // Both reads are needed: selectTurnTarget picks the cast's `tgt`, while this loop
-                // re-resolves the anchor for every hit — a buff read at only one of them would let
-                // the two disagree about which victim the cast is actually pointed at.
-                ignoresForcedTargeting:
-                    actor.ignoresForcedTargeting || holdsRoguesLiberty(statusEngine, actor.id),
-                ignoresStealth: actor.ignoresStealth,
+                // re-resolves the anchor for every hit — a bypass read at only one of them would
+                // let the two disagree about which victim the cast is actually pointed at.
+                bypasses: targetingBypassesOf(statusEngine, actor),
                 actingId: actor.id,
                 castTargetId: sel.tgt?.id,
                 castTargetCell: sel.tgtCell,

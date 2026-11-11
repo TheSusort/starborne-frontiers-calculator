@@ -4241,7 +4241,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 anyGateRejected = true;
                 continue;
             }
-            // A control-immune recipient is never attempted (`isControlOrSpeedDebuff`). It counts
+            // A control-immune recipient is never attempted (`controlImmunityBlocks`). It counts
             // as turned away, so the clause's paired control announces nothing on it either.
             if (
                 immuneToEnemyStatus(
@@ -5487,7 +5487,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (ctrl.target !== 'enemy') continue;
         // Standalone control with no named status: Block-Debuff immunity and control immunity
         // gate it.
-        if (targetImmuneToDebuffs || enemy.controlImmune) continue;
+        if (targetImmuneToDebuffs || immuneToEnemyStatus(enemy, pairedName)) continue;
         // Paired named status resisted on the scheduled path → suppress the success event.
         if (resistedEnemyDebuffNames.has(pairedName)) continue;
         emitControl(effect, enemy.id);

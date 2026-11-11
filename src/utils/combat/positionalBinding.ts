@@ -107,6 +107,8 @@ export function resolvesPositionalVictim(
 export interface PositionalActing {
     ignoresForcedTargeting?: boolean;
     ignoresStealth?: boolean;
+    /** Skips the Concentrate Fire override (a control-immune attacker, `CombatActor.controlImmune`). */
+    ignoresConcentrateFire?: boolean;
     provokedBy?: string;
     /** Keys the Concentrate Fire random pick to this attacker's own RNG stream. */
     attackerId?: string;
@@ -121,8 +123,9 @@ export interface PositionalActing {
  * When `statusOf` is omitted, or the target is ally-side, no forced-targeting or stealth rule
  * runs — this is the arm the golden fixtures pin. When `statusOf` is supplied
  * AND `target.side === 'enemy'`, forced targeting and stealth run before `selectTargets`:
- *   1. Concentrate Fire (bypasses stealth, never skipped) — force the marked actor (one picked at
- *      random when several are marked; a pick the cast already made stays while it lives).
+ *   1. Concentrate Fire (bypasses stealth) — force the marked actor (one picked at random when
+ *      several are marked; a pick the cast already made stays while it lives). Skipped only when
+ *      `acting.ignoresConcentrateFire` is true; `ignoresForcedTargeting` does not skip it.
  *   2. Taunt (before stealth) — force a taunting actor. Several taunters are ordered by the
  *      attacker's NORMAL targeting over the taunters' cells (its own row first, then the next
  *      rows; front to back for a `front` target), never by roster or application order.
@@ -204,10 +207,12 @@ export function resolvePositionalTargetCell(
     if (statusOf) {
         const ignore = acting?.ignoresForcedTargeting;
 
-        // 1. Concentrate Fire — bypasses stealth, never skipped (even when ignore is true).
-        //    Several marked actors → one is picked at random from the attacker's keyed stream;
-        //    a single mark draws nothing.
-        const concentrated = living.filter((a) => statusOf(a.id)?.concentrated);
+        // 1. Concentrate Fire — bypasses stealth; `ignore` does not skip it, only
+        //    `ignoresConcentrateFire` does. Several marked actors → one is picked at random from
+        //    the attacker's keyed stream; a single mark draws nothing.
+        const concentrated = acting?.ignoresConcentrateFire
+            ? []
+            : living.filter((a) => statusOf(a.id)?.concentrated);
         if (concentrated.length === 1) {
             return aimAt(concentrated[0]);
         }

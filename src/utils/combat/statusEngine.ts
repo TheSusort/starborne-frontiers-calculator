@@ -337,7 +337,7 @@ export interface StatusEngine {
     setLandsTimedEnemyApplication(fn: (buff: SelectedGameBuff) => boolean): void;
     /** Swap the TIMED-enemy skip hook used by `sourceFired`: an application it answers true for
      *  is never attempted — no landing roll, no resist, no landing (a control-immune turn target;
-     *  see `isControlOrSpeedDebuff`). The engine resets it per turn with the landing hook.
+     *  see `controlImmunityBlocks`). The engine resets it per turn with the landing hook.
      *  Default: skips nothing. */
     setSkipsTimedEnemyApplication(fn: (buff: SelectedGameBuff) => boolean): void;
     /** Observer run IMMEDIATELY BEFORE an enemy-side timed application reaches the family contest,

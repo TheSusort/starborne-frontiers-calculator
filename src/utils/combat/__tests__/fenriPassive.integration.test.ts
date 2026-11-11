@@ -6,9 +6,11 @@
  *    Boss repairs 10% of its MAX HP and gains Attack Up II for 2 turns. Additionally, on kill,
  *    the Boss clears Pressing Onslaught."
  *
- * Owner rulings (2026-11-10):
- *  - Control immunity covers Provoke, Taunt, Stasis, Concentrate Fire, Disable and every speed
- *    debuff. An immune target is never attempted: no landing roll, no resist, no landing.
+ * Owner rulings:
+ *  - Stasis, Disable and every speed debuff are never attempted on him: no landing roll, no
+ *    resist, no landing.
+ *  - Provoke, Taunt and Concentrate Fire land on him as ordinary debuffs (rolled, resistible),
+ *    but never force his target choice; Stealth never hides a unit from him either.
  *  - Charge Loss = charge removal.
  *  - Pressing Onslaught: +1 stack at the start of every round (never on an extra action),
  *    permanent, uncapped, never purged; every stack clears only on Fenri's DIRECT-damage kill —
@@ -185,7 +187,7 @@ describe.each<FenriSeat>(SEATS)('Fenri control immunity (Fenri seated %s)', (sea
         return run(input, fenriId);
     };
 
-    it.each(['Speed Down II', 'Stasis', 'Provoke', 'Concentrate Fire', 'Disable'])(
+    it.each(['Speed Down II', 'Stasis', 'Disable'])(
         'a cast %s on Fenri is never attempted',
         (buffName) => {
             const vulnerable = onFenri(fightWith(VULNERABLE_KIT, debuffer(buffName)), buffName);
@@ -196,35 +198,80 @@ describe.each<FenriSeat>(SEATS)('Fenri control immunity (Fenri seated %s)', (sea
         }
     );
 
+    it.each(['Provoke', 'Concentrate Fire'])(
+        'a cast %s lands on Fenri, or is resisted, like any debuff',
+        (buffName) => {
+            expect(
+                onFenri(fightWith(FENRI_KIT, debuffer(buffName)), buffName).applied
+            ).toBeGreaterThan(0);
+
+            // Held in his debuff store, where every per-debuff count reads it.
+            const lasting: BoardUnit = {
+                ...debuffer(buffName),
+                kit: textKit('Debuffer', {
+                    active: DEBUFFER_TEXTS[buffName].replace('for 1 turn', 'for 2 turns'),
+                }),
+            };
+            const held = seatInput(seat, fenriUnit(), [lasting], 1);
+            const heldLog = run(held.input, held.fenriId);
+            expect(
+                heldLog.engine
+                    .timedAbilityStatuses('enemy', undefined, held.fenriId)
+                    .map((st) => st.active.buffName)
+            ).toContain(buffName);
+
+            // An applied debuff is resisted on affinity disadvantage (electric beats thermal).
+            const { input, fenriId } = seatInput(
+                seat,
+                fenriUnit(FENRI_KIT, { affinity: 'electric' }),
+                [{ ...debuffer(buffName), affinity: 'thermal' }],
+                4
+            );
+            const resisted = onFenri(run(input, fenriId), buffName);
+            expect(resisted.resisted).toBeGreaterThan(0);
+        }
+    );
+
     it('a non-control debuff still lands on Fenri', () => {
         const log = fightWith(FENRI_KIT, debuffer('Defense Down II'));
         expect(onFenri(log, 'Defense Down II').applied).toBeGreaterThan(0);
     });
 
-    it('a standalone control ability does not announce a control on Fenri', () => {
-        const stasisOnly: ShipSkills = {
+    const standaloneController = (effect: 'stasis' | 'concentrate-fire'): BoardUnit => ({
+        ...debuffer('Stasis'),
+        kit: {
             slots: [
                 {
                     slot: 'active',
                     abilities: [
                         ...hitKit(1).slots[0].abilities,
                         {
-                            id: 'test-stasis',
+                            id: `test-${effect}`,
                             type: 'control',
                             target: 'enemy',
                             trigger: 'on-cast',
                             conditions: [],
-                            config: { type: 'control', effect: 'stasis' },
+                            config: { type: 'control', effect },
                         },
                     ],
                 },
             ],
-        };
-        const controller: BoardUnit = { ...debuffer('Stasis'), kit: stasisOnly };
+        },
+    });
+
+    it('a standalone Stasis control does not announce a control on Fenri', () => {
+        const controller = standaloneController('stasis');
         expect(onFenri(fightWith(VULNERABLE_KIT, controller), 'Stasis').controlled).toBeGreaterThan(
             0
         );
         expect(onFenri(fightWith(FENRI_KIT, controller), 'Stasis').controlled).toBe(0);
+    });
+
+    it('a standalone Concentrate Fire control announces a control on Fenri', () => {
+        const controller = standaloneController('concentrate-fire');
+        expect(
+            onFenri(fightWith(FENRI_KIT, controller), 'Concentrate Fire').controlled
+        ).toBeGreaterThan(0);
     });
 
     // Reactive inflictions: Iridium (Speed Down on being attacked) and Flamel (Stasis + Speed
@@ -317,13 +364,110 @@ describe('Fenri control immunity — scheduled (picker) debuffs', () => {
     });
 });
 
+describe.each<FenriSeat>(SEATS)('Fenri ignores forced targeting (Fenri seated %s)', (seat) => {
+    // Fenri targets `front`: his normal pick is the front unit at M4. The forcing unit stands
+    // at M1, so a forced hit and a normal one land on different units.
+    const normalPick: BoardUnit = { id: 'normal', kit: NO_KIT, position: 'M4', speed: 1, hp: 1e12 };
+    const fast = (id: string, active: string, position: BoardUnit['position']): BoardUnit => ({
+        id,
+        kit: textKit(id, { active }),
+        position,
+        speed: 300,
+        attack: 1,
+        hacking: 1e6,
+        hp: 1e12,
+    });
+    /** The unit each of Fenri's round-1 sub-attacks lands on (its first victim; `targetId` names
+     *  the cast's target on every sub-attack). */
+    const targets = (
+        kit: ShipSkills,
+        opponents: BoardUnit[],
+        allies: BoardUnit[] = []
+    ): (string | undefined)[] => {
+        const { input, fenriId, id } = seatInput(seat, fenriUnit(kit), opponents, 1, allies);
+        const log = run(input, fenriId);
+        const byId = new Map(opponents.map((u) => [id(u), u.id]));
+        return log.events.flatMap((e) =>
+            e.type === 'ability-performed' && e.actorId === fenriId && e.abilityType === 'damage'
+                ? [byId.get(e.victimIds?.[0] ?? e.targetId)]
+                : []
+        );
+    };
+    const firstTarget = (kit: ShipSkills, opponents: BoardUnit[], allies: BoardUnit[] = []) =>
+        targets(kit, opponents, allies)[0];
+
+    it('Provoke on Fenri does not force his target', () => {
+        const provoker = fast(
+            'provoker',
+            'This Unit deals <unit-damage>1% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn.',
+            'M1'
+        );
+        expect(firstTarget(VULNERABLE_KIT, [normalPick, provoker])).toBe('provoker');
+        expect(firstTarget(FENRI_KIT, [normalPick, provoker])).toBe('normal');
+    });
+
+    it('a Taunting enemy does not force his target', () => {
+        const taunter = fast(
+            'taunter',
+            'This Unit gains <unit-skill>Taunt</unit-skill> for 2 turns.',
+            'M1'
+        );
+        expect(firstTarget(VULNERABLE_KIT, [normalPick, taunter])).toBe('taunter');
+        expect(firstTarget(FENRI_KIT, [normalPick, taunter])).toBe('normal');
+    });
+
+    const marked: BoardUnit = { id: 'marked', kit: NO_KIT, position: 'M1', speed: 1, hp: 1e12 };
+    // Fenri's ally marks the back unit before Fenri acts.
+    const marker: BoardUnit = {
+        ...fast(
+            'marker',
+            'This Unit deals <unit-damage>1% damage</unit-damage> and applies <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+            'T1'
+        ),
+        target: parseTarget('back'),
+    };
+
+    it('Concentrate Fire on an enemy does not force his target', () => {
+        expect(firstTarget(VULNERABLE_KIT, [normalPick, marked], [marker])).toBe('marked');
+        expect(firstTarget(FENRI_KIT, [normalPick, marked], [marker])).toBe('normal');
+    });
+
+    it('every hit of a multi-hit cast ignores Concentrate Fire, not only the first', () => {
+        const twoHits = hitKit(1, 2);
+        expect(targets(twoHits, [normalPick, marked], [marker])).toEqual(['marked', 'marked']);
+        expect(
+            targets({ ...twoHits, controlImmune: true }, [normalPick, marked], [marker])
+        ).toEqual(['normal', 'normal']);
+    });
+
+    it('a Stealthed front enemy is still his target', () => {
+        const stealthed = fast(
+            'stealthed',
+            'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns.',
+            'M4'
+        );
+        const visible: BoardUnit = {
+            id: 'visible',
+            kit: NO_KIT,
+            position: 'M1',
+            speed: 1,
+            hp: 1e12,
+        };
+        expect(firstTarget(VULNERABLE_KIT, [stealthed, visible])).toBe('visible');
+        expect(firstTarget(FENRI_KIT, [stealthed, visible])).toBe('stealthed');
+    });
+});
+
 describe.each<FenriSeat>(SEATS)('Fenri control immunity tripwire (Fenri seated %s)', (seat) => {
-    // Real control/speed kits, charged and hacking-maxed, against Fenri: a charged and an active
-    // cast (Xcellence, Morao, Bizon, Huanying), a passive-slot rider on the cast (Bayah), a
+    // Real control/speed kits, charged and hacking-maxed, against Fenri: charged and active casts
+    // (Xcellence, Morao, Bizon, Huanying), a passive-slot rider on the cast (Bayah), a
     // start-of-round grant on the highest-attack enemy (Selenite) and an adjacent-enemies fan-out
-    // (Vindicator, aimed at a decoy beside Fenri). Whatever path each infliction takes, none
-    // reaches Fenri: no landing, no resist, no control, nothing left in his debuff store.
-    const CONTROL_OR_SPEED = /^(Stasis|Disable|Provoke|Taunt|Concentrate Fire|Speed Down.*)$/;
+    // (Vindicator, aimed at a decoy beside Fenri). Whatever path each infliction takes, no
+    // Stasis, Disable or speed debuff reaches Fenri: no landing, no resist, no control, nothing
+    // left in his debuff store. Provoke and Concentrate Fire reach him like any debuff.
+    const BLOCKED = /^(Stasis|Disable|Speed Down.*)$/;
+    const FORCING = /^(Provoke|Taunt|Concentrate Fire)$/;
+    const BLOCKED_EFFECTS: ReadonlySet<string> = new Set(['stasis', 'disable']);
     const controller = (ship: string): BoardUnit => ({
         id: ship.toLowerCase(),
         kit: realKit(ship),
@@ -335,7 +479,7 @@ describe.each<FenriSeat>(SEATS)('Fenri control immunity tripwire (Fenri seated %
         startCharged: true,
         target: parseTarget('front'),
     });
-    const outcome = (ship: string, kit: ShipSkills) => {
+    const outcome = (ship: string, kit: ShipSkills, names: RegExp = BLOCKED) => {
         // The decoy stands in front of Fenri (M1) so Vindicator's fan-out reaches him.
         const allies: BoardUnit[] =
             ship === 'Vindicator'
@@ -354,23 +498,33 @@ describe.each<FenriSeat>(SEATS)('Fenri control immunity tripwire (Fenri seated %
             (e) =>
                 (e.type === 'debuff-applied' || e.type === 'debuff-resisted') &&
                 e.targetId === fenriId &&
-                CONTROL_OR_SPEED.test(e.buffName)
+                names.test(e.buffName)
         ).length;
         const controlled = log.events.filter(
-            (e) => e.type === 'control-applied' && e.targetId === fenriId
+            (e) =>
+                e.type === 'control-applied' &&
+                e.targetId === fenriId &&
+                BLOCKED_EFFECTS.has(e.effect)
         ).length;
         const held = log.engine
             .timedAbilityStatuses('enemy', undefined, fenriId)
             .map((st) => st.active.buffName)
-            .filter((n) => CONTROL_OR_SPEED.test(n));
+            .filter((n) => names.test(n));
         return { touching, controlled, held };
     };
 
-    it.each(['Xcellence', 'Morao', 'Bizon', 'Huanying', 'Bayah', 'Selenite', 'Vindicator'])(
-        "%s's control and speed debuffs never touch Fenri",
+    it.each(['Xcellence', 'Bizon', 'Bayah'])(
+        "%s's Stasis, Disable and speed debuffs never touch Fenri",
         (ship) => {
             expect(outcome(ship, VULNERABLE_KIT).touching).toBeGreaterThan(0);
             expect(outcome(ship, FENRI_KIT)).toEqual({ touching: 0, controlled: 0, held: [] });
+        }
+    );
+
+    it.each(['Morao', 'Huanying', 'Selenite', 'Vindicator'])(
+        "%s's Provoke or Concentrate Fire reaches Fenri",
+        (ship) => {
+            expect(outcome(ship, FENRI_KIT, FORCING).touching).toBeGreaterThan(0);
         }
     );
 });
