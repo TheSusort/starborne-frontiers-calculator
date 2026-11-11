@@ -559,6 +559,8 @@ export interface CombatActor {
     /** Every board cell this actor occupies, anchor (`position`) first — a multi-hex bounty boss.
      *  Absent → the actor occupies `position` only. Targeting reads it through `cellsOf`. */
     footprint?: readonly Position[];
+    /** A bounty boss: its destruction defeats its whole side (see `sideIsWiped`). */
+    isBoss?: boolean;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
      *  plumbing — set at construction, consumed by resolvePositionalTarget. engine.ts's
      *  `targetingBypassesOf` ORs it with the timed `Rogue's Liberty` buff (rogueLiberty.ts) and
@@ -624,6 +626,7 @@ export function createActor(
         startCharged?: boolean;
         position?: Position;
         footprint?: readonly Position[];
+        isBoss?: boolean;
         ignoresForcedTargeting?: boolean;
         ignoresStealth?: boolean;
         doesntBreakStasis?: boolean;
@@ -660,6 +663,7 @@ export function createActor(
         pendingAccumulators: [],
         position: partial.position,
         footprint: partial.footprint,
+        isBoss: partial.isBoss,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
         ignoresStealth: partial.ignoresStealth,
         doesntBreakStasis: partial.doesntBreakStasis,

@@ -930,6 +930,8 @@ export interface EnemyActorInput {
     /** Every board cell this actor occupies, anchor first (a multi-hex bounty boss). Absent →
      *  `position` only. */
     footprint?: readonly Position[];
+    /** A bounty boss: its destruction defeats its whole side. */
+    isBoss?: boolean;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1082,6 +1084,7 @@ export function buildEnemyPlayerActorRuntime(
         startCharged: e.startCharged,
         position: e.position,
         footprint: e.footprint,
+        isBoss: e.isBoss,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
         ignoresStealth: e.ignoresStealth,
         doesntBreakStasis: e.doesntBreakStasis,
@@ -1580,6 +1583,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     /** Every board cell this actor occupies, anchor first (a multi-hex bounty boss). Absent →
      *  `position` only. */
     footprint?: readonly Position[];
+    /** A bounty boss: its destruction defeats its whole side. */
+    isBoss?: boolean;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1722,6 +1727,8 @@ export interface CombatEngineInput {
         /** Every board cell this actor occupies, anchor first (a multi-hex bounty boss). Absent →
          *  `position` only. */
         footprint?: readonly Position[];
+        /** A bounty boss: its destruction defeats its whole side. */
+        isBoss?: boolean;
         /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
          *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
          *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1778,6 +1785,8 @@ export interface CombatEngineInput {
     /** Every board cell this actor occupies, anchor first (a multi-hex bounty boss). Absent →
      *  `position` only. */
     footprint?: readonly Position[];
+    /** A bounty boss: its destruction defeats its whole side. */
+    isBoss?: boolean;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -2528,6 +2537,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         startCharged,
         position: input.position,
         footprint: input.footprint,
+        isBoss: input.isBoss,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
         ignoresStealth: input.ignoresStealth,
         doesntBreakStasis: input.doesntBreakStasis,
@@ -2651,6 +2661,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             startCharged: t.startCharged,
             position: t.position,
             footprint: t.footprint,
+            isBoss: t.isBoss,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
             ignoresStealth: t.ignoresStealth,
             doesntBreakStasis: t.doesntBreakStasis,
@@ -6047,9 +6058,11 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     // A never-alive side is therefore NOT a wipe, and the run continues exactly as before — which
     // is also the honest reading: nothing was killed.
+    const sideDefeated = (actors: readonly CombatActor[]): boolean =>
+        actors.every((a) => a.destroyedRound !== undefined) ||
+        actors.some((a) => a.isBoss === true && a.destroyedRound !== undefined);
     const sideIsWiped = (): boolean =>
-        enemyAttackerActors.every((a) => a.destroyedRound !== undefined) ||
-        allPlayerActors.every((a) => a.destroyedRound !== undefined);
+        sideDefeated(enemyAttackerActors) || sideDefeated(allPlayerActors);
     let matchOver = false;
 
     // §4.5 Stasis reductions owed by direct hits, keyed by victim id: one per hit that landed on
