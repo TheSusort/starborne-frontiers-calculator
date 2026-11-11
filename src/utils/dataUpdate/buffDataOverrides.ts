@@ -60,4 +60,23 @@ export const MANUAL_BUFF_ADDITIONS: Array<{
         description: `Deals Damage equal to ${pct}% of this units's attack, ignores defense and shield. Cannot be cleansed.`,
         type: 'debuff' as const,
     })),
+    // Nifo's grants, from the catalogue: "Increases defense by 20% of the applying Unit's
+    // defense" (a flat grant snapshotted from the applier, like Terran Guard) and "Reflects
+    // 10/20/30% of the direct damage when hit as a primary target".
+    {
+        name: 'Defense Surge',
+        description: '+20% Defense (Applying Unit)',
+        type: 'buff',
+    },
+    ...(
+        [
+            ['I', 10],
+            ['II', 20],
+            ['III', 30],
+        ] as const
+    ).map(([numeral, pct]) => ({
+        name: `Reflect ${numeral}`,
+        description: `Reflects ${pct}% of the direct damage when hit as a primary target.`,
+        type: 'buff' as const,
+    })),
 ];

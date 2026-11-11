@@ -1,8 +1,8 @@
 import { composeIncomingFactor, type IncomingReductionParts } from './victimDamage';
 
 /**
- * Pure reflected ("thorns") damage calculator for the Reflect gear set and a ship's own
- * reflect (Nosorog).
+ * Pure reflected ("thorns") damage calculator for the Reflect gear set, a ship's own
+ * reflect (Nosorog) and a held Reflect status (Reflect I/II/III).
  *
  * A reflector reflects a percentage of the hit AS THROWN: the attacker's per-hit raw damage
  * (`victimHitDamageParts(...).reflectBase`), before crit, the attacker's outgoing buffs,
@@ -12,7 +12,8 @@ import { composeIncomingFactor, type IncomingReductionParts } from './victimDama
  * **before shield absorb** — the engine seam applies shield, inside `applyVictimDamage`
  * (`engine.ts`).
  *
- *   reflected = pct% × reflectBase × (1 + reflectorOutgoing/100) × affinityFactor
+ *   reflected = pct% × reflectBase × (1 + amplification/100) × (1 + reflectorOutgoing/100)
+ *               × affinityFactor
  *               × (1 − defenceReduction/100)
  *               × composeIncomingFactor(statusChannel, recipientReductions)
  *
@@ -34,6 +35,8 @@ import { composeIncomingFactor, type IncomingReductionParts } from './victimDama
 export function reflectedDamageForHit(args: {
     /** Reflect percentage, e.g. 10 for 10 % */
     reflectPct: number;
+    /** The reflector's allies' "increase that damage by N%" (Nifo), summed. Default 0. */
+    reflectAmplificationPct?: number;
     /** The hit as thrown: `victimHitDamageParts(...).reflectBase`. */
     reflectBase: number;
     /** The REFLECTOR's outgoing damage buff (Out. Damage Up), signed %. Default 0. */
@@ -110,11 +113,17 @@ export function reflectedDamageParts(args: {
     /** The victim-side slice of that channel (`VictimDefenseProfile.victimSideIncomingPct`),
      *  which `preMitigation` strips while keeping the attacker-applied rest. Default 0. */
     victimSideIncomingPct?: number;
+    /** The reflector's allies' "increase that damage by N%" (Nifo), summed. Default 0. It scales
+     *  the bounce as thrown, so it enters both axes. */
+    reflectAmplificationPct?: number;
 }): { damage: number; preMitigation: number; incomingFactor: number } {
     if (args.reflectPct <= 0 || args.reflectBase <= 0) {
         return { damage: 0, preMitigation: 0, incomingFactor: 1 };
     }
-    const base = (args.reflectPct / 100) * args.reflectBase;
+    const base =
+        (args.reflectPct / 100) *
+        args.reflectBase *
+        (1 + (args.reflectAmplificationPct ?? 0) / 100);
     const outgoing =
         (1 + (args.reflectorOutgoingPct ?? 0) / 100) * (args.reflectorOutgoingSeparateFactor ?? 1);
     const affinity = 1 + args.affinityDamageModifier / 100;

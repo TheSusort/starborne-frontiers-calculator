@@ -51,6 +51,12 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     const defense = extract(/([+-]\d+)%\s*Defense(?!\s*Penetration)/);
     if (defense !== undefined && defenseOfApplier === undefined) effects.defense = defense;
 
+    // A granted Reflect status ("Reflects 20% of the direct damage when hit as a primary target",
+    // Reflect I/II/III). The family-name entry "Reflect" lists all three tiers ("10/20/30%") and
+    // describes the effect rather than granting it, so it does not match.
+    const reflect = extract(/Reflects\s+(\d+(?:\.\d+)?)%\s+of\s+the\s+direct\s+damage/i);
+    if (reflect !== undefined) effects.reflectPct = reflect;
+
     // Flat defence as a multiple of the holder's security ("Increase DEF by 10x Unit Security").
     const defencePerSecurity = extract(/(\d+(?:\.\d+)?)x\s*Unit\s*Security/i);
     if (defencePerSecurity !== undefined) effects.defencePerSecurity = defencePerSecurity;

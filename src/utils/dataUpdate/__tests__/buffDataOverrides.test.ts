@@ -69,12 +69,16 @@ describe('fetch-buffs manual additions', () => {
         }
     );
 
-    it('carries Pressing Onslaught and the three White Phosphorus tiers', () => {
+    it('carries Pressing Onslaught, the White Phosphorus tiers, Defense Surge and the Reflect tiers', () => {
         expect(MANUAL_BUFF_ADDITIONS.map((b) => b.name)).toEqual([
             'Pressing Onslaught',
             'White Phosphorus I',
             'White Phosphorus II',
             'White Phosphorus III',
+            'Defense Surge',
+            'Reflect I',
+            'Reflect II',
+            'Reflect III',
         ]);
     });
 });

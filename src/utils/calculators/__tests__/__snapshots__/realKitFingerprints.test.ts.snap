@@ -2401,6 +2401,35 @@ exports[`kit fingerprints > Nemesis 1`] = `
 }
 `;
 
+exports[`kit fingerprints > Nifo 1`] = `
+{
+  "plain": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "richEnemy": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+  "wounded": [
+    "attack",
+    "buff",
+    "buff-expired",
+    "buff:active",
+    "buff:charged",
+    "charge-changed",
+  ],
+}
+`;
+
 exports[`kit fingerprints > Nosorog 1`] = `
 {
   "plain": [
@@ -4404,26 +4433,26 @@ exports[`kit fingerprints > Yuyan 1`] = `
   "plain": [
     "attack:active",
     "attack:charged",
-    "buff",
     "charge-changed",
     "control",
     "debuff",
+    "debuff-resisted",
   ],
   "richEnemy": [
     "attack:active",
     "attack:charged",
-    "buff",
     "charge-changed",
     "control",
     "debuff",
+    "debuff-resisted",
   ],
   "wounded": [
     "attack:active",
     "attack:charged",
-    "buff",
     "charge-changed",
     "control",
     "debuff",
+    "debuff-resisted",
   ],
 }
 `;
@@ -4528,7 +4557,7 @@ exports[`kit fingerprints > Zosimos 1`] = `
 
 exports[`suite health > pins the corpus shape so a data refresh announces itself in ONE diff 1`] = `
 {
-  "digest": 890907920,
-  "shipCount": 150,
+  "digest": -434380373,
+  "shipCount": 151,
 }
 `;

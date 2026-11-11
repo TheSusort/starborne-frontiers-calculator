@@ -103,6 +103,20 @@ const allSelfSourced = (lists: ReturnType<typeof selfSourcedBuffs>): SelectedGam
     strongestPerFamily([...lists.scheduledSelfBuffs, ...lists.timedEffects, ...lists.auraEffects]);
 
 /**
+ * The Reflect percentage `actorId` holds from a Reflect status (Reflect I/II/III), read from the
+ * same self-sourced lists the buff fold reads, auras included. One family, so the strongest tier
+ * stands alone (`strongestPerFamily`). 0 when it holds none.
+ */
+export function heldReflectPct(
+    statusEngine: StatusEngine,
+    selfBuffLookup: Map<string, SelectedGameBuff[]>,
+    actorId: string
+): number {
+    const held = allSelfSourced(selfSourcedBuffs(statusEngine, selfBuffLookup, actorId, true));
+    return held.reduce((max, b) => Math.max(max, b.parsedEffects.reflectPct ?? 0), 0);
+}
+
+/**
  * Sum an actor's live self-buff totals from the same two sources foldSpeedBuffPct uses
  * (scheduled self-buffs + timed ability statuses, via `selfSourcedBuffs`). Generalizes
  * foldSpeedBuffPct to the full calculateBuffTotals shape.

@@ -20,6 +20,7 @@ import {
     EXCLUDED_KINDS,
     oracleFingerprint,
     oracleKind,
+    resistedAttemptKind,
     restrictDiff,
 } from '../../../src/utils/combat/audit/oracleKinds';
 import { runSeededBattle } from '../../../src/utils/simulator/seededRuns';
@@ -78,9 +79,26 @@ function mapEntries(
 }
 
 /** `result` with every entry booked to `actorId` that the oracle reads as `kind` removed (a
- *  resisted attempt included), as if the engine never ran that part of its kit. */
+ *  resisted attempt and a kill-pre-empted landing included), as if the engine never ran that part
+ *  of its kit. */
 function dropKind(result: BattleResult, actorId: string, kind: CombatLogEntryKind): BattleResult {
-    const f = (e: CombatLogEntry) => (e.actorId === actorId && oracleKind(e) === kind ? null : e);
+    const f = (e: CombatLogEntry): CombatLogEntry | null => {
+        if (e.actorId !== actorId) return e;
+        if (oracleKind(e) === kind) return null;
+        return {
+            ...e,
+            targets: e.targets.map((t) =>
+                t.droppedLandings
+                    ? {
+                          ...t,
+                          droppedLandings: t.droppedLandings.filter(
+                              (label) => resistedAttemptKind(label) !== kind
+                          ),
+                      }
+                    : t
+            ),
+        };
+    };
     return {
         ...result,
         combatLog: result.combatLog.map((round) => ({
