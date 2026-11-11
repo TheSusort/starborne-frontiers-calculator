@@ -8,6 +8,7 @@ import type { Ship } from '../../types/ship';
 import type { LimitableStat, StatName, StatType } from '../../types/stats';
 import type { WishlistEntry } from '../../types/wishlist';
 import { CUSTOM_FORMULA_SEEDS } from '../autogear/customFormulaSeeds';
+import { hostedBasisTerms, rolePrimaryStat } from '../autogear/offFormula/roleBasisHost';
 import { WISHLIST_NAME_MAX_LENGTH } from './describeWishlistEntry';
 
 export type WishlistDraft = Omit<WishlistEntry, 'id'>;
@@ -43,42 +44,61 @@ function formulaRole(ship: Ship, config: SavedAutogearConfig | null): ShipTypeNa
 }
 
 /**
- * The stats the ship's scoring formula maximises, derived stats expanded: the config's custom
- * formula rows with `direction: 'max'` plus their basis-term stats, or without a custom formula
- * the role seed's rows. Includes stats gear cannot roll as substats (they still pick sets).
+ * The stats the ship's scoring formula maximises, derived stats expanded, chosen the way
+ * `calculatePriorityScore` picks its formula: a config in Custom mode (`shipRole: null`) scores on
+ * its custom formula's `direction: 'max'` rows plus their basis-term stats; otherwise the role
+ * scores on its own formula (the role seed's rows here), with an applied kit basis
+ * (`hostedBasisTerms`) replacing the role's primary stat by the basis-term stats. Includes stats
+ * gear cannot roll as substats (they still pick sets).
  */
 export function formulaStats(ship: Ship, config: SavedAutogearConfig | null): StatName[] {
-    const role = formulaRole(ship, config);
-    const rows = config?.customFormula?.rows ?? (role ? CUSTOM_FORMULA_SEEDS[role].rows : []);
     const stats = new Set<StatName>();
-    for (const row of rows) {
-        if (row.direction !== 'max') continue;
-        expand(row.stat).forEach((s) => stats.add(s));
-        row.basis?.forEach((term) => expand(term.stat).forEach((s) => stats.add(s)));
+    if (config && config.shipRole === null) {
+        for (const row of config.customFormula?.rows ?? []) {
+            if (row.direction !== 'max') continue;
+            expand(row.stat).forEach((s) => stats.add(s));
+            row.basis?.forEach((term) => expand(term.stat).forEach((s) => stats.add(s)));
+        }
+        return inStatOrder(stats);
+    }
+    const role = formulaRole(ship, config);
+    if (!role) return [];
+    for (const row of CUSTOM_FORMULA_SEEDS[role].rows) {
+        if (row.direction === 'max') expand(row.stat).forEach((s) => stats.add(s));
+    }
+    const basis = hostedBasisTerms(role, config?.roleBasis);
+    const primary = rolePrimaryStat(role);
+    if (basis && primary) {
+        stats.delete(primary);
+        basis.forEach((term) => expand(term.stat).forEach((s) => stats.add(s)));
     }
     return inStatOrder(stats);
 }
 
-/**
- * The substats a generated entry hunts: formula stats, stat priorities and stat bonuses, with
- * derived stats expanded and only stats gear can roll as substats kept (`hpRegen` and
- * `shieldPenetration` never are).
- */
-export function wantedStats(ship: Ship, config: SavedAutogearConfig | null): StatName[] {
+/** Formula stats plus the stats the config's stat priorities and stat bonuses name, expanded. */
+function focusStats(ship: Ship, config: SavedAutogearConfig | null): StatName[] {
     const stats = new Set<StatName>(formulaStats(ship, config));
     config?.statPriorities.forEach((p) => expand(p.stat).forEach((s) => stats.add(s)));
     config?.statBonuses.forEach((b) => expand(b.stat).forEach((s) => stats.add(s)));
-    return inStatOrder(stats).filter(isRollableSubstat);
+    return inStatOrder(stats);
+}
+
+/**
+ * The substats a generated entry hunts: `focusStats`, keeping only stats gear can roll as
+ * substats (`hpRegen` and `shieldPenetration` never are).
+ */
+export function wantedStats(ship: Ship, config: SavedAutogearConfig | null): StatName[] {
+    return focusStats(ship, config).filter(isRollableSubstat);
 }
 
 const GEAR_SET_KEYS = Object.keys(GEAR_SETS) as (keyof typeof GEAR_SETS)[];
 
 /**
  * The gear sets a generated entry accepts: the config's gear set priorities (implant priorities
- * and unknown names dropped), then every gear set with a stat bonus on one of the formula stats.
- * Stat priorities and bonuses add substats, not sets; an effect-only set comes only from a set
- * priority. A set priority with `count: 0` excludes that set, as it does in autogear
- * (`runShipOptimizer`), so neither path adds it.
+ * and unknown names dropped), then every gear set with a stat bonus on one of `focusStats` (the
+ * formula, stat priorities and stat bonuses). An effect-only set comes only from a set priority.
+ * A set priority with `count: 0` excludes that set, as it does in autogear (`runShipOptimizer`),
+ * so neither path adds it.
  */
 export function wantedSets(ship: Ship, config: SavedAutogearConfig | null): GearSetName[] {
     const gearPriorities = (config?.setPriorities ?? []).filter((p) => p.kind !== 'implant');
@@ -90,10 +110,10 @@ export function wantedSets(ship: Ship, config: SavedAutogearConfig | null): Gear
             sets.add(priority.setName as GearSetName);
         }
     }
-    const formula = new Set(formulaStats(ship, config));
+    const focus = new Set(focusStats(ship, config));
     for (const key of GEAR_SET_KEYS) {
         const bonusStats = GEAR_SETS[key].stats as readonly { name: StatName }[];
-        if (!excluded.has(key) && bonusStats.some((s) => formula.has(s.name))) sets.add(key);
+        if (!excluded.has(key) && bonusStats.some((s) => focus.has(s.name))) sets.add(key);
     }
     return [...sets];
 }

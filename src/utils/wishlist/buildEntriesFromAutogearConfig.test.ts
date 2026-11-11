@@ -10,6 +10,7 @@ import {
     wantedStats,
 } from './buildEntriesFromAutogearConfig';
 
+/** `shipRole: null` is autogear's Custom mode; a role-based config names its role. */
 const config = (overrides: Partial<SavedAutogearConfig> = {}): SavedAutogearConfig => ({
     shipId: 's1',
     shipRole: null,
@@ -58,6 +59,7 @@ describe('wantedStats', () => {
         const stats = wantedStats(
             defender,
             config({
+                shipRole: 'DEFENDER',
                 statPriorities: [{ stat: 'speed' }, { stat: 'hpRegen' }],
                 statBonuses: [{ stat: 'critMultiplier', percentage: 50 }],
             })
@@ -67,6 +69,54 @@ describe('wantedStats', () => {
 
     it('uses the config role when it has no custom formula', () => {
         expect(wantedStats(attacker, config({ shipRole: 'DEFENDER' }))).toEqual(['hp', 'defence']);
+    });
+
+    it('ignores a custom formula while a role is set, as autogear scoring does', () => {
+        const stats = wantedStats(
+            attacker,
+            config({
+                shipRole: 'ATTACKER',
+                customFormula: { rows: [{ stat: 'hacking', kind: 'core', direction: 'max' }] },
+            })
+        );
+        expect(stats).toEqual(['attack', 'crit', 'critDamage']);
+    });
+
+    it("swaps the role's primary stat for an applied kit basis", () => {
+        const withHp = wantedStats(
+            attacker,
+            config({
+                shipRole: 'ATTACKER',
+                roleBasis: {
+                    produces: 'damage',
+                    terms: [
+                        { stat: 'attack', weight: 2.333 },
+                        { stat: 'hp', weight: 0.125 },
+                    ],
+                },
+            })
+        );
+        expect(withHp).toEqual(['attack', 'hp', 'crit', 'critDamage']);
+
+        const hpOnly = wantedStats(
+            attacker,
+            config({
+                shipRole: 'ATTACKER',
+                roleBasis: { produces: 'damage', terms: [{ stat: 'hp', weight: 0.5 }] },
+            })
+        );
+        expect(hpOnly).toEqual(['hp', 'crit', 'critDamage']);
+    });
+
+    it('ignores a kit basis the role does not host', () => {
+        const stats = wantedStats(
+            defender,
+            config({
+                shipRole: 'DEFENDER',
+                roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 1 }] },
+            })
+        );
+        expect(stats).toEqual(['hp', 'defence']);
     });
 });
 
@@ -95,9 +145,26 @@ describe('wantedSets', () => {
         expect(sets).not.toContain('NOT_A_SET');
     });
 
-    it('does not add sets for stat priorities or bonuses', () => {
-        const sets = wantedSets(defender, config({ statPriorities: [{ stat: 'speed' }] }));
-        expect(sets).not.toContain('SPEED');
+    it('adds sets for stats named by stat priorities and bonuses', () => {
+        const fromPriority = wantedSets(defender, config({ statPriorities: [{ stat: 'speed' }] }));
+        expect(fromPriority).toContain('SPEED');
+        expect(fromPriority).toContain('SWIFTNESS');
+        const fromBonus = wantedSets(
+            defender,
+            config({ statBonuses: [{ stat: 'hacking', percentage: 50 }] })
+        );
+        expect(fromBonus).toContain('HACKING');
+    });
+
+    it('adds sets for kit-basis stats', () => {
+        const sets = wantedSets(
+            attacker,
+            config({
+                shipRole: 'ATTACKER',
+                roleBasis: { produces: 'damage', terms: [{ stat: 'hp', weight: 0.5 }] },
+            })
+        );
+        expect(sets).toContain('FORTITUDE');
     });
 
     it('drops a set whose priority count is 0, from either path', () => {
@@ -105,6 +172,7 @@ describe('wantedSets', () => {
         const sets = wantedSets(
             attacker,
             config({
+                shipRole: 'ATTACKER',
                 setPriorities: [
                     { setName: 'ATTACK', count: 0 },
                     { setName: 'BOOST', count: 0 },
@@ -138,7 +206,10 @@ describe('buildEntriesFromAutogearConfig', () => {
     it('limits bottom-row main stats to stats those slots can roll', () => {
         const { bottom } = buildEntriesFromAutogearConfig(
             attacker,
-            config({ statPriorities: [{ stat: 'hacking' }, { stat: 'speed' }] })
+            config({
+                shipRole: 'ATTACKER',
+                statPriorities: [{ stat: 'hacking' }, { stat: 'speed' }],
+            })
         );
         const bottomRollable = new Set(
             (['sensor', 'software', 'thrusters'] as const).flatMap(
