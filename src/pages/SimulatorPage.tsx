@@ -203,13 +203,15 @@ const SimulatorPage: React.FC = () => {
         });
     };
 
-    // A loaded boss fills the side's board: there are no adds, so no cell opens the ship picker.
+    // A loaded encounter fills the side's board: its units are fixed, so no cell opens the ship
+    // picker and none can be removed alone.
     const handleSelectPosition = (side: Side, position: Position) => {
         if (loadedBossShipId(side === 'player' ? playerBoard : enemyBoard)) return;
         boardSetters[side].setSelected(position);
     };
 
     const handleRemoveShip = (side: Side, position: Position) => {
+        if (loadedBossShipId(side === 'player' ? playerBoard : enemyBoard)) return;
         const { setBoard, selected, setSelected } = boardSetters[side];
         setBoard((prev) => {
             const next = { ...prev };
