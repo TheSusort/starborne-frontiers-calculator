@@ -13,6 +13,7 @@ import { deriveBasis } from '../autogear/offFormula/basisDerivation';
 import { detectOffFormulaStats } from '../autogear/offFormula/offFormulaStats';
 import { hostedBasisTerms, roleAxis, rolePrimaryStat } from '../autogear/offFormula/roleBasisHost';
 import { WISHLIST_NAME_MAX_LENGTH } from './describeWishlistEntry';
+import { MAX_GEAR_SUBSTATS } from './matchWishlistEntry';
 
 export type WishlistDraft = Omit<WishlistEntry, 'id'>;
 
@@ -135,7 +136,8 @@ export function wantedSets(ship: Ship, config: SavedAutogearConfig | null): Gear
 }
 
 export interface BuildEntriesOptions {
-    /** How many of the wanted substats a piece needs. Clamped to 1..count; all when omitted. */
+    /** How many of the wanted substats a piece needs. Clamped to 1..min(count,
+     *  `MAX_GEAR_SUBSTATS`); that upper bound when omitted. */
     subStatsMin?: number;
     /** The sets to accept; `wantedSets` when omitted. No set filter when empty. */
     sets?: readonly GearSetName[];
@@ -154,7 +156,8 @@ export function buildEntriesFromAutogearConfig(
 ): { top: WishlistDraft; bottom: WishlistDraft } {
     const stats = wantedStats(ship, config);
     const sets = options.sets ?? wantedSets(ship, config);
-    const min = Math.max(1, Math.min(stats.length, options.subStatsMin ?? stats.length));
+    const most = Math.min(stats.length, MAX_GEAR_SUBSTATS);
+    const min = Math.max(1, Math.min(most, options.subStatsMin ?? most));
 
     const shared: WishlistEntry['filters'] = {
         ...(sets.length > 0 ? { setBonus: [...sets] } : {}),

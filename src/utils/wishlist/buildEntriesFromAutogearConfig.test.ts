@@ -304,6 +304,14 @@ describe('buildEntriesFromAutogearConfig', () => {
         expect(all.top.filters.subStatsMin).toBeUndefined();
         const zero = buildEntriesFromAutogearConfig(attacker, null, { subStatsMin: 0 });
         expect(zero.top.filters.subStatsMin).toBe(1);
+        // A piece rolls at most 4 substats, so five wanted stats cap at 4.
+        const five = buildEntriesFromAutogearConfig(
+            attacker,
+            config({ shipRole: 'ATTACKER', statPriorities: [{ stat: 'speed' }, { stat: 'hp' }] }),
+            { subStatsMin: 5 }
+        );
+        expect(five.top.filters.subStats).toHaveLength(5);
+        expect(five.top.filters.subStatsMin).toBe(4);
     });
 
     it('uses the chosen sets, and no set filter when none are chosen', () => {
