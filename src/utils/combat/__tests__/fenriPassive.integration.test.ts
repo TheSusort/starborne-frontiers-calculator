@@ -758,3 +758,62 @@ describe('Pressing Onslaught accrual cadence (status engine)', () => {
         expect(stacksOf(eng, 'f', PO)).toBe(2);
     });
 });
+
+describe.each<FenriSeat>(SEATS)(
+    'Fenri control immunity — recurring aura statuses (Fenri seated %s)',
+    (seat) => {
+        const auraer: BoardUnit = {
+            id: 'auraer',
+            // A board-wide debuff with no stated duration: an aura, re-rolled every round.
+            kit: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'dmg',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 1 },
+                            },
+                            {
+                                id: 'aura-sd',
+                                type: 'debuff',
+                                target: 'all-enemies',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: {
+                                    type: 'debuff',
+                                    buffName: 'Speed Down II',
+                                    parsedEffects: { speed: -30 },
+                                    stacks: 1,
+                                    isStackable: false,
+                                    application: 'inflict',
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+            position: 'M4',
+            speed: 300,
+            attack: 1,
+        };
+        const fight = (kit: ShipSkills, hacking: number) => {
+            const { input, fenriId } = seatInput(seat, fenriUnit(kit), [{ ...auraer, hacking }], 4);
+            const log = run(input, fenriId);
+            return { ...onFenri(log, 'Speed Down II'), log };
+        };
+
+        it('a recurring Speed Down II neither lands on nor is resisted by Fenri', () => {
+            // Non-vacuity: a vulnerable target resists the same aura at zero hacking.
+            const resisted = fight(VULNERABLE_KIT, 0);
+            expect(resisted.resisted).toBeGreaterThan(0);
+
+            expect(fight(FENRI_KIT, 1e6)).toMatchObject({ applied: 0, resisted: 0, controlled: 0 });
+            expect(fight(FENRI_KIT, 0)).toMatchObject({ applied: 0, resisted: 0, controlled: 0 });
+        });
+    }
+);

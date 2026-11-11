@@ -4735,6 +4735,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (hasVictim) {
         for (const s of recurringAbilityEnemy) {
             const sb = payloadToSelectedBuff(s.payload);
+            if (immuneToEnemyStatus(enemy, sb.buffName, sb.parsedEffects)) continue;
             const isApply = sb.application === 'apply';
             const lands = isApply ? !landingAtDisadvantage : roundDebuffLanded();
             if (!lands) {
