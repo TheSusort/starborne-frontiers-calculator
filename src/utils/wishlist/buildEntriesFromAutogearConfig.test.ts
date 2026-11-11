@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as basisDerivation from '../autogear/offFormula/basisDerivation';
+import * as offFormulaStats from '../autogear/offFormula/offFormulaStats';
 import { makeShip } from '../gear/fastPotential/__tests__/fixtures';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { STATS } from '../../constants/stats';
@@ -106,6 +108,48 @@ describe('wantedStats', () => {
             })
         );
         expect(hpOnly).toEqual(['hp', 'crit', 'critDamage']);
+    });
+
+    describe('a kit equation the player has not applied', () => {
+        afterEach(() => vi.restoreAllMocks());
+
+        const hpScaling = () => {
+            vi.spyOn(offFormulaStats, 'detectOffFormulaStats').mockReturnValue([
+                { stat: 'hp', produces: 'damage', severity: 'substitution', trigger: 'active' },
+            ]);
+            vi.spyOn(basisDerivation, 'deriveBasis').mockReturnValue({
+                terms: [
+                    { stat: 'attack', weight: 2.575 },
+                    { stat: 'hp', weight: 0.1 },
+                ],
+                excluded: [],
+                period: 0,
+            });
+        };
+
+        it('still adds its stats and sets', () => {
+            hpScaling();
+            const cfg = config({ shipRole: 'ATTACKER' });
+            expect(wantedStats(attacker, cfg)).toEqual(['attack', 'hp', 'crit', 'critDamage']);
+            expect(wantedSets(attacker, cfg)).toContain('FORTITUDE');
+        });
+
+        it('yields to an applied one', () => {
+            hpScaling();
+            const stats = wantedStats(
+                attacker,
+                config({
+                    shipRole: 'ATTACKER',
+                    roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2 }] },
+                })
+            );
+            expect(stats).toEqual(['attack', 'crit', 'critDamage']);
+        });
+
+        it('is not read in Custom mode', () => {
+            hpScaling();
+            expect(wantedStats(attacker, config({ customFormula: { rows: [] } }))).toEqual([]);
+        });
     });
 
     it('ignores a kit basis the role does not host', () => {

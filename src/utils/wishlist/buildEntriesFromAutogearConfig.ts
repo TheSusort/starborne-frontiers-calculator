@@ -3,12 +3,15 @@ import { GEAR_SLOTS, type GearSlotName } from '../../constants/gearTypes';
 import { isShipTypeName, type ShipTypeName } from '../../constants/shipTypes';
 import { ALL_STAT_NAMES, STATS } from '../../constants/stats';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
-import type { SavedAutogearConfig } from '../../types/autogear';
+import type { SavedAutogearConfig, BasisTerm } from '../../types/autogear';
 import type { Ship } from '../../types/ship';
 import type { LimitableStat, StatName, StatType } from '../../types/stats';
 import type { WishlistEntry } from '../../types/wishlist';
 import { CUSTOM_FORMULA_SEEDS } from '../autogear/customFormulaSeeds';
-import { hostedBasisTerms, rolePrimaryStat } from '../autogear/offFormula/roleBasisHost';
+import { usableBasisTerms } from '../autogear/customFormula';
+import { deriveBasis } from '../autogear/offFormula/basisDerivation';
+import { detectOffFormulaStats } from '../autogear/offFormula/offFormulaStats';
+import { hostedBasisTerms, roleAxis, rolePrimaryStat } from '../autogear/offFormula/roleBasisHost';
 import { WISHLIST_NAME_MAX_LENGTH } from './describeWishlistEntry';
 
 export type WishlistDraft = Omit<WishlistEntry, 'id'>;
@@ -44,11 +47,24 @@ function formulaRole(ship: Ship, config: SavedAutogearConfig | null): ShipTypeNa
 }
 
 /**
+ * The kit equation `OffFormulaNotice` offers for `role` (its "Use this equation" terms): the
+ * ship's derived basis on the axis `role` hosts, when the detector flags an effect on that axis.
+ */
+function detectedBasisTerms(ship: Ship, role: ShipTypeName): BasisTerm[] | undefined {
+    const axis = roleAxis(role);
+    if (!axis) return undefined;
+    if (!detectOffFormulaStats(ship, role).some((f) => f.produces === axis)) return undefined;
+    return usableBasisTerms(deriveBasis(ship, axis).terms);
+}
+
+/**
  * The stats the ship's scoring formula maximises, derived stats expanded, chosen the way
  * `calculatePriorityScore` picks its formula: a config in Custom mode (`shipRole: null`) scores on
  * its custom formula's `direction: 'max'` rows plus their basis-term stats; otherwise the role
- * scores on its own formula (the role seed's rows here), with an applied kit basis
- * (`hostedBasisTerms`) replacing the role's primary stat by the basis-term stats. Includes stats
+ * scores on its own formula (the role seed's rows here), with a kit basis replacing the role's
+ * primary stat by the basis-term stats: the applied one (`hostedBasisTerms`), else the one the
+ * autogear page offers but the player has not applied (`detectedBasisTerms`), since the kit wants
+ * those stats either way. Includes stats
  * gear cannot roll as substats (they still pick sets).
  */
 export function formulaStats(ship: Ship, config: SavedAutogearConfig | null): StatName[] {
@@ -66,7 +82,7 @@ export function formulaStats(ship: Ship, config: SavedAutogearConfig | null): St
     for (const row of CUSTOM_FORMULA_SEEDS[role].rows) {
         if (row.direction === 'max') expand(row.stat).forEach((s) => stats.add(s));
     }
-    const basis = hostedBasisTerms(role, config?.roleBasis);
+    const basis = hostedBasisTerms(role, config?.roleBasis) ?? detectedBasisTerms(ship, role);
     const primary = rolePrimaryStat(role);
     if (basis && primary) {
         stats.delete(primary);
