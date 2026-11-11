@@ -42,8 +42,11 @@ describe('Mamma Maglienza encounter', () => {
             ['M3', 'Larkspur'],
             ['M4', 'Laika'],
         ];
+        // Mamma's row hit reaches every ship in the row; the hp floor keeps the row alive so the
+        // Capos, the slowest units, still get a turn.
         const playerBoard: BoardState = {};
-        for (const [pos, name] of cells) playerBoard[pos] = { ship: reference(name) };
+        for (const [pos, name] of cells)
+            playerBoard[pos] = { ship: reference(name), overrides: { hp: 1e9 } };
         const result = simulateBattle({
             playerTeam: buildTeam(playerBoard, deps),
             enemyTeam: buildTeam(encounterBoard(), deps),
@@ -62,16 +65,50 @@ describe('Mamma Maglienza encounter', () => {
         expect(attacks.some((e) => e.actorId.startsWith('e:npc:capo:124'))).toBe(true);
         expect(attacks.some((e) => e.actorId.startsWith('e:boss:maglienza:32'))).toBe(true);
     });
+
+    it('Mamma and each Capo strike the whole row they pick', () => {
+        setupKeyedRng(1);
+        // Row M holds three ships, row B one: Mamma picks the fullest row, the Capos the emptiest.
+        const playerBoard: BoardState = {};
+        for (const [pos, name] of [
+            ['M2', 'Butcher'],
+            ['M3', 'Nuqtu'],
+            ['M4', 'Larkspur'],
+            ['B4', 'Laika'],
+        ] as Array<[Position, string]>)
+            playerBoard[pos] = { ship: reference(name), overrides: { hp: 1e9 } };
+        const result = simulateBattle({
+            playerTeam: buildTeam(playerBoard, deps),
+            enemyTeam: buildTeam(encounterBoard(), deps),
+            rounds: 1,
+        });
+        const idAt = (pos: Position) =>
+            result.roster.find((r) => r.side === 'player' && r.position === pos)!.actorId;
+        const struckBy = (prefix: string) =>
+            result.combatLog[0].turns
+                .flatMap((t) => t.entries)
+                .filter((e) => e.kind === 'attack' && e.actorId.startsWith(prefix))
+                .map((e) => (e.kind === 'attack' ? e.targets.map((t) => t.targetId).sort() : []));
+        const mRow = [idAt('M2'), idAt('M3'), idAt('M4')].sort();
+        const mamma = struckBy('e:boss:maglienza:32');
+        expect(mamma.length).toBeGreaterThan(0);
+        for (const targets of mamma) expect(targets).toEqual(mRow);
+        const capos = struckBy('e:npc:capo:124');
+        expect(capos.length).toBeGreaterThan(0);
+        for (const targets of capos) expect(targets).toEqual([idAt('B4')]);
+    });
 });
 
 describe('boss-death win condition', () => {
+    // Laika alone in row B draws every Capo's row-least cast (and its Disable), leaving the
+    // three row-M ships free to act.
     const playerBoard = (): BoardState => {
         const board: BoardState = {};
         for (const [pos, name] of [
-            ['M1', 'Butcher'],
-            ['M2', 'Nuqtu'],
-            ['M3', 'Larkspur'],
-            ['M4', 'Laika'],
+            ['M2', 'Butcher'],
+            ['M3', 'Nuqtu'],
+            ['M4', 'Larkspur'],
+            ['B4', 'Laika'],
         ] as Array<[Position, string]>)
             board[pos] = { ship: reference(name), overrides: { hp: 1e9 } };
         return board;

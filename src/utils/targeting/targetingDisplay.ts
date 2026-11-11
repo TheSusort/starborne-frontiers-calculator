@@ -13,6 +13,7 @@ function cap(s: string): string {
 function shapeSegment(p: ParsedPattern): string {
     if (p.shape === 'base') return 'Single target';
     if (p.shape === 'all') return 'Whole board';
+    if (p.shape === 'row') return 'Whole row';
     const prefixes = [
         p.modifiers.reverse && 'Reverse',
         p.modifiers.prolonged && 'Prolonged',
@@ -34,6 +35,8 @@ function rangeSegment(p: ParsedPattern): string | null {
 }
 
 function targetSegment(t: ParsedTarget): string {
+    if (t.selection === 'row-most') return `${t.side} row with the most units`;
+    if (t.selection === 'row-least') return `${t.side} row with the fewest units`;
     return `${t.side} ${t.selection}`;
 }
 

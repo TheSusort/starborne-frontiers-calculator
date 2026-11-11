@@ -34,6 +34,16 @@ export const TARGETING_RULES: Record<TargetSelection, TargetingRule> = {
         label: 'All',
         description: 'Hits every valid target at once.',
     },
+    'row-most': {
+        id: 'row-most',
+        label: 'Fullest Row',
+        description: 'Strikes the enemy row holding the most units.',
+    },
+    'row-least': {
+        id: 'row-least',
+        label: 'Emptiest Row',
+        description: 'Strikes the enemy row holding the fewest units.',
+    },
     team: {
         id: 'team',
         label: 'Allies',
@@ -77,4 +87,5 @@ export const PATTERN_SHAPES: Record<PatternShape, PatternShapeInfo> = {
     range: { id: 'range', label: 'Range' },
     pickaxe: { id: 'pickaxe', label: 'Pickaxe' },
     all: { id: 'all', label: 'All' },
+    row: { id: 'row', label: 'Whole Row' },
 };

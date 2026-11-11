@@ -67,10 +67,10 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
         affinity: 'electric',
         type: 'DEBUFFER',
         footprint: ['T1', 'M2', 'M3', 'B1'],
-        activeTarget: 'front',
-        activePattern: 'Pattern-Line-Range-2',
-        chargedTarget: 'front',
-        chargedPattern: 'Pattern-Line-Range-2',
+        activeTarget: 'row-most',
+        activePattern: 'Pattern-Row',
+        chargedTarget: 'row-most',
+        chargedPattern: 'Pattern-Row',
         activeSkillText:
             'The Boss targets the row with the most enemies, dealing <unit-damage>120% damage</unit-damage> and inflicting <unit-skill>Inferno II</unit-skill> twice for 12 turns each.',
         chargeSkillText:
@@ -124,10 +124,10 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
         affinity: 'electric',
         type: 'DEFENDER',
         level: 124,
-        activeTarget: 'front',
-        activePattern: 'Pattern-Line-Range-2',
-        chargedTarget: 'front',
-        chargedPattern: 'Pattern-Line-Range-2',
+        activeTarget: 'row-least',
+        activePattern: 'Pattern-Row',
+        chargedTarget: 'row-least',
+        chargedPattern: 'Pattern-Row',
         activeSkillText:
             'This Unit deals <unit-damage>damage equal to 100%</unit-damage> of its Defense to all enemies in the row with the least enemies and <unit-skill>removes 2 charges</unit-skill> from the enemy.',
         chargeSkillText:

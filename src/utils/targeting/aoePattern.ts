@@ -23,7 +23,8 @@ export interface PatternCell {
  * cell so it can be shown as a neutral marker even though it isn't affected.
  *
  * Special cases: whole-lane patterns use the caster-centred lane; 'all' (whole board) has no
- * relative footprint, so it returns every formation cell as primary to convey "hits all".
+ * relative footprint, so it returns every formation cell as primary to convey "hits all"; 'row'
+ * returns the four cells of one row, all primary.
  */
 export function toPatternCells(pattern: ParsedPattern): PatternCell[] {
     if (pattern.shape === 'all') {
@@ -31,6 +32,10 @@ export function toPatternCells(pattern: ParsedPattern): PatternCell[] {
             const { q, r } = positionToAxial(pos);
             return { q, r, role: 'primary' as const };
         });
+    }
+
+    if (pattern.shape === 'row') {
+        return [0, -1, -2, -3].map((q) => ({ q, r: 0, role: 'primary' as const }));
     }
 
     const offsets =

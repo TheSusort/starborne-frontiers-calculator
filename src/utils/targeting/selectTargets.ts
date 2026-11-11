@@ -31,6 +31,35 @@ function colsFrontToBack(row: BoardRow, occupied: readonly Position[]): Position
     return occupied.filter((p) => rowOf(p) === row).sort((a, b) => colOf(b) - colOf(a));
 }
 
+/** Tie order for the row choices: the centre row first, then bottom, then top. */
+const ROW_TIE_ORDER: readonly BoardRow[] = ['M', 'B', 'T'];
+
+/**
+ * The row a `row-most` / `row-least` selection picks, counting occupied cells per row. Callers
+ * pass one cell per unit per row (`representativeCells`), so a multi-hex unit counts once in each
+ * row it covers. An empty row is never picked. `row-most` breaks ties M → B → T; `row-least`
+ * breaks them on the caster's own row first, then M → B → T. Requires ≥1 occupied cell.
+ */
+function chooseRow(
+    selection: 'row-most' | 'row-least',
+    casterRow: BoardRow,
+    occupied: readonly Position[]
+): BoardRow {
+    const count = (row: BoardRow) => occupied.filter((p) => rowOf(p) === row).length;
+    const order =
+        selection === 'row-most'
+            ? ROW_TIE_ORDER
+            : [casterRow, ...ROW_TIE_ORDER.filter((r) => r !== casterRow)];
+    let best: BoardRow | undefined;
+    for (const row of order) {
+        const n = count(row);
+        if (n === 0) continue;
+        if (best === undefined) best = row;
+        else if (selection === 'row-most' ? n > count(best) : n < count(best)) best = row;
+    }
+    return best!;
+}
+
 export function selectTargets(target: ParsedTarget, ctx: SelectTargetsContext): SelectionResult {
     // Ally side: support patterns anchor on the caster's own cell.
     if (target.side === 'ally') {
@@ -43,6 +72,12 @@ export function selectTargets(target: ParsedTarget, ctx: SelectTargetsContext): 
     }
 
     const scan = rowScanOrder(rowOf(ctx.casterPosition));
+
+    if (target.selection === 'row-most' || target.selection === 'row-least') {
+        const row = chooseRow(target.selection, rowOf(ctx.casterPosition), ctx.enemyOccupied);
+        const ordered = colsFrontToBack(row, ctx.enemyOccupied);
+        return { ordered, anchor: ordered[0] };
+    }
 
     // `all`: every living enemy, row-scan order then front->back within each row.
     if (target.selection === 'all') {

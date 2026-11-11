@@ -6087,7 +6087,7 @@ export function runCombat(rawInput: CombatEngineInput): {
      * area pattern neither counts nor spends, and nor does a hit Protection moved wholly onto
      * protectors (R139, `directlyDamagesVictim`). A cast's hit is aimed at each of its
      * sub-attack's primary targets (`SubAttackOutcome.primaryVictimIds` — the anchor, or every
-     * victim of a whole-battlefield attack, owner ruling R110). The FIRST aimed hit on a victim in
+     * victim where `everyVictimIsPrimary` holds). The FIRST aimed hit on a victim in
      * a chain is the primary-target hit; Stalwart's counter and buff, Nosorog's reflect and
      * Malvex's damage-taken shield read that one answer. Keys are `victimId|root`; roots are
      * unique for the whole run.
@@ -6488,7 +6488,8 @@ export function runCombat(rawInput: CombatEngineInput): {
          * True while the funnel is applying a cast whose pattern is the whole battlefield
          * (`isWholeBattlefieldPattern` — `Pattern-All`, Curator). Protection skips such a hit —
          * its game text: "Damage is not redirected for skills that target the entire
-         * battlefield." Set beside
+         * battlefield." A whole-row hit (`Pattern-Row`) makes every victim primary but is NOT
+         * whole-battlefield, so Protection still redirects it (#519). Set beside
          * `currentSubAttackIndex` by `drivePositionalApply`'s `applyToVictim` wrapper, so a
          * filtered-set passive hit ("all enemies with Inferno") never sets it.
          */
@@ -6670,8 +6671,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 reflectBase?: number;
                 /** This hit is a primary-target hit (Nosorog's `requirePrimaryTarget` reflect
                  *  gate): a cast's hit on one of its sub-attack's primary targets
-                 *  (`SubAttackOutcome.primaryVictimIds` — the anchor, or every victim of a
-                 *  whole-battlefield attack), or a counter's / proc's hit that was the first aimed
+                 *  (`SubAttackOutcome.primaryVictimIds` — the anchor, or every victim where
+                 *  `everyVictimIsPrimary` holds), or a counter's / proc's hit that was the first aimed
                  *  hit on this victim in its chain (`primaryHitsSpent`). False for a covered
                  *  footprint victim and for a later hit in the chain. Undefined reads as
                  *  true — the non-positional cast sites, which bind one victim. */
