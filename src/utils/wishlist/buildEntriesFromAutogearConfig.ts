@@ -3,12 +3,12 @@ import { GEAR_SLOTS, type GearSlotName } from '../../constants/gearTypes';
 import { isShipTypeName, type ShipTypeName } from '../../constants/shipTypes';
 import { ALL_STAT_NAMES, STATS } from '../../constants/stats';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
-import type { SavedAutogearConfig, BasisTerm } from '../../types/autogear';
+import type { BasisTerm, CustomFormulaRow, SavedAutogearConfig } from '../../types/autogear';
 import type { Ship } from '../../types/ship';
 import type { LimitableStat, StatName, StatType } from '../../types/stats';
 import type { WishlistEntry } from '../../types/wishlist';
 import { CUSTOM_FORMULA_SEEDS } from '../autogear/customFormulaSeeds';
-import { usableBasisTerms } from '../autogear/customFormula';
+import { usableBasis, usableBasisTerms } from '../autogear/customFormula';
 import { deriveBasis } from '../autogear/offFormula/basisDerivation';
 import { detectOffFormulaStats } from '../autogear/offFormula/offFormulaStats';
 import { hostedBasisTerms, roleAxis, rolePrimaryStat } from '../autogear/offFormula/roleBasisHost';
@@ -47,6 +47,23 @@ function formulaRole(ship: Ship, config: SavedAutogearConfig | null): ShipTypeNa
     return role && isShipTypeName(role) ? role : null;
 }
 
+/** The stat a row's basis replaces (`formulaRowTerm`): a derived stat's primary factor, or a
+ *  plain stat itself. `critMultiplier` has none, so the scorer ignores a basis on it. */
+const BASIS_PRIMARY: Partial<Record<LimitableStat, StatName>> = {
+    directDamage: 'attack',
+    effectiveHp: 'hp',
+};
+
+/** The stats a maximised custom-formula row scores on, its basis applied as `formulaRowTerm`
+ *  applies it (`usableBasis` validates the stored row). */
+function customRowStats(row: CustomFormulaRow): StatName[] {
+    const own = expand(row.stat);
+    const basis = row.stat === 'critMultiplier' ? undefined : usableBasis(row);
+    if (!basis) return own;
+    const primary = BASIS_PRIMARY[row.stat] ?? row.stat;
+    return [...own.filter((s) => s !== primary), ...basis.flatMap((term) => expand(term.stat))];
+}
+
 /**
  * The kit equation `OffFormulaNotice` offers for `role` (its "Use this equation" terms): the
  * ship's derived basis on the axis `role` hosts, when the detector flags an effect on that axis.
@@ -61,7 +78,7 @@ function detectedBasisTerms(ship: Ship, role: ShipTypeName): BasisTerm[] | undef
 /**
  * The stats the ship's scoring formula maximises, derived stats expanded, chosen the way
  * `calculatePriorityScore` picks its formula: a config in Custom mode (`shipRole: null`) scores on
- * its custom formula's `direction: 'max'` rows plus their basis-term stats; otherwise the role
+ * its custom formula's `direction: 'max'` rows (`customRowStats`); otherwise the role
  * scores on its own formula (the role seed's rows here), with a kit basis replacing the role's
  * primary stat by the basis-term stats: the applied one (`hostedBasisTerms`), else the one the
  * autogear page offers but the player has not applied (`detectedBasisTerms`), since the kit wants
@@ -72,9 +89,7 @@ export function formulaStats(ship: Ship, config: SavedAutogearConfig | null): St
     const stats = new Set<StatName>();
     if (config && config.shipRole === null) {
         for (const row of config.customFormula?.rows ?? []) {
-            if (row.direction !== 'max') continue;
-            expand(row.stat).forEach((s) => stats.add(s));
-            row.basis?.forEach((term) => expand(term.stat).forEach((s) => stats.add(s)));
+            if (row.direction === 'max') customRowStats(row).forEach((s) => stats.add(s));
         }
         return inStatOrder(stats);
     }
@@ -92,11 +107,14 @@ export function formulaStats(ship: Ship, config: SavedAutogearConfig | null): St
     return inStatOrder(stats);
 }
 
-/** Formula stats plus the stats the config's stat priorities and stat bonuses name, expanded. */
+/** Formula stats plus the stats the config's stat priorities and stat bonuses name, expanded.
+ *  Custom mode skips stat bonuses: `calculatePriorityScore` applies them only to a role formula. */
 function focusStats(ship: Ship, config: SavedAutogearConfig | null): StatName[] {
     const stats = new Set<StatName>(formulaStats(ship, config));
     config?.statPriorities.forEach((p) => expand(p.stat).forEach((s) => stats.add(s)));
-    config?.statBonuses.forEach((b) => expand(b.stat).forEach((s) => stats.add(s)));
+    if (config?.shipRole) {
+        config.statBonuses.forEach((b) => expand(b.stat).forEach((s) => stats.add(s)));
+    }
     return inStatOrder(stats);
 }
 

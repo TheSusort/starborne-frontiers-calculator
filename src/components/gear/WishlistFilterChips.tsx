@@ -3,6 +3,7 @@ import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { RARITIES } from '../../constants/rarities';
 import { WishlistEntry } from '../../types/wishlist';
 import { wishlistStatLabel } from '../../utils/wishlist/describeWishlistEntry';
+import { requiredSubStats } from '../../utils/wishlist/matchWishlistEntry';
 
 /** One chip per active filter of a wishlist entry. */
 export function WishlistFilterChips({ entry }: { entry: WishlistEntry }) {
@@ -18,7 +19,7 @@ export function WishlistFilterChips({ entry }: { entry: WishlistEntry }) {
     }
     if (filters.subStats?.length) {
         const names = filters.subStats.map(wishlistStatLabel).join(' + ');
-        const min = filters.subStatsMin ?? filters.subStats.length;
+        const min = requiredSubStats(filters);
         chips.push(min < filters.subStats.length ? `Subs: ${min} of ${names}` : `Subs: ${names}`);
     }
 

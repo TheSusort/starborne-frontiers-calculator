@@ -54,7 +54,43 @@ describe('wantedStats', () => {
                 },
             })
         );
-        expect(stats).toEqual(['hp', 'defence', 'hacking', 'security']);
+        // The basis replaces effectiveHp's primary factor (hp); defence still counts.
+        expect(stats).toEqual(['defence', 'hacking', 'security']);
+    });
+
+    it("keeps a derived row's other factors when its basis replaces the primary", () => {
+        const stats = wantedStats(
+            attacker,
+            config({
+                customFormula: {
+                    rows: [
+                        {
+                            stat: 'directDamage',
+                            kind: 'core',
+                            direction: 'max',
+                            basis: [{ stat: 'hp', weight: 0.5 }],
+                        },
+                    ],
+                },
+            })
+        );
+        expect(stats).toEqual(['hp', 'crit', 'critDamage']);
+    });
+
+    it('skips a stored basis the scorer would reject', () => {
+        const rows = [
+            {
+                stat: 'attack',
+                kind: 'core',
+                direction: 'max',
+                basis: 'not-an-array',
+            },
+            { stat: 'speed', kind: 'bonus', direction: 'max', basis: [{ stat: 'hp', weight: 1 }] },
+        ] as unknown as NonNullable<SavedAutogearConfig['customFormula']>['rows'];
+        expect(wantedStats(attacker, config({ customFormula: { rows } }))).toEqual([
+            'attack',
+            'speed',
+        ]);
     });
 
     it('adds stat priorities and bonuses, expanded, and drops stats no substat rolls', () => {
@@ -195,9 +231,16 @@ describe('wantedSets', () => {
         expect(fromPriority).toContain('SWIFTNESS');
         const fromBonus = wantedSets(
             defender,
-            config({ statBonuses: [{ stat: 'hacking', percentage: 50 }] })
+            config({ shipRole: 'DEFENDER', statBonuses: [{ stat: 'hacking', percentage: 50 }] })
         );
         expect(fromBonus).toContain('HACKING');
+        // Custom mode: the scorer applies no stat bonuses, so they add nothing.
+        const custom = config({
+            customFormula: { rows: [{ stat: 'hp', kind: 'core', direction: 'max' }] },
+            statBonuses: [{ stat: 'hacking', percentage: 50 }],
+        });
+        expect(wantedSets(defender, custom)).not.toContain('HACKING');
+        expect(wantedStats(defender, custom)).toEqual(['hp']);
     });
 
     it('adds sets for kit-basis stats', () => {
