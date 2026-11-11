@@ -43,10 +43,11 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
         statsByLevel: {
             32: {
                 hp: 327000,
-                // Fitted to a measured in-game Disintegration Cannon hit (#519); the community
-                // sheet's rounded 26.8K over-predicted it by 1.5%.
+                // Attack and defence are fitted to measured in-game hits (#519): attack to his
+                // Disintegration Cannon on a known-defence ship, defence to three player hits at
+                // two defence-penetration values, which agree within 2 points.
                 attack: 26390,
-                defence: 14900,
+                defence: 14675,
                 hacking: 270,
                 security: 160,
                 crit: 22,
