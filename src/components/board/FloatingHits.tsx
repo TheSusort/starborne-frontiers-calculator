@@ -75,12 +75,14 @@ export const FloatingHits: React.FC<{
     return (
         <>
             {statuses.length > 0 && (
-                <div className="absolute inset-x-0 top-[2%] flex flex-col items-center">
+                // `items-start` + `left-1/2`: `.board-float` translates by -50% of its own width,
+                // so each text starts at the cell's centre line and the animation centres it.
+                <div className="absolute inset-x-0 top-[2%] flex flex-col items-start">
                     {statuses.map((hit, i) => (
                         <span
                             key={`${turn}-s${i}`}
                             data-testid="status-float"
-                            className={`board-float whitespace-nowrap drop-shadow ${hitClass(hit, small)}`}
+                            className={`board-float relative left-1/2 max-w-[5rem] truncate drop-shadow ${hitClass(hit, small)}`}
                         >
                             {hitText(hit)}
                         </span>
