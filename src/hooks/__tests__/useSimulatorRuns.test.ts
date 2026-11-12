@@ -547,6 +547,9 @@ describe('divergence playback', () => {
         });
         const currentInput = mockRunSeedSetAsync.mock.calls[1][0];
         expect(currentInput).not.toBe(baselineInput);
+        // Each finished run auto-opens its first seed; the replay count asserted below is about
+        // the explicit opens only.
+        mockRunSeededBattle.mockClear();
 
         // Open a single playback first so `battleResult` starts non-null — otherwise the
         // "hides the single-fight playback" assertion below would pass even if
@@ -718,5 +721,72 @@ describe('useSimulatorRuns build failures', () => {
         });
         expect(result.current.runError).toMatch(/anchor/i);
         expect(mockRunSeededBattle).not.toHaveBeenCalled();
+    });
+});
+
+describe('useSimulatorRuns opened seed', () => {
+    const render = (overrides: Partial<Parameters<typeof useSimulatorRuns>[0]> = {}) =>
+        renderHook((props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props), {
+            initialProps: baseArgs(overrides),
+        });
+
+    it('opens the first seed of a multi-seed run once, from the input that ran', async () => {
+        const { result } = render({ seed: 42, runCount: 5 });
+        await act(async () => {
+            result.current.handleRun();
+        });
+
+        expect(result.current.aggregate).not.toBeNull();
+        expect(result.current.battleResult).toBe(fakeBattleResult);
+        expect(result.current.openedSeed).toBe(42);
+        expect(mockRunSeededBattle).toHaveBeenCalledTimes(1);
+        expect(mockRunSeededBattle.mock.calls[0][0]).toBe(mockRunSeedSetAsync.mock.calls[0][0]);
+        expect(mockRunSeededBattle.mock.calls[0][1]).toBe(42);
+    });
+
+    it('tracks the seed a later handleOpenSeed shows', async () => {
+        const { result } = render({ seed: 42, runCount: 5 });
+        await act(async () => {
+            result.current.handleRun();
+        });
+        act(() => result.current.handleOpenSeed(44));
+        expect(result.current.openedSeed).toBe(44);
+    });
+
+    it('records the effective seed of a single run', () => {
+        const { result } = render({ seed: 7, runCount: 1 });
+        act(() => {
+            result.current.handleRun();
+        });
+        expect(result.current.openedSeed).toBe(7);
+    });
+
+    it('clears the opened seed when a pair opens and when the run state is cleared', async () => {
+        const { result } = render({ seed: 42, runCount: 5 });
+        await act(async () => {
+            result.current.handleRun();
+        });
+        act(() => result.current.handlePinBaseline());
+        act(() => result.current.handleOpenDivergence(43));
+        expect(result.current.openedSeed).toBeNull();
+
+        act(() => result.current.handleOpenSeed(44));
+        expect(result.current.openedSeed).toBe(44);
+        act(() => result.current.handleClearRunState());
+        expect(result.current.openedSeed).toBeNull();
+    });
+
+    it('leaves nothing opened when the auto-opened replay throws', async () => {
+        mockRunSeededBattle.mockImplementationOnce(() => {
+            throw new Error('replay exploded');
+        });
+        const { result } = render({ seed: 42, runCount: 5 });
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.aggregate).not.toBeNull();
+        expect(result.current.battleResult).toBeNull();
+        expect(result.current.openedSeed).toBeNull();
+        expect(result.current.runError).toBe('replay exploded');
     });
 });

@@ -174,3 +174,19 @@ describe('PlacementBoard load-from-encounter with a reference ship', () => {
         expect(loadEncounter().T1).toBeUndefined();
     });
 });
+
+describe('PlacementBoard footer and hint', () => {
+    it('renders the footer slot inside the board card', () => {
+        renderBoard({ footerSlot: <p>squad leader goes here</p>, title: 'Your Team' });
+        const footer = screen.getByText('squad leader goes here');
+        expect(footer.closest('.card')).toBe(screen.getByText('Your Team').closest('.card'));
+    });
+
+    it('shows the click hint by default and leaves it out on request', () => {
+        const { unmount } = renderBoard();
+        expect(screen.getByText(/Click to select a ship/)).toBeInTheDocument();
+        unmount();
+        renderBoard({ hideHint: true });
+        expect(screen.queryByText(/Click to select a ship/)).not.toBeInTheDocument();
+    });
+});

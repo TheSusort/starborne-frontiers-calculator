@@ -43,6 +43,12 @@ interface UseSimulatorRunsArgs {
 
 export interface UseSimulatorRunsResult {
     battleResult: BattleResult | null;
+    /** The seed `battleResult` replays, or `null` when no single fight is displayed. A finished
+     *  multi-seed run opens its first seed, so a displayed aggregate always has one. */
+    openedSeed: number | null;
+    /** Bumped each time a run lands a result. A cancelled or failed run does not bump it, and
+     *  neither does opening a seed, so a consumer can tell a new result from a re-display. */
+    completedRuns: number;
     aggregate: SeedSetAggregate | null;
     baseline: PinnedBaseline | null;
     runError: string | null;
@@ -106,6 +112,8 @@ export function useSimulatorRuns({
     gridMode,
 }: UseSimulatorRunsArgs): UseSimulatorRunsResult {
     const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
+    const [openedSeed, setOpenedSeed] = useState<number | null>(null);
+    const [completedRuns, setCompletedRuns] = useState(0);
     const [aggregate, setAggregate] = useState<SeedSetAggregate | null>(null);
     const [runError, setRunError] = useState<string | null>(null);
     const [baseline, setBaseline] = useState<PinnedBaseline | null>(null);
@@ -161,6 +169,7 @@ export function useSimulatorRuns({
             input = buildInput();
         } catch (err) {
             setBattleResult(null);
+            setOpenedSeed(null);
             setAggregate(null);
             setProvenance(null);
             setRunError(err instanceof Error ? err.message : 'Simulation failed');
@@ -185,9 +194,12 @@ export function useSimulatorRuns({
                 setAggregate(null);
                 setDivergence(null);
                 setBattleResult(runSeededBattle(input, effectiveSeed, getGearPiece));
+                setOpenedSeed(effectiveSeed);
                 setProvenance({ input, overrides, gridMode: runGridMode });
+                setCompletedRuns((count) => count + 1);
             } catch (err) {
                 setBattleResult(null);
+                setOpenedSeed(null);
                 setAggregate(null);
                 setProvenance(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
@@ -217,15 +229,27 @@ export function useSimulatorRuns({
                 // stay the recorded run that produced it.
                 if (result === null) return;
                 setDivergence(null);
-                setBattleResult(null);
                 setAggregate(result);
                 setProvenance({ input, overrides, gridMode: runGridMode });
+                setCompletedRuns((count) => count + 1);
+                // Opened here, not in a page effect: strict mode double-fires effects, and this
+                // `.then` runs once per run. A replay failure leaves the aggregate displayed with
+                // no fight open.
+                try {
+                    setBattleResult(runSeededBattle(input, result.baseSeed, getGearPiece));
+                    setOpenedSeed(result.baseSeed);
+                } catch (err) {
+                    setBattleResult(null);
+                    setOpenedSeed(null);
+                    setRunError(err instanceof Error ? err.message : 'Simulation failed');
+                }
             })
             .catch((err) => {
                 if (!isCurrent()) return;
                 setIsRunning(false);
                 setProgress(null);
                 setBattleResult(null);
+                setOpenedSeed(null);
                 setAggregate(null);
                 setDivergence(null);
                 setProvenance(null);
@@ -243,6 +267,7 @@ export function useSimulatorRuns({
         setIsRunning(false);
         setProgress(null);
         setBattleResult(null);
+        setOpenedSeed(null);
         setAggregate(null);
         setProvenance(null);
         setBaseline(null);
@@ -254,7 +279,7 @@ export function useSimulatorRuns({
     // always matches the row it was opened from regardless of any board edit made since that
     // run. Never rebuild from the live boards here.
     //
-    // Wrapped in useCallback so this stays referentially stable for `SeedSetResults`' memo —
+    // Wrapped in useCallback so this stays referentially stable for `SeedStrip`'s memo —
     // see that component's doc for why.
     const handleOpenSeed = useCallback(
         (openSeed: number) => {
@@ -266,8 +291,10 @@ export function useSimulatorRuns({
             try {
                 setDivergence(null);
                 setBattleResult(runSeededBattle(provenance.input, openSeed, getGearPiece));
+                setOpenedSeed(openSeed);
             } catch (err) {
                 setBattleResult(null);
+                setOpenedSeed(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
             }
         },
@@ -316,11 +343,13 @@ export function useSimulatorRuns({
                 const baselineResult = runSeededBattle(baseline.input, openSeed, getGearPiece);
                 const currentResult = runSeededBattle(provenance.input, openSeed, getGearPiece);
                 setBattleResult(null);
+                setOpenedSeed(null);
                 setDivergence({ seed: openSeed, baseline: baselineResult, current: currentResult });
             } catch (err) {
                 // A failed open leaves nothing displayed: the pair never formed, and the single
                 // fight that was on screen is not what the error is about.
                 setBattleResult(null);
+                setOpenedSeed(null);
                 setDivergence(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
             }
@@ -332,6 +361,8 @@ export function useSimulatorRuns({
 
     return {
         battleResult,
+        openedSeed,
+        completedRuns,
         aggregate,
         baseline,
         runError,

@@ -16,9 +16,12 @@ import BattlePlayback from '../components/simulator/BattlePlayback';
 import DivergencePlayback from '../components/simulator/DivergencePlayback';
 import SeedRunControls, { randomSeed } from '../components/simulator/SeedRunControls';
 import SeedSetResults from '../components/simulator/SeedSetResults';
+import SeedStrip from '../components/simulator/SeedStrip';
+import SimulatorVerdict from '../components/simulator/SimulatorVerdict';
 import RunComparison from '../components/simulator/RunComparison';
 import StatSweepPanel from '../components/simulator/StatSweepPanel';
 import { Button } from '../components/ui/Button';
+import { Tabs } from '../components/ui/layout/Tabs';
 import SquadLeaderPicker from '../components/simulator/SquadLeaderPicker';
 import BossEncounterPicker from '../components/simulator/BossEncounterPicker';
 import { bossFootprintOfId } from '../constants/bountyBosses';
@@ -35,7 +38,10 @@ import {
 } from '../utils/simulator/squadLeaderSelection';
 import SimulatorSetupBar from '../components/simulator/SimulatorSetupBar';
 import { shipPortraitUrl } from '../components/board/shipPortrait';
-import { Select } from '../components/ui/Select';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
+import SetupStrip from '../components/simulator/SetupStrip';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { setupChipLabels } from '../utils/simulator/setupSummary';
 import {
     DEFAULT_GRID_MODE,
     fitBoardToCells,
@@ -64,6 +70,8 @@ import {
 
 type Side = 'player' | 'enemy';
 
+type ResultTab = 'playback' | 'compare' | 'sweep';
+
 type UnsimulatedEntry = { actorId: string; name: string; texts: string[] };
 
 /** One side's list of squad-leader effects the sim could not model this run (conditional /
@@ -78,6 +86,12 @@ const UnsimulatedEffectsList: React.FC<{ entries: UnsimulatedEntry[] }> = ({ ent
         ))}
     </ul>
 );
+
+const CLICK_HINT =
+    "Click to select a ship, Ctrl+Click to remove a ship, Hover + 1-5 to set attack order, Shift+Click or a ship's cog icon to edit stats";
+
+/** From this width up the whole run bar stays pinned; below it only the summary and Run do. */
+const WIDE_QUERY = '(min-width: 640px)';
 
 const SimulatorPage: React.FC = () => {
     const { getGearPiece } = useInventory();
@@ -255,6 +269,16 @@ const SimulatorPage: React.FC = () => {
     };
 
     const enemyHasBoss = loadedBossShipId(enemyBoard) !== undefined;
+    // Whether the user switched the enemy card to boss mode before choosing a boss. The mode
+    // itself is derived: a loaded boss always means boss mode, so this never disagrees with the
+    // board.
+    const [bossModePicked, setBossModePicked] = useState(false);
+    const enemyMode: 'team' | 'boss' =
+        enemyHasBoss || (bossModePicked && gridMode === 'normal') ? 'boss' : 'team';
+    // Edit setup and a load/restore set this; a newly landed result clears it. The setup is
+    // collapsed only while a result is displayed and this is false.
+    const [editingSetup, setEditingSetup] = useState(false);
+    const isWide = useMediaQuery(WIDE_QUERY);
     // A boss board has no squad leader: the picker is hidden and the stored selection neither
     // runs nor saves, but stays in state for when the boss is taken off.
     const activeEnemySquadLeader = enemyHasBoss ? undefined : enemySquadLeader;
@@ -263,6 +287,8 @@ const SimulatorPage: React.FC = () => {
 
     const {
         battleResult,
+        openedSeed,
+        completedRuns,
         aggregate,
         baseline,
         divergence,
@@ -296,6 +322,31 @@ const SimulatorPage: React.FC = () => {
         gridMode,
     });
 
+    const hasResult = battleResult !== null || aggregate !== null || divergence !== null;
+    const collapsed = hasResult && !editingSetup;
+
+    // Folds the setup when a run lands a result, not when Run is clicked: a rerun that is still
+    // going, or was cancelled, leaves the boards open.
+    const seenCompletedRuns = useRef(completedRuns);
+    useEffect(() => {
+        if (completedRuns === seenCompletedRuns.current) return;
+        seenCompletedRuns.current = completedRuns;
+        setEditingSetup(false);
+    }, [completedRuns]);
+
+    // Boss mode with no boss chosen leaves the enemy side as it was, so the hook's own check
+    // passes; the run is blocked here instead.
+    const bossPending = enemyMode === 'boss' && !enemyHasBoss;
+
+    const handleEnemyModeChange = (mode: string) => {
+        if (mode === 'boss') {
+            setBossModePicked(true);
+            return;
+        }
+        setBossModePicked(false);
+        if (enemyHasBoss) handleLoadEncounter('enemy', {});
+    };
+
     /** The one place a stored setup becomes live state. */
     const applySetup = (result: DeserializedSetup) => {
         setPlayerBoard(withoutStrayBossCells(result.playerBoard));
@@ -315,6 +366,8 @@ const SimulatorPage: React.FC = () => {
         // A displayed result describes the boards that produced it and is never re-derived from
         // live state, so replacing the boards has to discard it.
         handleClearRunState();
+        setEditingSetup(true);
+        setBossModePicked(false);
         appliedSetupLostCellsRef.current = result.dropped.length > 0;
         setLoadNotice(
             result.dropped.length > 0
@@ -449,6 +502,68 @@ const SimulatorPage: React.FC = () => {
     // resolved-value step.
     const sweep = useStatSweep({ buildInput, getGearPiece });
 
+    const [activeTab, setActiveTab] = useState<ResultTab>('playback');
+
+    const seedRunProps = {
+        seed: effectiveSeed,
+        runCount: effectiveRunCount,
+        onSeedChange: setSeed,
+        onRunCountChange: setRunCount,
+        onRun: handleRun,
+        canRun: canRun && !bossPending && !sweep.isSweeping,
+        locked: baseline !== null,
+        lockedReason: 'Seed and run count are fixed by the pinned baseline. Unpin to change them.',
+        onUnpin: handleUnpinBaseline,
+        isRunning,
+        progress,
+        onCancel: handleCancel,
+    };
+
+    const pinButton =
+        aggregate && !baseline ? (
+            <Button variant="secondary" onClick={handlePinBaseline} disabled={isRunning}>
+                Pin as baseline
+            </Button>
+        ) : null;
+
+    const leaderNames = [playerSquadLeader?.name, activeEnemySquadLeader?.name].filter(Boolean);
+    const runSummary = [
+        `${playerCount} vs ${enemyHasBoss ? 'Boss' : enemyCount}`,
+        gridMode === 'small' ? 'Small grid' : 'Normal grid',
+        leaderNames.length > 0 ? `Leaders: ${leaderNames.join(', ')}` : 'no squad leaders',
+    ].join(' · ');
+    const lastRunText = aggregate
+        ? `Last run: ${aggregate.wins.player} / ${aggregate.count} wins`
+        : battleResult
+          ? `Last run: ${battleResult.outcome.winner === 'player' ? 'win' : 'loss'}`
+          : null;
+
+    const handleOpenDivergenceFromCompare = (openSeed: number) => {
+        handleOpenDivergence(openSeed);
+        setActiveTab('playback');
+    };
+
+    const unsimulatedBlock = (() => {
+        const sections: { label: string; entries: UnsimulatedEntry[] }[] = divergence
+            ? [
+                  {
+                      label: 'Baseline: squad leader effects not simulated this run',
+                      entries: divergence.baseline.preFight?.unsimulated ?? [],
+                  },
+                  {
+                      label: 'Current: squad leader effects not simulated this run',
+                      entries: divergence.current.preFight?.unsimulated ?? [],
+                  },
+              ]
+            : [
+                  {
+                      label: 'Squad leader effects not simulated this run',
+                      entries: battleResult?.preFight?.unsimulated ?? [],
+                  },
+              ];
+        return sections.filter((section) => section.entries.length > 0);
+    })();
+
     return (
         <>
             <Seo {...SEO_CONFIG.simulator} />
@@ -462,222 +577,309 @@ const SimulatorPage: React.FC = () => {
                 }
             >
                 <div className="space-y-6">
-                    <SimulatorSetupBar
-                        saved={savedSetups}
-                        onSave={handleSaveSetup}
-                        onLoad={handleLoadSetup}
-                        onDelete={handleDeleteSetup}
-                        canSave={playerCount > 0 || enemyCount > 0}
-                        canLoad={!shipsLoading && !unitsLoading}
-                    />
-                    <div className="max-w-xs">
-                        <Select
-                            label="Board"
-                            value={gridMode}
-                            onChange={handleGridModeChange}
-                            options={[
-                                { value: 'normal', label: 'Normal (12 cells)' },
-                                { value: 'small', label: 'Small grid (7 cells)' },
-                            ]}
-                            helpLabel="The small grid is the middle cell and the six around it, for both teams."
+                    {collapsed ? (
+                        <SetupStrip
+                            playerLabels={setupChipLabels(playerBoard)}
+                            enemyLabels={setupChipLabels(enemyBoard)}
+                            onEdit={() => setEditingSetup(true)}
                         />
-                    </div>
+                    ) : (
+                        <SimulatorSetupBar
+                            saved={savedSetups}
+                            onSave={handleSaveSetup}
+                            onLoad={handleLoadSetup}
+                            onDelete={handleDeleteSetup}
+                            canSave={playerCount > 0 || enemyCount > 0}
+                            canLoad={!shipsLoading && !unitsLoading}
+                            trailing={
+                                <SegmentedControl
+                                    label="Board"
+                                    value={gridMode}
+                                    onChange={handleGridModeChange}
+                                    options={[
+                                        { value: 'normal', label: 'Normal · 12' },
+                                        { value: 'small', label: 'Small · 7' },
+                                    ]}
+                                    helpText="The small grid is the middle cell and the six around it, for both teams."
+                                />
+                            }
+                        />
+                    )}
                     <div aria-live="polite" className="space-y-1">
                         {loadNotice && <p className="text-sm text-amber-400">{loadNotice}</p>}
                         {gridNotice && <p className="text-sm text-amber-400">{gridNotice}</p>}
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                            <PlacementBoard
-                                title={`Your Team${playerCount > 0 ? ` (${playerCount})` : ''}`}
-                                formation={playerFormation}
-                                selectedPosition={playerSelected}
-                                onSelectPosition={(pos) => handleSelectPosition('player', pos)}
-                                onRemoveShip={(pos) => handleRemoveShip('player', pos)}
-                                onPickShip={(ship) => handlePickShip('player', ship)}
-                                onCloseSelector={() => setPlayerSelected(undefined)}
-                                resolveShip={(pos) => playerBoard[pos]?.ship ?? null}
-                                cells={gridCells(gridMode)}
-                                footprintOf={bossFootprintOfId}
-                                onLoadEncounter={(board) => handleLoadEncounter('player', board)}
-                                onCopyToOtherSide={() => handleCopyBoard('player')}
-                                copyLabel="Copy to enemy"
-                                onEditStats={(pos) => setEditing({ side: 'player', position: pos })}
-                                hasOverrides={(pos) => hasAnyOverride(playerBoard[pos]?.overrides)}
-                            />
-                            <SquadLeaderPicker
-                                side="player"
-                                selection={playerSquadLeader}
-                                onChange={(sel) => handleSquadLeaderChange('player', sel)}
-                                board={playerBoard}
-                            />
-                        </div>
-                        <div className="space-y-4">
-                            <PlacementBoard
-                                title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
-                                formation={enemyFormation}
-                                selectedPosition={enemySelected}
-                                onSelectPosition={(pos) => handleSelectPosition('enemy', pos)}
-                                onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
-                                onPickShip={(ship) => handlePickShip('enemy', ship)}
-                                onCloseSelector={() => setEnemySelected(undefined)}
-                                resolveShip={(pos) => enemyBoard[pos]?.ship ?? null}
-                                cells={gridCells(gridMode)}
-                                onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
-                                onCopyToOtherSide={
-                                    enemyHasBoss ? undefined : () => handleCopyBoard('enemy')
-                                }
-                                footprintOf={bossFootprintOfId}
-                                headerSlot={
-                                    <BossEncounterPicker
-                                        board={enemyBoard}
-                                        onChange={(board) => handleLoadEncounter('enemy', board)}
-                                        disabled={gridMode === 'small'}
-                                        helpLabel="Fight a bounty boss instead of a team. Needs the normal board."
-                                    />
-                                }
-                                copyLabel="Copy to your team"
-                                mirrored
-                                onEditStats={(pos) => setEditing({ side: 'enemy', position: pos })}
-                                hasOverrides={(pos) => hasAnyOverride(enemyBoard[pos]?.overrides)}
-                            />
-                            {!enemyHasBoss && (
-                                <SquadLeaderPicker
-                                    side="enemy"
-                                    selection={enemySquadLeader}
-                                    onChange={(sel) => handleSquadLeaderChange('enemy', sel)}
-                                    board={enemyBoard}
+                    {!collapsed && (
+                        <>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <PlacementBoard
+                                    title={`Your Team${playerCount > 0 ? ` (${playerCount})` : ''}`}
+                                    formation={playerFormation}
+                                    selectedPosition={playerSelected}
+                                    onSelectPosition={(pos) => handleSelectPosition('player', pos)}
+                                    onRemoveShip={(pos) => handleRemoveShip('player', pos)}
+                                    onPickShip={(ship) => handlePickShip('player', ship)}
+                                    onCloseSelector={() => setPlayerSelected(undefined)}
+                                    resolveShip={(pos) => playerBoard[pos]?.ship ?? null}
+                                    cells={gridCells(gridMode)}
+                                    footprintOf={bossFootprintOfId}
+                                    onLoadEncounter={(board) =>
+                                        handleLoadEncounter('player', board)
+                                    }
+                                    onCopyToOtherSide={() => handleCopyBoard('player')}
+                                    copyLabel="Copy to enemy"
+                                    onEditStats={(pos) =>
+                                        setEditing({ side: 'player', position: pos })
+                                    }
+                                    hasOverrides={(pos) =>
+                                        hasAnyOverride(playerBoard[pos]?.overrides)
+                                    }
+                                    hideHint
+                                    footerSlot={
+                                        <SquadLeaderPicker
+                                            side="player"
+                                            selection={playerSquadLeader}
+                                            onChange={(sel) =>
+                                                handleSquadLeaderChange('player', sel)
+                                            }
+                                            board={playerBoard}
+                                        />
+                                    }
                                 />
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <SeedRunControls
-                            seed={effectiveSeed}
-                            runCount={effectiveRunCount}
-                            onSeedChange={setSeed}
-                            onRunCountChange={setRunCount}
-                            onRun={handleRun}
-                            canRun={canRun && !sweep.isSweeping}
-                            locked={baseline !== null}
-                            lockedReason="Seed and run count are fixed by the pinned baseline. Unpin to change them."
-                            onUnpin={handleUnpinBaseline}
-                            isRunning={isRunning}
-                            progress={progress}
-                            onCancel={handleCancel}
-                        />
-                        {!canRun && (
-                            <span className="text-sm text-theme-text-secondary">
-                                Place at least one ship on each team to run.
-                            </span>
-                        )}
-                    </div>
+                                <PlacementBoard
+                                    title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
+                                    formation={enemyFormation}
+                                    selectedPosition={enemySelected}
+                                    onSelectPosition={(pos) => handleSelectPosition('enemy', pos)}
+                                    onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
+                                    onPickShip={(ship) => handlePickShip('enemy', ship)}
+                                    onCloseSelector={() => setEnemySelected(undefined)}
+                                    resolveShip={(pos) => enemyBoard[pos]?.ship ?? null}
+                                    cells={gridCells(gridMode)}
+                                    onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
+                                    onCopyToOtherSide={
+                                        enemyHasBoss ? undefined : () => handleCopyBoard('enemy')
+                                    }
+                                    footprintOf={bossFootprintOfId}
+                                    headerSlot={
+                                        <div className="space-y-3">
+                                            <SegmentedControl
+                                                label="Enemy"
+                                                size="sm"
+                                                value={enemyMode}
+                                                onChange={handleEnemyModeChange}
+                                                options={[
+                                                    { value: 'team', label: 'Team' },
+                                                    {
+                                                        value: 'boss',
+                                                        label: 'Bounty boss',
+                                                        disabled: gridMode === 'small',
+                                                        title:
+                                                            gridMode === 'small'
+                                                                ? 'Fight a bounty boss instead of a team. Needs the normal board.'
+                                                                : undefined,
+                                                    },
+                                                ]}
+                                            />
+                                            {gridMode === 'small' && (
+                                                <p className="text-xs text-theme-text-secondary">
+                                                    Bounty bosses need the normal board.
+                                                </p>
+                                            )}
+                                            {enemyMode === 'boss' && (
+                                                <BossEncounterPicker
+                                                    board={enemyBoard}
+                                                    onChange={(board) =>
+                                                        handleLoadEncounter('enemy', board)
+                                                    }
+                                                    disabled={gridMode === 'small'}
+                                                    helpLabel="Fight a bounty boss instead of a team. Needs the normal board."
+                                                />
+                                            )}
+                                        </div>
+                                    }
+                                    copyLabel="Copy to your team"
+                                    mirrored
+                                    onEditStats={(pos) =>
+                                        setEditing({ side: 'enemy', position: pos })
+                                    }
+                                    hasOverrides={(pos) =>
+                                        hasAnyOverride(enemyBoard[pos]?.overrides)
+                                    }
+                                    hideHint
+                                    footerSlot={
+                                        enemyHasBoss ? (
+                                            <p className="text-sm text-theme-text-secondary">
+                                                Bounty bosses have no squad leader.
+                                            </p>
+                                        ) : (
+                                            <SquadLeaderPicker
+                                                side="enemy"
+                                                selection={enemySquadLeader}
+                                                onChange={(sel) =>
+                                                    handleSquadLeaderChange('enemy', sel)
+                                                }
+                                                board={enemyBoard}
+                                            />
+                                        )
+                                    }
+                                />
+                            </div>
+                            <p className="text-xs text-theme-text-secondary">{CLICK_HINT}</p>
+                        </>
+                    )}
 
                     {runError && (
                         <div className="card text-red-400">Simulation error: {runError}</div>
                     )}
 
-                    <StatSweepPanel
-                        playerBoard={playerBoard}
-                        enemyBoard={enemyBoard}
-                        statsDeps={statsDeps}
-                        seed={effectiveSeed}
-                        points={sweep.points}
-                        provenance={sweep.provenance}
-                        isSweeping={sweep.isSweeping}
-                        progress={sweep.progress}
-                        error={sweep.error}
-                        onRunSweep={sweep.runSweep}
-                        onCancelSweep={sweep.cancelSweep}
-                        disabled={isRunning}
-                    />
+                    {(aggregate || battleResult) &&
+                        (aggregate ? (
+                            <SeedSetResults aggregate={aggregate} />
+                        ) : (
+                            <SimulatorVerdict result={battleResult} />
+                        ))}
 
                     {/* Squad-leader effects the sim could not model, surfaced so the outcome is
                         never mistaken for a full simulation of the selected leaders. A divergence
                         pair can carry a DIFFERENT selection per side (the baseline may have been
                         pinned under a different squad leader than the current run), so each side
-                        gets its own labelled list rather than one merged list. */}
-                    {divergence ? (
-                        <>
-                            {(divergence.baseline.preFight?.unsimulated.length ?? 0) > 0 && (
-                                <div className="card border-amber-500/40 space-y-1">
+                        keeps its own labelled list inside the one block. */}
+                    {unsimulatedBlock.length > 0 && (
+                        <div className="card border-amber-500/40 space-y-3">
+                            {unsimulatedBlock.map((section) => (
+                                <div key={section.label} className="space-y-1">
                                     <p className="text-sm font-semibold text-amber-400">
-                                        Baseline: squad leader effects not simulated this run
+                                        {section.label}
                                     </p>
-                                    <UnsimulatedEffectsList
-                                        entries={divergence.baseline.preFight!.unsimulated}
-                                    />
+                                    <UnsimulatedEffectsList entries={section.entries} />
                                 </div>
-                            )}
-                            {(divergence.current.preFight?.unsimulated.length ?? 0) > 0 && (
-                                <div className="card border-amber-500/40 space-y-1">
-                                    <p className="text-sm font-semibold text-amber-400">
-                                        Current: squad leader effects not simulated this run
-                                    </p>
-                                    <UnsimulatedEffectsList
-                                        entries={divergence.current.preFight!.unsimulated}
-                                    />
-                                </div>
-                            )}
-                        </>
-                    ) : (
-                        battleResult?.preFight &&
-                        battleResult.preFight.unsimulated.length > 0 && (
-                            <div className="card border-amber-500/40 space-y-1">
-                                <p className="text-sm font-semibold text-amber-400">
-                                    Squad leader effects not simulated this run
-                                </p>
-                                <UnsimulatedEffectsList
-                                    entries={battleResult.preFight.unsimulated}
-                                />
-                            </div>
-                        )
-                    )}
-
-                    {aggregate && (
-                        <div className="space-y-2">
-                            <SeedSetResults aggregate={aggregate} onOpenSeed={handleOpenSeed} />
-                            {!baseline && (
-                                <Button
-                                    variant="secondary"
-                                    onClick={handlePinBaseline}
-                                    disabled={isRunning}
-                                >
-                                    Pin as baseline
-                                </Button>
-                            )}
+                            ))}
                         </div>
                     )}
 
-                    {baseline && aggregate && currentOverrides && (
-                        <RunComparison
-                            baseline={baseline}
-                            current={aggregate}
-                            currentOverrides={currentOverrides}
-                            onOpenDivergence={handleOpenDivergence}
-                        />
+                    {!isWide && (
+                        <div className="card">
+                            <SeedRunControls {...seedRunProps} showAction={false}>
+                                {pinButton}
+                            </SeedRunControls>
+                        </div>
                     )}
 
-                    {divergence ? (
-                        <DivergencePlayback
-                            seed={divergence.seed}
-                            baseline={divergence.baseline}
-                            current={divergence.current}
-                            onClose={handleCloseDivergence}
-                            portraitFor={portraitFor}
-                            baselineCells={gridCells(baselineGridMode)}
-                            currentCells={gridCells(currentGridMode)}
+                    <div>
+                        <Tabs
+                            tabs={[
+                                { id: 'playback', label: 'Playback' },
+                                {
+                                    id: 'compare',
+                                    label: 'Compare to baseline',
+                                    badge: baseline ? undefined : 'pin one first',
+                                },
+                                { id: 'sweep', label: 'Stat sweep' },
+                            ]}
+                            activeTab={activeTab}
+                            onChange={(tab) => setActiveTab(tab as ResultTab)}
                         />
-                    ) : (
-                        battleResult && (
-                            <BattlePlayback
-                                result={battleResult}
-                                portraitFor={portraitFor}
-                                cells={gridCells(currentGridMode)}
+
+                        {activeTab === 'playback' && (
+                            <div className="space-y-4">
+                                {aggregate && (
+                                    <SeedStrip
+                                        runs={aggregate.runs}
+                                        openedSeed={divergence?.seed ?? openedSeed}
+                                        onOpenSeed={handleOpenSeed}
+                                    />
+                                )}
+                                {divergence ? (
+                                    <DivergencePlayback
+                                        seed={divergence.seed}
+                                        baseline={divergence.baseline}
+                                        current={divergence.current}
+                                        onClose={handleCloseDivergence}
+                                        portraitFor={portraitFor}
+                                        baselineCells={gridCells(baselineGridMode)}
+                                        currentCells={gridCells(currentGridMode)}
+                                    />
+                                ) : battleResult ? (
+                                    <BattlePlayback
+                                        result={battleResult}
+                                        portraitFor={portraitFor}
+                                        cells={gridCells(currentGridMode)}
+                                    />
+                                ) : (
+                                    <p className="text-sm text-theme-text-secondary">
+                                        {aggregate
+                                            ? 'Pick a seed above to watch that fight.'
+                                            : 'Run a simulation to watch the fight here.'}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'compare' &&
+                            (baseline && aggregate && currentOverrides ? (
+                                <RunComparison
+                                    baseline={baseline}
+                                    current={aggregate}
+                                    currentOverrides={currentOverrides}
+                                    onOpenDivergence={handleOpenDivergenceFromCompare}
+                                />
+                            ) : (
+                                <p className="text-sm text-theme-text-secondary">
+                                    Run several seeds, then use Pin as baseline in the run controls
+                                    to compare later runs against it.
+                                </p>
+                            ))}
+
+                        {/* Stays mounted while another tab shows: its inputs are local state a
+                            tab switch must not reset. */}
+                        <div hidden={activeTab !== 'sweep'}>
+                            <StatSweepPanel
+                                playerBoard={playerBoard}
+                                enemyBoard={enemyBoard}
+                                statsDeps={statsDeps}
+                                seed={effectiveSeed}
+                                points={sweep.points}
+                                provenance={sweep.provenance}
+                                isSweeping={sweep.isSweeping}
+                                progress={sweep.progress}
+                                error={sweep.error}
+                                onRunSweep={sweep.runSweep}
+                                onCancelSweep={sweep.cancelSweep}
+                                disabled={isRunning}
+                                alwaysOpen
                             />
-                        )
-                    )}
+                        </div>
+                    </div>
+
+                    {/* Right padding clears the app's fixed bottom-right widget stack (App.tsx). */}
+                    <div
+                        data-testid="run-bar"
+                        className="sticky bottom-0 z-30 bg-dark border-t border-dark-border shadow-[0_-4px_12px_rgba(0,0,0,0.4)] pl-4 pr-24 py-3"
+                    >
+                        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                            <div className="text-sm space-y-0.5">
+                                <p>{runSummary}</p>
+                                {lastRunText && (
+                                    <p className="text-theme-text-secondary">{lastRunText}</p>
+                                )}
+                                {!canRun ? (
+                                    <p className="text-theme-text-secondary">
+                                        Place at least one ship on each team to run.
+                                    </p>
+                                ) : (
+                                    bossPending && (
+                                        <p className="text-theme-text-secondary">
+                                            Pick a bounty boss to run.
+                                        </p>
+                                    )
+                                )}
+                            </div>
+                            <SeedRunControls {...seedRunProps} showInputs={isWide}>
+                                {pinButton}
+                            </SeedRunControls>
+                        </div>
+                    </div>
                 </div>
 
                 {editing && editingPlacement && (

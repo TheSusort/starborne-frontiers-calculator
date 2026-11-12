@@ -31,6 +31,7 @@ const baseHookReturn = {
     divergence: null as { seed: number; baseline: BattleResult; current: BattleResult } | null,
     handleOpenDivergence,
     handleCloseDivergence,
+    openedSeed: null,
     runError: null,
     effectiveSeed: 1,
     effectiveRunCount: 1,
@@ -52,6 +53,14 @@ vi.mock('../../hooks/useSimulatorRuns', () => ({
 }));
 
 vi.mock('../../components/simulator/SeedSetResults', () => ({
+    default: () => null,
+}));
+
+vi.mock('../../components/simulator/SimulatorVerdict', () => ({
+    default: () => null,
+}));
+
+vi.mock('../../components/simulator/SeedStrip', () => ({
     default: () => null,
 }));
 
@@ -98,7 +107,7 @@ describe('SimulatorPage divergence wiring', () => {
     it('passes handleOpenDivergence (not a no-op) to RunComparison', () => {
         hookReturn = {
             ...baseHookReturn,
-            aggregate: { runs: [] } as never,
+            aggregate: { runs: [], wins: { player: 0, enemy: 0 }, count: 0 } as never,
             baseline: {} as never,
             currentOverrides: {} as never,
         };
@@ -108,8 +117,35 @@ describe('SimulatorPage divergence wiring', () => {
             </MemoryRouter>
         );
 
+        fireEvent.click(screen.getByRole('button', { name: 'Compare to baseline' }));
         fireEvent.click(screen.getByText('open divergence for 42'));
         expect(handleOpenDivergence).toHaveBeenCalledWith(42);
+    });
+
+    it('switches to the playback tab once a divergence opens from the compare tab', () => {
+        hookReturn = {
+            ...baseHookReturn,
+            aggregate: { runs: [], wins: { player: 0, enemy: 0 }, count: 0 } as never,
+            baseline: {} as never,
+            currentOverrides: {} as never,
+        };
+        render(
+            <MemoryRouter>
+                <SimulatorPage />
+            </MemoryRouter>
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Compare to baseline' }));
+        expect(screen.getByRole('button', { name: 'Compare to baseline' })).toHaveAttribute(
+            'aria-current',
+            'page'
+        );
+        fireEvent.click(screen.getByText('open divergence for 42'));
+        expect(screen.getByRole('button', { name: 'Playback' })).toHaveAttribute(
+            'aria-current',
+            'page'
+        );
+        expect(screen.queryByText('open divergence for 42')).not.toBeInTheDocument();
     });
 
     it('renders the divergence pair instead of the single playback when a pair is open', () => {
@@ -210,6 +246,15 @@ describe('SimulatorPage divergence wiring', () => {
         ).toBeInTheDocument();
         expect(screen.getByText(/baseline-only effect/)).toBeInTheDocument();
         expect(screen.getByText(/current-only effect/)).toBeInTheDocument();
+        // One warning block carries both labelled lists.
+        const baselineBlock = screen
+            .getByText('Baseline: squad leader effects not simulated this run')
+            .closest('.card');
+        const currentBlock = screen
+            .getByText('Current: squad leader effects not simulated this run')
+            .closest('.card');
+        expect(baselineBlock).not.toBeNull();
+        expect(baselineBlock).toBe(currentBlock);
     });
 
     it('shows no unsimulated-effects caveat while a pair is open and neither side carries one', () => {

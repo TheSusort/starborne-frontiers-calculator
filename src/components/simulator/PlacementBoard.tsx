@@ -58,6 +58,10 @@ interface PlacementBoardProps {
     footprintOf?: (shipId: string) => readonly Position[] | undefined;
     /** Rendered between the heading and the load/save controls (e.g. the encounter picker). */
     headerSlot?: React.ReactNode;
+    /** Rendered at the bottom of the board card, below the grid. */
+    footerSlot?: React.ReactNode;
+    /** Leaves out the grid's click-instructions line; the host shows it once for both boards. */
+    hideHint?: boolean;
 }
 
 /** One placement board: a side heading, an optional "load encounter" dropdown, a FormationGrid,
@@ -80,6 +84,8 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     cells,
     footprintOf,
     headerSlot,
+    footerSlot,
+    hideHint = false,
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
     const resolveStoredShip = useShipIdResolver();
@@ -169,7 +175,9 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                 resolveShip={resolveShip}
                 cells={cells}
                 footprintOf={footprintOf}
+                hideHint={hideHint}
             />
+            {footerSlot && <div className="mt-4">{footerSlot}</div>}
             {/* Picker contract: mounted ONLY while a cell is selected. Mount/unmount drives the
                 modal — it opens on mount; onClose clears the selection, which unmounts this and
                 closes the modal. Do not render it unconditionally. */}

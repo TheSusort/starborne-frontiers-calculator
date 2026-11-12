@@ -230,7 +230,7 @@ export async function runSeedSetAsync(
     const { getGearPiece, signal, onProgress } = options;
 
     // Each `onProgress` call re-renders every consumer of the result it reports (see
-    // `SeedSetResults`), so a 1,000-seed run cannot fire one per seed without flooding the
+    // `SeedStrip`), so a 1,000-seed run cannot fire one per seed without flooding the
     // results tree. Reporting at most ~100 times keeps that cost constant regardless of `count`,
     // while a count at or below 100 keeps reporting every seed unchanged.
     const reportEvery = Math.max(1, Math.ceil(count / 100));

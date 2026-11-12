@@ -101,9 +101,8 @@ const renderPage = () =>
         </MemoryRouter>
     );
 
-const chooseGrid = (label: 'Normal (12 cells)' | 'Small grid (7 cells)') => {
-    fireEvent.click(screen.getByLabelText('Board'));
-    fireEvent.click(screen.getByRole('option', { name: label }));
+const chooseGrid = (label: 'Normal · 12' | 'Small · 7') => {
+    fireEvent.click(screen.getByRole('button', { name: label }));
 };
 
 const positions = (side: 'player' | 'enemy') =>
@@ -125,7 +124,7 @@ describe('SimulatorPage small grid', () => {
         fireEvent.click(screen.getByText('load player'));
         expect(positions('player')).toEqual(['B4', 'T1', 'T4']);
 
-        chooseGrid('Small grid (7 cells)');
+        chooseGrid('Small · 7');
         expect(screen.getByTestId('cells-player')).toHaveTextContent('7');
         expect(screen.getByTestId('cells-enemy')).toHaveTextContent('7');
         expect(positions('player')).toHaveLength(3);
@@ -135,7 +134,7 @@ describe('SimulatorPage small grid', () => {
 
     it('keeps every later write on the grid: a loaded encounter, a copy, a picked cell', () => {
         renderPage();
-        chooseGrid('Small grid (7 cells)');
+        chooseGrid('Small · 7');
         fireEvent.click(screen.getByText('load enemy'));
         expectAllOnSmallGrid();
         expect(positions('enemy')).toHaveLength(3);
@@ -148,18 +147,24 @@ describe('SimulatorPage small grid', () => {
     it('refuses to switch while a team has more ships than the small grid holds', () => {
         renderPage();
         fireEvent.click(screen.getByText('load eight player'));
-        chooseGrid('Small grid (7 cells)');
+        chooseGrid('Small · 7');
         expect(screen.getByTestId('cells-player')).toHaveTextContent('12');
         expect(positions('player')).toHaveLength(8);
         expect(screen.getByText(/holds 7 ships per team/)).toBeInTheDocument();
         // The control still reads Normal.
-        expect(screen.getByText('Normal (12 cells)')).toBeInTheDocument();
-        expect(screen.queryByText('Small grid (7 cells)')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Normal · 12' })).toHaveAttribute(
+            'aria-pressed',
+            'true'
+        );
+        expect(screen.getByRole('button', { name: 'Small · 7' })).toHaveAttribute(
+            'aria-pressed',
+            'false'
+        );
     });
 
     it('a loaded encounter too big for the small grid keeps seven and says how many were left out', () => {
         renderPage();
-        chooseGrid('Small grid (7 cells)');
+        chooseGrid('Small · 7');
         fireEvent.click(screen.getByText('load eight player'));
         expect(positions('player')).toHaveLength(7);
         expectAllOnSmallGrid();
@@ -168,10 +173,10 @@ describe('SimulatorPage small grid', () => {
 
     it('switching back to normal leaves the ships where they are', () => {
         renderPage();
-        chooseGrid('Small grid (7 cells)');
+        chooseGrid('Small · 7');
         fireEvent.click(screen.getByText('load player'));
         const onGrid = positions('player');
-        chooseGrid('Normal (12 cells)');
+        chooseGrid('Normal · 12');
         expect(screen.getByTestId('cells-player')).toHaveTextContent('12');
         expect(positions('player')).toEqual(onGrid);
     });

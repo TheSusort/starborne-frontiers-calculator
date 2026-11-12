@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { BattleResult } from '../../utils/calculators/battleSimulator';
 import type { Ship } from '../../types/ship';
@@ -261,5 +261,104 @@ describe('SimulatorPage playback', () => {
         expect(screen.getByLabelText('Hexa at T4, 0% HP, destroyed')).toBeInTheDocument();
         // The event log re-renders for round 2 (the killing blow), not the round-1 content.
         expect(screen.getByText(/Nova \[active\] → Enemy Hexa: 1,500 → 0%/)).toBeInTheDocument();
+    });
+});
+
+describe('SimulatorPage results area', () => {
+    const renderPage = () =>
+        render(
+            <MemoryRouter>
+                <SimulatorPage />
+            </MemoryRouter>
+        );
+
+    const placeShips = () => {
+        fireEvent.click(screen.getByText(/select Your Team/i));
+        fireEvent.click(screen.getByText(/pick Your Team/i));
+        fireEvent.click(screen.getByText(/select Enemy Team/i));
+        fireEvent.click(screen.getByText(/pick Enemy Team/i));
+    };
+
+    const runSeeds = async (count: number) => {
+        placeShips();
+        fireEvent.change(screen.getByLabelText('Runs'), { target: { value: String(count) } });
+        fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
+        // The seed set runs asynchronously; the strip appears once it lands.
+        await screen.findAllByRole('button', { name: /^Seed \d+:/ });
+    };
+
+    const seedSquares = () => screen.getAllByRole('button', { name: /^Seed \d+:/ });
+
+    it('shows an empty playback state before any run', () => {
+        renderPage();
+        expect(screen.getByText('Run a simulation to watch the fight here.')).toBeInTheDocument();
+    });
+
+    it('opens the first seed of a multi-seed run without a click', async () => {
+        renderPage();
+        await runSeeds(3);
+
+        expect(seedSquares()).toHaveLength(3);
+        expect(seedSquares()[0]).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
+        expect(screen.getByLabelText('Nova at T1, 100% HP')).toBeInTheDocument();
+        expect(screen.queryByText('Run a simulation to watch the fight here.')).toBeNull();
+    });
+
+    it('shows the clicked seed and marks it', async () => {
+        renderPage();
+        await runSeeds(3);
+
+        fireEvent.click(seedSquares()[2]);
+
+        expect(seedSquares()[2]).toHaveAttribute('aria-pressed', 'true');
+        expect(seedSquares()[0]).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByText(/Seed \d+ · 3 of 3/)).toBeInTheDocument();
+        expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
+    });
+
+    it('summarises a single run with verdict tiles', () => {
+        renderPage();
+        placeShips();
+        fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
+
+        expect(screen.getByText('Your win rate').parentElement).toHaveTextContent('100%');
+        expect(screen.getByText('Fight length').parentElement).toHaveTextContent('2');
+        expect(screen.getByText('Your top damage').parentElement).toHaveTextContent('2,500');
+    });
+
+    it('summarises a multi-seed run with verdict tiles and a grouped breakdown', async () => {
+        renderPage();
+        await runSeeds(3);
+
+        expect(screen.getByText('Your win rate').parentElement).toHaveTextContent('3 of 3');
+        const table = screen.getByRole('table');
+        expect(within(table).getByText('Your team')).toBeInTheDocument();
+        expect(within(table).getByText('Enemy')).toBeInTheDocument();
+    });
+
+    it('explains the empty compare tab when no baseline is pinned', async () => {
+        renderPage();
+        await runSeeds(3);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Compare to baseline' }));
+
+        expect(
+            screen.getByText(
+                'Run several seeds, then use Pin as baseline in the run controls to compare later runs against it.'
+            )
+        ).toBeInTheDocument();
+        expect(screen.queryByText('Round 1 / 2')).toBeNull();
+    });
+
+    it('renders the stat sweep open inside its own tab and keeps it out of view otherwise', () => {
+        renderPage();
+        const sweepBody = () => screen.getByText(/A sweep holds every other stat fixed/);
+        expect(sweepBody()).not.toBeVisible();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stat sweep' }));
+
+        expect(sweepBody()).toBeVisible();
+        expect(screen.queryByTestId('sweep-toggle')).toBeNull();
     });
 });

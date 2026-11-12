@@ -42,6 +42,9 @@ interface StatSweepPanelProps {
     /** An ordinary run is in flight. Run and Sweep disable each other: two engine loops competing
      *  for the page would each make the other's progress meaningless. */
     disabled?: boolean;
+    /** Renders the body open with no toggle, for a host (a tab) that already provides the
+     *  heading and the show/hide. */
+    alwaysOpen?: boolean;
 }
 
 const DEFAULT_SWEEP_RUNS = 20;
@@ -110,8 +113,10 @@ const StatSweepPanel: React.FC<StatSweepPanelProps> = ({
     onRunSweep,
     onCancelSweep,
     disabled = false,
+    alwaysOpen = false,
 }) => {
-    const [isOpen, setIsOpen] = useState(false);
+    const [isOpenState, setIsOpen] = useState(false);
+    const isOpen = alwaysOpen || isOpenState;
     const [targetKeyValue, setTargetKeyValue] = useState('');
     const [stat, setStat] = useState<OverridableStat>('speed');
     const [from, setFrom] = useState(0);
@@ -184,17 +189,19 @@ const StatSweepPanel: React.FC<StatSweepPanelProps> = ({
 
     return (
         <div className="card">
-            <button
-                type="button"
-                data-testid="sweep-toggle"
-                className="w-full flex items-center justify-between text-left"
-                aria-expanded={isOpen}
-                aria-controls="stat-sweep-body"
-                onClick={() => setIsOpen((open) => !open)}
-            >
-                <span className="font-semibold">Stat sweep</span>
-                {isOpen ? <ChevronUpIcon /> : <ChevronDownIcon />}
-            </button>
+            {!alwaysOpen && (
+                <button
+                    type="button"
+                    data-testid="sweep-toggle"
+                    className="w-full flex items-center justify-between text-left"
+                    aria-expanded={isOpen}
+                    aria-controls="stat-sweep-body"
+                    onClick={() => setIsOpen((open) => !open)}
+                >
+                    <span className="font-semibold">Stat sweep</span>
+                    {isOpen ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                </button>
+            )}
 
             <CollapsibleAccordion isOpen={isOpen} id="stat-sweep-body">
                 <div className="space-y-4">
