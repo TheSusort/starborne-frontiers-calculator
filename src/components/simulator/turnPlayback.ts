@@ -2,7 +2,14 @@ import type { Position } from '../../types/encounters';
 import type { BattleResult, BattleRound } from '../../utils/calculators/battleSimulator';
 import type { HexBoardShip } from '../board/AnimatedHexBoard';
 import { beatBoardShip, type BoardShipIdentity } from '../board/beatBoardShip';
-import { compactStatuses, type FightBeat, type FightSide } from '../board/fightBeats';
+import type { CombatLogEntry } from '../../utils/combat/log/types';
+import {
+    compactStatuses,
+    dotChipName,
+    statusBaseName,
+    type FightBeat,
+    type FightSide,
+} from '../board/fightBeats';
 
 /**
  * Where a simulator playback stands: a round (1-based) and a turn within it, the index into that
@@ -143,4 +150,83 @@ export function sideBoardShips({
 export function beatActorId(result: BattleResult, beat: FightBeat | undefined): string | null {
     if (!beat?.actor) return null;
     return rosterBySide(result.roster)[beat.actor][beat.actorShip] ?? null;
+}
+
+/** One line of the target overlay: from the acting ship's cell to a ship its attacks reach. */
+export interface TargetLine {
+    role: 'main' | 'splash';
+    from: { side: FightSide; cell: Position };
+    to: { side: FightSide; cell: Position };
+}
+
+/** The lines to draw while `beat` plays: its actor to each of its targets (a multi-hex target at
+ *  its anchor cell). None without an actor or targets, and none from a ship to its own cell. */
+export function targetLines(beat: FightBeat | undefined): TargetLine[] {
+    if (!beat?.actor || !beat.targets) return [];
+    const from = { side: beat.actor, cell: beat[beat.actor][beat.actorShip]?.position };
+    if (!from.cell) return [];
+    const lines: TargetLine[] = [];
+    for (const t of beat.targets) {
+        const cell = beat[t.side][t.ship]?.position;
+        if (!cell || (t.side === from.side && cell === from.cell)) continue;
+        lines.push({
+            role: t.role,
+            from: { ...from, cell: from.cell },
+            to: { side: t.side, cell },
+        });
+    }
+    return lines;
+}
+
+/** Who last applied each status a ship holds, keyed by holder and status name. */
+export type StatusSources = Map<string, string>;
+
+const sourceKey = (holderId: string, name: string) => `${holderId}\u0000${name}`;
+
+const eachEntry = (entries: readonly CombatLogEntry[], visit: (e: CombatLogEntry) => void) => {
+    for (const e of entries) {
+        visit(e);
+        eachEntry(e.reactions, visit);
+    }
+};
+
+/**
+ * The latest granter (a `buff`'s `actorId`) or applier (a `debuff` or DoT's) of each status, per
+ * holder, from the combat log's rounds up to `upToRound`. A status is recorded under its name and
+ * under its tier-stripped base, so a later look-up by either finds it; an `attemptOnly` row
+ * changed nothing and is skipped. Pass the round whose end-of-round snapshot the statuses being
+ * looked up come from: a later round could name an applier the ship does not yet have.
+ */
+export function statusSources(result: BattleResult, upToRound: number): StatusSources {
+    const sources: StatusSources = new Map();
+    const record = (e: CombatLogEntry) => {
+        if (e.attemptOnly || !e.note) return;
+        if (e.kind !== 'buff' && e.kind !== 'debuff' && e.kind !== 'dot-applied') return;
+        const name = e.kind === 'dot-applied' ? dotChipName(e.note) : e.note;
+        if (!name) return;
+        for (const t of e.targets) {
+            sources.set(sourceKey(t.targetId, name), e.actorId);
+            sources.set(sourceKey(t.targetId, statusBaseName(name)), e.actorId);
+        }
+    };
+    for (const round of result.combatLog) {
+        if (round.round > upToRound) break;
+        eachEntry(round.startOfRound, record);
+        for (const turn of round.turns) eachEntry(turn.entries, record);
+        eachEntry(round.endOfRound, record);
+    }
+    return sources;
+}
+
+/** The actorId that applied status `name` to `holderId`: by exact name, else by the name without
+ *  its tier; `undefined` when the log never named it. */
+export function statusSource(
+    sources: StatusSources,
+    holderId: string,
+    name: string
+): string | undefined {
+    return (
+        sources.get(sourceKey(holderId, name)) ??
+        sources.get(sourceKey(holderId, statusBaseName(name)))
+    );
 }

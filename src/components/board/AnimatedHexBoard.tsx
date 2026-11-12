@@ -145,8 +145,13 @@ interface AnimatedHexBoardProps {
     /** The cell drawn as selected (a yellow rim). */
     selectedCell?: Position | null;
     /** Cells covered by a multi-hex unit, each mapped to the unit's anchor cell (the key `ships`
-     *  uses). A covered cell draws the unit's rim and name without bars, and selects the anchor. */
+     *  uses). A covered cell draws the unit's rim only (the anchor cell carries the name and the
+     *  bars), and selects the anchor. */
     secondaryCells?: Partial<Record<Position, Position>>;
+    /** With `onSelectCell`, fired with an occupied cell (the anchor for a covered one) and its
+     *  button, to anchor a popover to, when the pointer enters or focus lands on it, and with
+     *  `null` when it leaves. */
+    onHoverCell?: (cell: Position | null, el: HTMLElement | null) => void;
     className?: string;
 }
 
@@ -172,9 +177,21 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
     onSelectCell,
     selectedCell = null,
     secondaryCells,
+    onHoverCell,
     className = '',
 }) => {
     const layout = hexBoardLayout(cells);
+    /** Hover and focus handlers for the occupied cell `at`, spread on its button. */
+    const hoverProps = (at: Position) =>
+        onHoverCell
+            ? {
+                  onMouseEnter: (e: React.MouseEvent<HTMLElement>) =>
+                      onHoverCell(at, e.currentTarget),
+                  onMouseLeave: () => onHoverCell(null, null),
+                  onFocus: (e: React.FocusEvent<HTMLElement>) => onHoverCell(at, e.currentTarget),
+                  onBlur: () => onHoverCell(null, null),
+              }
+            : {};
     return (
         <div
             role="group"
@@ -194,11 +211,7 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
                                 selectedCell === anchor ? 'bg-yellow-500' : TONE_RIM[tone]
                             }
                             className={anchorShip.alive ? '' : 'opacity-40 grayscale'}
-                        >
-                            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-semibold text-theme-text-secondary sm:text-xs">
-                                {anchorShip.name}
-                            </span>
-                        </HexTile>
+                        ></HexTile>
                     );
                     return (
                         <div
@@ -218,6 +231,7 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
                                     aria-pressed={selectedCell === anchor}
                                     aria-label={cellLabel(anchorShip, anchor)}
                                     onClick={() => onSelectCell(anchor)}
+                                    {...hoverProps(anchor)}
                                     className="relative block h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                                 >
                                     {covered}
@@ -246,6 +260,7 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
                                 aria-pressed={selectedCell === cell}
                                 aria-label={cellLabel(ship, cell)}
                                 onClick={() => onSelectCell(cell)}
+                                {...hoverProps(cell)}
                                 className="relative block h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                             >
                                 <ShipCell

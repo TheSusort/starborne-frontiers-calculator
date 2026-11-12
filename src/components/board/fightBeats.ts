@@ -113,7 +113,7 @@ const HEAL_KINDS = new Set<CombatLogEntry['kind']>(['heal', 'hot-ticked']);
 
 /** The debuff chip a DoT shows on its holder: its family name, as the round snapshot labels it
  *  (the log's `note` reads "corrosion III ×3"). */
-const dotChipName = (note: string | undefined): string | undefined => {
+export const dotChipName = (note: string | undefined): string | undefined => {
     const family = note?.split(' ')[0] as DoTType | undefined;
     return family ? DOT_DEBUFF_LABELS[family] : undefined;
 };
