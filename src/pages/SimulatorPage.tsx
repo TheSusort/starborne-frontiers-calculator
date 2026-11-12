@@ -16,9 +16,12 @@ import BattlePlayback from '../components/simulator/BattlePlayback';
 import DivergencePlayback from '../components/simulator/DivergencePlayback';
 import SeedRunControls, { randomSeed } from '../components/simulator/SeedRunControls';
 import SeedSetResults from '../components/simulator/SeedSetResults';
+import SeedStrip from '../components/simulator/SeedStrip';
+import SimulatorVerdict from '../components/simulator/SimulatorVerdict';
 import RunComparison from '../components/simulator/RunComparison';
 import StatSweepPanel from '../components/simulator/StatSweepPanel';
 import { Button } from '../components/ui/Button';
+import { Tabs } from '../components/ui/layout/Tabs';
 import SquadLeaderPicker from '../components/simulator/SquadLeaderPicker';
 import BossEncounterPicker from '../components/simulator/BossEncounterPicker';
 import { bossFootprintOfId } from '../constants/bountyBosses';
@@ -63,6 +66,8 @@ import {
 } from '../utils/simulator/setupStorage';
 
 type Side = 'player' | 'enemy';
+
+type ResultTab = 'playback' | 'compare' | 'sweep';
 
 type UnsimulatedEntry = { actorId: string; name: string; texts: string[] };
 
@@ -263,6 +268,7 @@ const SimulatorPage: React.FC = () => {
 
     const {
         battleResult,
+        openedSeed,
         aggregate,
         baseline,
         divergence,
@@ -449,6 +455,34 @@ const SimulatorPage: React.FC = () => {
     // resolved-value step.
     const sweep = useStatSweep({ buildInput, getGearPiece });
 
+    const [activeTab, setActiveTab] = useState<ResultTab>('playback');
+
+    const handleOpenDivergenceFromCompare = (openSeed: number) => {
+        handleOpenDivergence(openSeed);
+        setActiveTab('playback');
+    };
+
+    const unsimulatedBlock = (() => {
+        const sections: { label: string; entries: UnsimulatedEntry[] }[] = divergence
+            ? [
+                  {
+                      label: 'Baseline: squad leader effects not simulated this run',
+                      entries: divergence.baseline.preFight?.unsimulated ?? [],
+                  },
+                  {
+                      label: 'Current: squad leader effects not simulated this run',
+                      entries: divergence.current.preFight?.unsimulated ?? [],
+                  },
+              ]
+            : [
+                  {
+                      label: 'Squad leader effects not simulated this run',
+                      entries: battleResult?.preFight?.unsimulated ?? [],
+                  },
+              ];
+        return sections.filter((section) => section.entries.length > 0);
+    })();
+
     return (
         <>
             <Seo {...SEO_CONFIG.simulator} />
@@ -578,106 +612,128 @@ const SimulatorPage: React.FC = () => {
                         <div className="card text-red-400">Simulation error: {runError}</div>
                     )}
 
-                    <StatSweepPanel
-                        playerBoard={playerBoard}
-                        enemyBoard={enemyBoard}
-                        statsDeps={statsDeps}
-                        seed={effectiveSeed}
-                        points={sweep.points}
-                        provenance={sweep.provenance}
-                        isSweeping={sweep.isSweeping}
-                        progress={sweep.progress}
-                        error={sweep.error}
-                        onRunSweep={sweep.runSweep}
-                        onCancelSweep={sweep.cancelSweep}
-                        disabled={isRunning}
-                    />
+                    {(aggregate || battleResult) &&
+                        (aggregate ? (
+                            <SeedSetResults aggregate={aggregate} />
+                        ) : (
+                            <SimulatorVerdict result={battleResult} />
+                        ))}
+
+                    {aggregate && !baseline && (
+                        <div>
+                            <Button
+                                variant="secondary"
+                                onClick={handlePinBaseline}
+                                disabled={isRunning}
+                            >
+                                Pin as baseline
+                            </Button>
+                        </div>
+                    )}
 
                     {/* Squad-leader effects the sim could not model, surfaced so the outcome is
                         never mistaken for a full simulation of the selected leaders. A divergence
                         pair can carry a DIFFERENT selection per side (the baseline may have been
                         pinned under a different squad leader than the current run), so each side
-                        gets its own labelled list rather than one merged list. */}
-                    {divergence ? (
-                        <>
-                            {(divergence.baseline.preFight?.unsimulated.length ?? 0) > 0 && (
-                                <div className="card border-amber-500/40 space-y-1">
+                        keeps its own labelled list inside the one block. */}
+                    {unsimulatedBlock.length > 0 && (
+                        <div className="card border-amber-500/40 space-y-3">
+                            {unsimulatedBlock.map((section) => (
+                                <div key={section.label} className="space-y-1">
                                     <p className="text-sm font-semibold text-amber-400">
-                                        Baseline: squad leader effects not simulated this run
+                                        {section.label}
                                     </p>
-                                    <UnsimulatedEffectsList
-                                        entries={divergence.baseline.preFight!.unsimulated}
-                                    />
+                                    <UnsimulatedEffectsList entries={section.entries} />
                                 </div>
-                            )}
-                            {(divergence.current.preFight?.unsimulated.length ?? 0) > 0 && (
-                                <div className="card border-amber-500/40 space-y-1">
-                                    <p className="text-sm font-semibold text-amber-400">
-                                        Current: squad leader effects not simulated this run
-                                    </p>
-                                    <UnsimulatedEffectsList
-                                        entries={divergence.current.preFight!.unsimulated}
-                                    />
-                                </div>
-                            )}
-                        </>
-                    ) : (
-                        battleResult?.preFight &&
-                        battleResult.preFight.unsimulated.length > 0 && (
-                            <div className="card border-amber-500/40 space-y-1">
-                                <p className="text-sm font-semibold text-amber-400">
-                                    Squad leader effects not simulated this run
-                                </p>
-                                <UnsimulatedEffectsList
-                                    entries={battleResult.preFight.unsimulated}
-                                />
-                            </div>
-                        )
-                    )}
-
-                    {aggregate && (
-                        <div className="space-y-2">
-                            <SeedSetResults aggregate={aggregate} onOpenSeed={handleOpenSeed} />
-                            {!baseline && (
-                                <Button
-                                    variant="secondary"
-                                    onClick={handlePinBaseline}
-                                    disabled={isRunning}
-                                >
-                                    Pin as baseline
-                                </Button>
-                            )}
+                            ))}
                         </div>
                     )}
 
-                    {baseline && aggregate && currentOverrides && (
-                        <RunComparison
-                            baseline={baseline}
-                            current={aggregate}
-                            currentOverrides={currentOverrides}
-                            onOpenDivergence={handleOpenDivergence}
+                    <div>
+                        <Tabs
+                            tabs={[
+                                { id: 'playback', label: 'Playback' },
+                                {
+                                    id: 'compare',
+                                    label: 'Compare to baseline',
+                                    badge: baseline ? undefined : 'pin one first',
+                                },
+                                { id: 'sweep', label: 'Stat sweep' },
+                            ]}
+                            activeTab={activeTab}
+                            onChange={(tab) => setActiveTab(tab as ResultTab)}
                         />
-                    )}
 
-                    {divergence ? (
-                        <DivergencePlayback
-                            seed={divergence.seed}
-                            baseline={divergence.baseline}
-                            current={divergence.current}
-                            onClose={handleCloseDivergence}
-                            portraitFor={portraitFor}
-                            baselineCells={gridCells(baselineGridMode)}
-                            currentCells={gridCells(currentGridMode)}
-                        />
-                    ) : (
-                        battleResult && (
-                            <BattlePlayback
-                                result={battleResult}
-                                portraitFor={portraitFor}
-                                cells={gridCells(currentGridMode)}
+                        {activeTab === 'playback' && (
+                            <div className="space-y-4">
+                                {aggregate && (
+                                    <SeedStrip
+                                        runs={aggregate.runs}
+                                        openedSeed={divergence?.seed ?? openedSeed}
+                                        onOpenSeed={handleOpenSeed}
+                                    />
+                                )}
+                                {divergence ? (
+                                    <DivergencePlayback
+                                        seed={divergence.seed}
+                                        baseline={divergence.baseline}
+                                        current={divergence.current}
+                                        onClose={handleCloseDivergence}
+                                        portraitFor={portraitFor}
+                                        baselineCells={gridCells(baselineGridMode)}
+                                        currentCells={gridCells(currentGridMode)}
+                                    />
+                                ) : battleResult ? (
+                                    <BattlePlayback
+                                        result={battleResult}
+                                        portraitFor={portraitFor}
+                                        cells={gridCells(currentGridMode)}
+                                    />
+                                ) : (
+                                    <p className="text-sm text-theme-text-secondary">
+                                        {aggregate
+                                            ? 'Pick a seed above to watch that fight.'
+                                            : 'Run a simulation to watch the fight here.'}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'compare' &&
+                            (baseline && aggregate && currentOverrides ? (
+                                <RunComparison
+                                    baseline={baseline}
+                                    current={aggregate}
+                                    currentOverrides={currentOverrides}
+                                    onOpenDivergence={handleOpenDivergenceFromCompare}
+                                />
+                            ) : (
+                                <p className="text-sm text-theme-text-secondary">
+                                    Pin a run as baseline from the run bar to compare it with later
+                                    runs.
+                                </p>
+                            ))}
+
+                        {/* Stays mounted while another tab shows: its inputs are local state a
+                            tab switch must not reset. */}
+                        <div hidden={activeTab !== 'sweep'}>
+                            <StatSweepPanel
+                                playerBoard={playerBoard}
+                                enemyBoard={enemyBoard}
+                                statsDeps={statsDeps}
+                                seed={effectiveSeed}
+                                points={sweep.points}
+                                provenance={sweep.provenance}
+                                isSweeping={sweep.isSweeping}
+                                progress={sweep.progress}
+                                error={sweep.error}
+                                onRunSweep={sweep.runSweep}
+                                onCancelSweep={sweep.cancelSweep}
+                                disabled={isRunning}
+                                alwaysOpen
                             />
-                        )
-                    )}
+                        </div>
+                    </div>
                 </div>
 
                 {editing && editingPlacement && (
