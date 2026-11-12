@@ -73,4 +73,13 @@ describe('SimulatorSetupBar', () => {
         fireEvent.click(screen.getByRole('button', { name: /confirm|delete setup/i }));
         expect(onDelete).toHaveBeenCalledWith('Alpha');
     });
+
+    it('is a toolbar row: no Setups heading, and a trailing control shares the row', () => {
+        render(
+            <SimulatorSetupBar {...props} trailing={<button type="button">board control</button>} />
+        );
+        expect(screen.queryByRole('heading', { name: /setups/i })).not.toBeInTheDocument();
+        const trailing = screen.getByRole('button', { name: 'board control' });
+        expect(trailing.parentElement).toBe(screen.getByLabelText(/setup name/i).closest('.card'));
+    });
 });

@@ -4808,11 +4808,11 @@ const DocumentationPage: React.FC = () => {
                                         onto the other side
                                     </li>
                                     <li>
-                                        The Board option switches both teams between the normal
-                                        12-cell board and the small grid: the middle cell and the
-                                        six around it. On the small grid, ships standing elsewhere
-                                        move to the nearest free cell, and the battle is shown on
-                                        the small grid too
+                                        The Board control in the toolbar switches both teams between
+                                        the normal 12-cell board and the small grid: the middle cell
+                                        and the six around it. On the small grid, ships standing
+                                        elsewhere move to the nearest free cell, and the battle is
+                                        shown on the small grid too
                                     </li>
                                     <li>
                                         The small grid holds 7 ships per team, so a team with more
@@ -4822,16 +4822,17 @@ const DocumentationPage: React.FC = () => {
                                         how many were left out
                                     </li>
                                     <li>
-                                        The Encounter option on the enemy board loads a bounty boss
-                                        fight in place of a team: Fenri Khaliriz (level 32) alone,
-                                        or Mamma Maglienza (level 32) with three level 124 Capo
-                                        escorts. Mamma fills four cells and each Capo one, so the
-                                        rest of the enemy board stays closed and none of them can be
-                                        moved or removed alone. Shift+Click still opens the stat
-                                        editor on each. The enemy squad leader is hidden. Killing
-                                        the boss wins the fight even with escorts left standing.
-                                        Mamma and the Capos hit a whole row of your team: the
-                                        fullest row for Mamma, the emptiest for the Capos.
+                                        Switch the enemy board from Team to Bounty boss and use its
+                                        Encounter option to load a bounty boss fight in place of a
+                                        team: Fenri Khaliriz (level 32) alone, or Mamma Maglienza
+                                        (level 32) with three level 124 Capo escorts. Mamma fills
+                                        four cells and each Capo one, so the rest of the enemy board
+                                        stays closed and none of them can be moved or removed alone.
+                                        Shift+Click still opens the stat editor on each. The enemy
+                                        squad leader is replaced by a note that bosses have none.
+                                        Killing the boss wins the fight even with escorts left
+                                        standing. Mamma and the Capos hit a whole row of your team:
+                                        the fullest row for Mamma, the emptiest for the Capos.
                                         Encounters need the normal board; None brings the empty
                                         board back
                                     </li>
@@ -4847,9 +4848,14 @@ const DocumentationPage: React.FC = () => {
                                         and come back when you reload the page
                                     </li>
                                     <li>
-                                        Type a name and press &quot;Save&quot; to keep a setup you
-                                        can come back to; saving under a name you already used
-                                        replaces that setup
+                                        Type a name and press &quot;Save&quot; in the toolbar to
+                                        keep a setup you can come back to; saving under a name you
+                                        already used replaces that setup
+                                    </li>
+                                    <li>
+                                        Once a run finishes, the toolbar and boards fold into a
+                                        one-row strip showing both squads; &quot;Edit setup&quot;
+                                        opens them again, and the next run folds them back
                                     </li>
                                     <li>
                                         A setup stores ships by reference rather than as a snapshot
@@ -4903,6 +4909,13 @@ const DocumentationPage: React.FC = () => {
                                         &quot;New seed&quot; to get a fresh one
                                     </li>
                                     <li>
+                                        The run bar stays at the bottom of the screen with the
+                                        matchup summary, the last result, the seed and run count,
+                                        and Run. Below the results, the Playback, Compare to
+                                        baseline and Stat sweep tabs hold the fight replay, the
+                                        baseline comparison and the stat sweep
+                                    </li>
+                                    <li>
                                         A fight lasts at most 30 rounds. If both teams still have a
                                         ship standing when the last round ends, the enemy wins, as a
                                         timeout is a defeat in the game. When both teams lose their
@@ -4913,15 +4926,17 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         Raise the run count to repeat the fight over that many
-                                        consecutive seeds and see an aggregate — win split and
-                                        average rounds and per-actor damage/healing — instead of a
-                                        single playback
+                                        consecutive seeds and see an aggregate — win rate, fight
+                                        length, each side&apos;s top damage, and a per-ship table of
+                                        average damage and healing grouped by team — and the first
+                                        seed plays back straight away
                                     </li>
                                     <li>
                                         A single seeded run reproduces one fight; the aggregate over
                                         a seed set is what you use to compare two configurations.
-                                        Click any seed in the aggregate to open that one
-                                        fight&apos;s round-by-round playback
+                                        Click any square in the seed strip above the playback to
+                                        open that one fight&apos;s round-by-round playback; blue
+                                        squares are your wins, red ones the enemy&apos;s
                                     </li>
                                     <li>
                                         Multi-seed runs show their progress as they go and can be
@@ -4937,8 +4952,9 @@ const DocumentationPage: React.FC = () => {
                                 </h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
-                                        After a multi-seed run, pin it as a baseline; then change
-                                        stats and run again to compare
+                                        After a multi-seed run, pin it as a baseline from the run
+                                        bar; then change stats and run again to compare in the
+                                        &quot;Compare to baseline&quot; tab
                                     </li>
                                     <li>
                                         While a baseline is pinned, the seed and run count are fixed
@@ -5010,9 +5026,9 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">Squad Leaders</h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
-                                        Pick one squad leader per team beneath each placement board
-                                        — faction, leader, and upgrade stage (stages are additive:
-                                        stage III includes stages I and II)
+                                        Pick one squad leader per team at the bottom of each
+                                        placement board — faction, leader, and upgrade stage (stages
+                                        are additive: stage III includes stages I and II)
                                     </li>
                                     <li>
                                         Ally bonuses apply only to ships of the leader&apos;s

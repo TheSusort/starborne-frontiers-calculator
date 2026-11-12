@@ -28,6 +28,13 @@ interface Props {
     /** Completed/total seeds of the run in flight. */
     progress?: { completed: number; total: number } | null;
     onCancel?: () => void;
+    /** Renders the seed, run-count and baseline-lock controls. Off lets a host place Run/Cancel
+     *  apart from them. */
+    showInputs?: boolean;
+    /** Renders the progress text and Run/Cancel. Off is the counterpart of `showInputs`. */
+    showAction?: boolean;
+    /** Extra controls placed with the inputs, before the progress and Run. */
+    children?: React.ReactNode;
 }
 
 // SimulatorPage's initial seed state needs this generator; it is not itself a component so
@@ -50,63 +57,75 @@ const SeedRunControls: React.FC<Props> = ({
     isRunning = false,
     progress = null,
     onCancel,
+    showInputs = true,
+    showAction = true,
+    children,
 }) => {
     const inputsDisabled = locked || isRunning;
     return (
         <div className="flex flex-wrap items-end gap-4">
-            <Input
-                label="Seed"
-                type="number"
-                value={seed}
-                onChange={(e) => onSeedChange(clampSeed(Number(e.target.value)))}
-                disabled={inputsDisabled}
-                className="max-w-[10rem]"
-            />
-            <Input
-                label="Runs"
-                type="number"
-                min={MIN_RUN_COUNT}
-                max={MAX_RUN_COUNT}
-                value={runCount}
-                onChange={(e) => onRunCountChange(clampRunCount(Number(e.target.value)))}
-                disabled={inputsDisabled}
-                className="max-w-[6rem]"
-            />
-            <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => onSeedChange(randomSeed())}
-                disabled={inputsDisabled}
-            >
-                New seed
-            </Button>
-            {locked && lockedReason && (
-                <span className="text-sm text-theme-text-secondary">{lockedReason}</span>
+            {showInputs && (
+                <>
+                    <Input
+                        label="Seed"
+                        type="number"
+                        value={seed}
+                        onChange={(e) => onSeedChange(clampSeed(Number(e.target.value)))}
+                        disabled={inputsDisabled}
+                        className="max-w-[10rem]"
+                    />
+                    <Input
+                        label="Runs"
+                        type="number"
+                        min={MIN_RUN_COUNT}
+                        max={MAX_RUN_COUNT}
+                        value={runCount}
+                        onChange={(e) => onRunCountChange(clampRunCount(Number(e.target.value)))}
+                        disabled={inputsDisabled}
+                        className="max-w-[6rem]"
+                    />
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onSeedChange(randomSeed())}
+                        disabled={inputsDisabled}
+                    >
+                        New seed
+                    </Button>
+                    {locked && lockedReason && (
+                        <span className="text-sm text-theme-text-secondary">{lockedReason}</span>
+                    )}
+                    {locked && onUnpin && (
+                        <Button variant="secondary" size="sm" onClick={onUnpin}>
+                            Unpin baseline
+                        </Button>
+                    )}
+                    {children}
+                </>
             )}
-            {locked && onUnpin && (
-                <Button variant="secondary" size="sm" onClick={onUnpin}>
-                    Unpin baseline
-                </Button>
-            )}
-            {/* Mounted unconditionally, empty until there is progress: a screen reader
+            {showAction && (
+                <>
+                    {/* Mounted unconditionally, empty until there is progress: a screen reader
                 inconsistently announces a live region and its first text when both land in the
                 same mutation. */}
-            <span aria-live="polite" className="text-sm text-theme-text-secondary">
-                {progress && `Run ${progress.completed} / ${progress.total}`}
-            </span>
-            {isRunning ? (
-                <Button variant="secondary" onClick={onCancel}>
-                    Cancel
-                </Button>
-            ) : (
-                <Button
-                    variant="primary"
-                    onClick={onRun}
-                    disabled={!canRun}
-                    data-track="simulator.run"
-                >
-                    Run Simulation
-                </Button>
+                    <span aria-live="polite" className="text-sm text-theme-text-secondary">
+                        {progress && `Run ${progress.completed} / ${progress.total}`}
+                    </span>
+                    {isRunning ? (
+                        <Button variant="secondary" onClick={onCancel}>
+                            Cancel
+                        </Button>
+                    ) : (
+                        <Button
+                            variant="primary"
+                            onClick={onRun}
+                            disabled={!canRun}
+                            data-track="simulator.run"
+                        >
+                            Run Simulation
+                        </Button>
+                    )}
+                </>
             )}
         </div>
     );

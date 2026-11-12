@@ -17,9 +17,12 @@ interface Props {
      *  drop every cell the data has not reached yet and replace the live boards with the
      *  remainder. */
     canLoad?: boolean;
+    /** Another control that shares the toolbar row (the board size). */
+    trailing?: React.ReactNode;
 }
 
-/** Save the current boards under a name, and load or delete a previously saved setup. */
+/** The setup toolbar: load or delete a saved setup, save the current boards under a name, and
+ *  whatever else the host puts in the row. */
 const SimulatorSetupBar: React.FC<Props> = ({
     saved,
     onSave,
@@ -27,6 +30,7 @@ const SimulatorSetupBar: React.FC<Props> = ({
     onDelete,
     canSave,
     canLoad = true,
+    trailing,
 }) => {
     const [name, setName] = useState('');
     const [selected, setSelected] = useState('');
@@ -47,20 +51,7 @@ const SimulatorSetupBar: React.FC<Props> = ({
     };
 
     return (
-        <div className="card space-y-3">
-            <h2 className="text-lg font-semibold">Setups</h2>
-            <div className="flex flex-wrap items-end gap-2">
-                <Input
-                    label="Setup name"
-                    value={name}
-                    placeholder="Wave 3 attempt"
-                    maxLength={SETUP_NAME_MAX_LENGTH}
-                    onChange={(e) => setName(e.target.value)}
-                />
-                <Button variant="primary" disabled={!canSave} onClick={handleSave}>
-                    Save
-                </Button>
-            </div>
+        <div className="card flex flex-wrap items-end gap-x-6 gap-y-3">
             <div className="flex flex-wrap items-end gap-2">
                 <Select
                     label="Saved setups"
@@ -85,6 +76,19 @@ const SimulatorSetupBar: React.FC<Props> = ({
                     Delete
                 </Button>
             </div>
+            <div className="flex flex-wrap items-end gap-2">
+                <Input
+                    label="Setup name"
+                    value={name}
+                    placeholder="Wave 3 attempt"
+                    maxLength={SETUP_NAME_MAX_LENGTH}
+                    onChange={(e) => setName(e.target.value)}
+                />
+                <Button variant="primary" disabled={!canSave} onClick={handleSave}>
+                    Save
+                </Button>
+            </div>
+            {trailing}
             <ConfirmModal
                 isOpen={pendingOverwrite !== null}
                 onClose={() => setPendingOverwrite(null)}

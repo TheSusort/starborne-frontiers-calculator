@@ -31,6 +31,7 @@ export * from './SectionHeader';
 export * from './SearchInput';
 export * from './Select';
 export * from './RoleSelector';
+export * from './SegmentedControl';
 export * from './StatCard';
 export * from './tables';
 export * from './Textarea';

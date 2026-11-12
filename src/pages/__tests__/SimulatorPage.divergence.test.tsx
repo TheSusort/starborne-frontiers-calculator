@@ -107,7 +107,7 @@ describe('SimulatorPage divergence wiring', () => {
     it('passes handleOpenDivergence (not a no-op) to RunComparison', () => {
         hookReturn = {
             ...baseHookReturn,
-            aggregate: { runs: [] } as never,
+            aggregate: { runs: [], wins: { player: 0, enemy: 0 }, count: 0 } as never,
             baseline: {} as never,
             currentOverrides: {} as never,
         };
@@ -125,7 +125,7 @@ describe('SimulatorPage divergence wiring', () => {
     it('switches to the playback tab once a divergence opens from the compare tab', () => {
         hookReturn = {
             ...baseHookReturn,
-            aggregate: { runs: [] } as never,
+            aggregate: { runs: [], wins: { player: 0, enemy: 0 }, count: 0 } as never,
             baseline: {} as never,
             currentOverrides: {} as never,
         };

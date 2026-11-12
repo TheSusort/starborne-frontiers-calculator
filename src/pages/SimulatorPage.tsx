@@ -38,7 +38,10 @@ import {
 } from '../utils/simulator/squadLeaderSelection';
 import SimulatorSetupBar from '../components/simulator/SimulatorSetupBar';
 import { shipPortraitUrl } from '../components/board/shipPortrait';
-import { Select } from '../components/ui/Select';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
+import SetupStrip from '../components/simulator/SetupStrip';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { setupChipLabels } from '../utils/simulator/setupSummary';
 import {
     DEFAULT_GRID_MODE,
     fitBoardToCells,
@@ -83,6 +86,12 @@ const UnsimulatedEffectsList: React.FC<{ entries: UnsimulatedEntry[] }> = ({ ent
         ))}
     </ul>
 );
+
+const CLICK_HINT =
+    "Click to select a ship, Ctrl+Click to remove a ship, Hover + 1-5 to set attack order, Shift+Click or a ship's cog icon to edit stats";
+
+/** From this width up the whole run bar stays pinned; below it only the summary and Run do. */
+const WIDE_QUERY = '(min-width: 640px)';
 
 const SimulatorPage: React.FC = () => {
     const { getGearPiece } = useInventory();
@@ -260,6 +269,16 @@ const SimulatorPage: React.FC = () => {
     };
 
     const enemyHasBoss = loadedBossShipId(enemyBoard) !== undefined;
+    // Whether the user switched the enemy card to boss mode before choosing a boss. The mode
+    // itself is derived: a loaded boss always means boss mode, so this never disagrees with the
+    // board.
+    const [bossModePicked, setBossModePicked] = useState(false);
+    const enemyMode: 'team' | 'boss' =
+        enemyHasBoss || (bossModePicked && gridMode === 'normal') ? 'boss' : 'team';
+    // Edit setup, a Run click and a load/restore set this; the setup is collapsed only while a
+    // result is displayed and this is false.
+    const [editingSetup, setEditingSetup] = useState(false);
+    const isWide = useMediaQuery(WIDE_QUERY);
     // A boss board has no squad leader: the picker is hidden and the stored selection neither
     // runs nor saves, but stays in state for when the boss is taken off.
     const activeEnemySquadLeader = enemyHasBoss ? undefined : enemySquadLeader;
@@ -302,6 +321,23 @@ const SimulatorPage: React.FC = () => {
         gridMode,
     });
 
+    const hasResult = battleResult !== null || aggregate !== null || divergence !== null;
+    const collapsed = hasResult && !editingSetup;
+
+    const handleRunClick = () => {
+        setEditingSetup(false);
+        handleRun();
+    };
+
+    const handleEnemyModeChange = (mode: string) => {
+        if (mode === 'boss') {
+            setBossModePicked(true);
+            return;
+        }
+        setBossModePicked(false);
+        if (enemyHasBoss) handleLoadEncounter('enemy', {});
+    };
+
     /** The one place a stored setup becomes live state. */
     const applySetup = (result: DeserializedSetup) => {
         setPlayerBoard(withoutStrayBossCells(result.playerBoard));
@@ -321,6 +357,8 @@ const SimulatorPage: React.FC = () => {
         // A displayed result describes the boards that produced it and is never re-derived from
         // live state, so replacing the boards has to discard it.
         handleClearRunState();
+        setEditingSetup(true);
+        setBossModePicked(false);
         appliedSetupLostCellsRef.current = result.dropped.length > 0;
         setLoadNotice(
             result.dropped.length > 0
@@ -457,6 +495,40 @@ const SimulatorPage: React.FC = () => {
 
     const [activeTab, setActiveTab] = useState<ResultTab>('playback');
 
+    const seedRunProps = {
+        seed: effectiveSeed,
+        runCount: effectiveRunCount,
+        onSeedChange: setSeed,
+        onRunCountChange: setRunCount,
+        onRun: handleRunClick,
+        canRun: canRun && !sweep.isSweeping,
+        locked: baseline !== null,
+        lockedReason: 'Seed and run count are fixed by the pinned baseline. Unpin to change them.',
+        onUnpin: handleUnpinBaseline,
+        isRunning,
+        progress,
+        onCancel: handleCancel,
+    };
+
+    const pinButton =
+        aggregate && !baseline ? (
+            <Button variant="secondary" onClick={handlePinBaseline} disabled={isRunning}>
+                Pin as baseline
+            </Button>
+        ) : null;
+
+    const leaderNames = [playerSquadLeader?.name, activeEnemySquadLeader?.name].filter(Boolean);
+    const runSummary = [
+        `${playerCount} vs ${enemyHasBoss ? 'Boss' : enemyCount}`,
+        gridMode === 'small' ? 'Small grid' : 'Normal grid',
+        leaderNames.length > 0 ? `Leaders: ${leaderNames.join(', ')}` : 'no squad leaders',
+    ].join(' · ');
+    const lastRunText = aggregate
+        ? `Last run: ${aggregate.wins.player} / ${aggregate.count} wins`
+        : battleResult
+          ? `Last run: ${battleResult.outcome.winner === 'player' ? 'win' : 'loss'}`
+          : null;
+
     const handleOpenDivergenceFromCompare = (openSeed: number) => {
         handleOpenDivergence(openSeed);
         setActiveTab('playback');
@@ -496,117 +568,152 @@ const SimulatorPage: React.FC = () => {
                 }
             >
                 <div className="space-y-6">
-                    <SimulatorSetupBar
-                        saved={savedSetups}
-                        onSave={handleSaveSetup}
-                        onLoad={handleLoadSetup}
-                        onDelete={handleDeleteSetup}
-                        canSave={playerCount > 0 || enemyCount > 0}
-                        canLoad={!shipsLoading && !unitsLoading}
-                    />
-                    <div className="max-w-xs">
-                        <Select
-                            label="Board"
-                            value={gridMode}
-                            onChange={handleGridModeChange}
-                            options={[
-                                { value: 'normal', label: 'Normal (12 cells)' },
-                                { value: 'small', label: 'Small grid (7 cells)' },
-                            ]}
-                            helpLabel="The small grid is the middle cell and the six around it, for both teams."
+                    {collapsed ? (
+                        <SetupStrip
+                            playerLabels={setupChipLabels(playerBoard)}
+                            enemyLabels={setupChipLabels(enemyBoard)}
+                            onEdit={() => setEditingSetup(true)}
                         />
-                    </div>
+                    ) : (
+                        <SimulatorSetupBar
+                            saved={savedSetups}
+                            onSave={handleSaveSetup}
+                            onLoad={handleLoadSetup}
+                            onDelete={handleDeleteSetup}
+                            canSave={playerCount > 0 || enemyCount > 0}
+                            canLoad={!shipsLoading && !unitsLoading}
+                            trailing={
+                                <SegmentedControl
+                                    label="Board"
+                                    value={gridMode}
+                                    onChange={handleGridModeChange}
+                                    options={[
+                                        { value: 'normal', label: 'Normal · 12' },
+                                        { value: 'small', label: 'Small · 7' },
+                                    ]}
+                                    helpText="The small grid is the middle cell and the six around it, for both teams."
+                                />
+                            }
+                        />
+                    )}
                     <div aria-live="polite" className="space-y-1">
                         {loadNotice && <p className="text-sm text-amber-400">{loadNotice}</p>}
                         {gridNotice && <p className="text-sm text-amber-400">{gridNotice}</p>}
                     </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                            <PlacementBoard
-                                title={`Your Team${playerCount > 0 ? ` (${playerCount})` : ''}`}
-                                formation={playerFormation}
-                                selectedPosition={playerSelected}
-                                onSelectPosition={(pos) => handleSelectPosition('player', pos)}
-                                onRemoveShip={(pos) => handleRemoveShip('player', pos)}
-                                onPickShip={(ship) => handlePickShip('player', ship)}
-                                onCloseSelector={() => setPlayerSelected(undefined)}
-                                resolveShip={(pos) => playerBoard[pos]?.ship ?? null}
-                                cells={gridCells(gridMode)}
-                                footprintOf={bossFootprintOfId}
-                                onLoadEncounter={(board) => handleLoadEncounter('player', board)}
-                                onCopyToOtherSide={() => handleCopyBoard('player')}
-                                copyLabel="Copy to enemy"
-                                onEditStats={(pos) => setEditing({ side: 'player', position: pos })}
-                                hasOverrides={(pos) => hasAnyOverride(playerBoard[pos]?.overrides)}
-                            />
-                            <SquadLeaderPicker
-                                side="player"
-                                selection={playerSquadLeader}
-                                onChange={(sel) => handleSquadLeaderChange('player', sel)}
-                                board={playerBoard}
-                            />
-                        </div>
-                        <div className="space-y-4">
-                            <PlacementBoard
-                                title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
-                                formation={enemyFormation}
-                                selectedPosition={enemySelected}
-                                onSelectPosition={(pos) => handleSelectPosition('enemy', pos)}
-                                onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
-                                onPickShip={(ship) => handlePickShip('enemy', ship)}
-                                onCloseSelector={() => setEnemySelected(undefined)}
-                                resolveShip={(pos) => enemyBoard[pos]?.ship ?? null}
-                                cells={gridCells(gridMode)}
-                                onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
-                                onCopyToOtherSide={
-                                    enemyHasBoss ? undefined : () => handleCopyBoard('enemy')
-                                }
-                                footprintOf={bossFootprintOfId}
-                                headerSlot={
-                                    <BossEncounterPicker
-                                        board={enemyBoard}
-                                        onChange={(board) => handleLoadEncounter('enemy', board)}
-                                        disabled={gridMode === 'small'}
-                                        helpLabel="Fight a bounty boss instead of a team. Needs the normal board."
-                                    />
-                                }
-                                copyLabel="Copy to your team"
-                                mirrored
-                                onEditStats={(pos) => setEditing({ side: 'enemy', position: pos })}
-                                hasOverrides={(pos) => hasAnyOverride(enemyBoard[pos]?.overrides)}
-                            />
-                            {!enemyHasBoss && (
-                                <SquadLeaderPicker
-                                    side="enemy"
-                                    selection={enemySquadLeader}
-                                    onChange={(sel) => handleSquadLeaderChange('enemy', sel)}
-                                    board={enemyBoard}
+                    {!collapsed && (
+                        <>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <PlacementBoard
+                                    title={`Your Team${playerCount > 0 ? ` (${playerCount})` : ''}`}
+                                    formation={playerFormation}
+                                    selectedPosition={playerSelected}
+                                    onSelectPosition={(pos) => handleSelectPosition('player', pos)}
+                                    onRemoveShip={(pos) => handleRemoveShip('player', pos)}
+                                    onPickShip={(ship) => handlePickShip('player', ship)}
+                                    onCloseSelector={() => setPlayerSelected(undefined)}
+                                    resolveShip={(pos) => playerBoard[pos]?.ship ?? null}
+                                    cells={gridCells(gridMode)}
+                                    footprintOf={bossFootprintOfId}
+                                    onLoadEncounter={(board) =>
+                                        handleLoadEncounter('player', board)
+                                    }
+                                    onCopyToOtherSide={() => handleCopyBoard('player')}
+                                    copyLabel="Copy to enemy"
+                                    onEditStats={(pos) =>
+                                        setEditing({ side: 'player', position: pos })
+                                    }
+                                    hasOverrides={(pos) =>
+                                        hasAnyOverride(playerBoard[pos]?.overrides)
+                                    }
+                                    hideHint
+                                    footerSlot={
+                                        <SquadLeaderPicker
+                                            side="player"
+                                            selection={playerSquadLeader}
+                                            onChange={(sel) =>
+                                                handleSquadLeaderChange('player', sel)
+                                            }
+                                            board={playerBoard}
+                                        />
+                                    }
                                 />
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <SeedRunControls
-                            seed={effectiveSeed}
-                            runCount={effectiveRunCount}
-                            onSeedChange={setSeed}
-                            onRunCountChange={setRunCount}
-                            onRun={handleRun}
-                            canRun={canRun && !sweep.isSweeping}
-                            locked={baseline !== null}
-                            lockedReason="Seed and run count are fixed by the pinned baseline. Unpin to change them."
-                            onUnpin={handleUnpinBaseline}
-                            isRunning={isRunning}
-                            progress={progress}
-                            onCancel={handleCancel}
-                        />
-                        {!canRun && (
-                            <span className="text-sm text-theme-text-secondary">
-                                Place at least one ship on each team to run.
-                            </span>
-                        )}
-                    </div>
+                                <PlacementBoard
+                                    title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
+                                    formation={enemyFormation}
+                                    selectedPosition={enemySelected}
+                                    onSelectPosition={(pos) => handleSelectPosition('enemy', pos)}
+                                    onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
+                                    onPickShip={(ship) => handlePickShip('enemy', ship)}
+                                    onCloseSelector={() => setEnemySelected(undefined)}
+                                    resolveShip={(pos) => enemyBoard[pos]?.ship ?? null}
+                                    cells={gridCells(gridMode)}
+                                    onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
+                                    onCopyToOtherSide={
+                                        enemyHasBoss ? undefined : () => handleCopyBoard('enemy')
+                                    }
+                                    footprintOf={bossFootprintOfId}
+                                    headerSlot={
+                                        <div className="space-y-3">
+                                            <SegmentedControl
+                                                label="Enemy"
+                                                size="sm"
+                                                value={enemyMode}
+                                                onChange={handleEnemyModeChange}
+                                                options={[
+                                                    { value: 'team', label: 'Team' },
+                                                    {
+                                                        value: 'boss',
+                                                        label: 'Bounty boss',
+                                                        disabled: gridMode === 'small',
+                                                        title:
+                                                            gridMode === 'small'
+                                                                ? 'Fight a bounty boss instead of a team. Needs the normal board.'
+                                                                : undefined,
+                                                    },
+                                                ]}
+                                            />
+                                            {enemyMode === 'boss' && (
+                                                <BossEncounterPicker
+                                                    board={enemyBoard}
+                                                    onChange={(board) =>
+                                                        handleLoadEncounter('enemy', board)
+                                                    }
+                                                    disabled={gridMode === 'small'}
+                                                    helpLabel="Fight a bounty boss instead of a team. Needs the normal board."
+                                                />
+                                            )}
+                                        </div>
+                                    }
+                                    copyLabel="Copy to your team"
+                                    mirrored
+                                    onEditStats={(pos) =>
+                                        setEditing({ side: 'enemy', position: pos })
+                                    }
+                                    hasOverrides={(pos) =>
+                                        hasAnyOverride(enemyBoard[pos]?.overrides)
+                                    }
+                                    hideHint
+                                    footerSlot={
+                                        enemyHasBoss ? (
+                                            <p className="text-sm text-theme-text-secondary">
+                                                Bounty bosses have no squad leader.
+                                            </p>
+                                        ) : (
+                                            <SquadLeaderPicker
+                                                side="enemy"
+                                                selection={enemySquadLeader}
+                                                onChange={(sel) =>
+                                                    handleSquadLeaderChange('enemy', sel)
+                                                }
+                                                board={enemyBoard}
+                                            />
+                                        )
+                                    }
+                                />
+                            </div>
+                            <p className="text-xs text-theme-text-secondary">{CLICK_HINT}</p>
+                        </>
+                    )}
 
                     {runError && (
                         <div className="card text-red-400">Simulation error: {runError}</div>
@@ -618,18 +725,6 @@ const SimulatorPage: React.FC = () => {
                         ) : (
                             <SimulatorVerdict result={battleResult} />
                         ))}
-
-                    {aggregate && !baseline && (
-                        <div>
-                            <Button
-                                variant="secondary"
-                                onClick={handlePinBaseline}
-                                disabled={isRunning}
-                            >
-                                Pin as baseline
-                            </Button>
-                        </div>
-                    )}
 
                     {/* Squad-leader effects the sim could not model, surfaced so the outcome is
                         never mistaken for a full simulation of the selected leaders. A divergence
@@ -646,6 +741,14 @@ const SimulatorPage: React.FC = () => {
                                     <UnsimulatedEffectsList entries={section.entries} />
                                 </div>
                             ))}
+                        </div>
+                    )}
+
+                    {!isWide && (
+                        <div className="card">
+                            <SeedRunControls {...seedRunProps} showAction={false}>
+                                {pinButton}
+                            </SeedRunControls>
                         </div>
                     )}
 
@@ -732,6 +835,28 @@ const SimulatorPage: React.FC = () => {
                                 disabled={isRunning}
                                 alwaysOpen
                             />
+                        </div>
+                    </div>
+
+                    <div
+                        data-testid="run-bar"
+                        className="sticky bottom-0 z-30 bg-dark border-t border-dark-border shadow-[0_-4px_12px_rgba(0,0,0,0.4)] px-4 py-3"
+                    >
+                        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                            <div className="text-sm space-y-0.5">
+                                <p>{runSummary}</p>
+                                {lastRunText && (
+                                    <p className="text-theme-text-secondary">{lastRunText}</p>
+                                )}
+                                {!canRun && (
+                                    <p className="text-theme-text-secondary">
+                                        Place at least one ship on each team to run.
+                                    </p>
+                                )}
+                            </div>
+                            <SeedRunControls {...seedRunProps} showInputs={isWide}>
+                                {pinButton}
+                            </SeedRunControls>
                         </div>
                     </div>
                 </div>

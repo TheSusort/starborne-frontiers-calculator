@@ -4,7 +4,11 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: a finished run now opens its first seed automatically.',
+    'Combat simulator: results lead with a verdict and a per-ship damage breakdown.',
+    'Combat simulator: Run stays pinned at the bottom and the setup folds away.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

@@ -44,6 +44,9 @@ interface FormationGridProps {
     /** Opt-in: the cells a multi-hex unit occupies, anchor first. The other cells draw as part of
      *  the same unit and route their clicks to the anchor. */
     footprintOf?: (shipId: string) => readonly Position[] | undefined;
+    /** Opt-in: leaves out the click-instructions line, for a host that shows it once for
+     *  several grids. */
+    hideHint?: boolean;
 }
 
 const FormationGrid: React.FC<FormationGridProps> = ({
@@ -57,6 +60,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     onEditStats,
     hasOverrides,
     resolveShip,
+    hideHint = false,
     cells,
     footprintOf,
 }) => {
@@ -333,7 +337,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                     )}
                 </div>
             )}
-            {onRemoveShip && (
+            {onRemoveShip && !hideHint && (
                 <div className="text-xs text-theme-text-secondary mt-10">
                     Click to select a ship, Ctrl+Click to remove a ship, Hover + 1-5 to set attack
                     order
