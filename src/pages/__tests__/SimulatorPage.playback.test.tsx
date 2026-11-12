@@ -242,13 +242,13 @@ describe('SimulatorPage playback', () => {
         fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
 
         // Outcome surfaced.
-        expect(screen.getByText('Your team wins')).toBeInTheDocument();
+        expect(screen.getByText('Your team wins in round 2')).toBeInTheDocument();
         // Boards render the roster ships at their positions with their round-end HP (player
         // full, enemy at 40%).
         expect(screen.getByLabelText('Nova at T1, 100% HP')).toBeInTheDocument();
         expect(screen.getByLabelText('Hexa at T4, 40% HP')).toBeInTheDocument();
-        // Stepper reports two rounds, starting on round 1.
-        expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
+        // The player has a button per round, starting on round 1.
+        expect(screen.getByText('Round 1 · round end')).toBeInTheDocument();
 
         // Event log renders the real combat-log content for the current round: the turn
         // header for the acting ship and the attack line against the enemy.
@@ -256,8 +256,10 @@ describe('SimulatorPage playback', () => {
         expect(screen.getByText(/Nova \[active\] → Enemy Hexa: 1,000 → 40%/)).toBeInTheDocument();
 
         // Step to round 2: the enemy is destroyed (HP 0%).
-        fireEvent.click(screen.getByRole('button', { name: /Next round/i }));
-        expect(screen.getByText('Round 2 / 2')).toBeInTheDocument();
+        fireEvent.click(
+            within(screen.getByRole('group', { name: 'Rounds' })).getByRole('button', { name: '2' })
+        );
+        expect(screen.getByText('Round 2 · round end')).toBeInTheDocument();
         expect(screen.getByLabelText('Hexa at T4, 0% HP, destroyed')).toBeInTheDocument();
         // The event log re-renders for round 2 (the killing blow), not the round-1 content.
         expect(screen.getByText(/Nova \[active\] → Enemy Hexa: 1,500 → 0%/)).toBeInTheDocument();
@@ -300,7 +302,7 @@ describe('SimulatorPage results area', () => {
 
         expect(seedSquares()).toHaveLength(3);
         expect(seedSquares()[0]).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
+        expect(screen.getByText('Round 1 · round end')).toBeInTheDocument();
         expect(screen.getByLabelText('Nova at T1, 100% HP')).toBeInTheDocument();
         expect(screen.queryByText('Run a simulation to watch the fight here.')).toBeNull();
     });
@@ -314,7 +316,7 @@ describe('SimulatorPage results area', () => {
         expect(seedSquares()[2]).toHaveAttribute('aria-pressed', 'true');
         expect(seedSquares()[0]).toHaveAttribute('aria-pressed', 'false');
         expect(screen.getByText(/Seed \d+ · 3 of 3/)).toBeInTheDocument();
-        expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
+        expect(screen.getByText('Round 1 · round end')).toBeInTheDocument();
     });
 
     it('summarises a single run with verdict tiles', () => {
@@ -348,7 +350,7 @@ describe('SimulatorPage results area', () => {
                 'Run several seeds, then use Pin as baseline in the run controls to compare later runs against it.'
             )
         ).toBeInTheDocument();
-        expect(screen.queryByText('Round 1 / 2')).toBeNull();
+        expect(screen.queryByText('Round 1 · round end')).toBeNull();
     });
 
     it('renders the stat sweep open inside its own tab and keeps it out of view otherwise', () => {

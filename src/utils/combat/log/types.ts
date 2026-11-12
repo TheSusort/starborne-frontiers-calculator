@@ -108,6 +108,9 @@ export interface CombatLogTarget {
     amount?: number;
     didCrit?: boolean;
     didHit?: boolean; // false = miss/dodge
+    /** An `attack` entry's main target, as the engine's `attacked` event flags it. Display only:
+     *  the playback draws main and splash target lines from it. */
+    isPrimary?: true;
     resultingHpPct?: number;
     shieldWasHit?: boolean;
     /** The hit struck this target and was turned into a damage-over-time effect on it, so it landed

@@ -10,6 +10,13 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: the Run controls now stay pinned at the bottom of the screen.',
     'Combat simulator: the setup now folds into a single row after a run.',
     'Combat simulator: playback, baseline comparison and stat sweep now sit in tabs.',
+    'Combat simulator: playback now has a speed control, round buttons and arrow-key stepping.',
+    'Combat simulator: playback draws lines from the acting ship to its targets.',
+    'Combat simulator: buffs, debuffs and resists now float over ships during playback.',
+    'Combat simulator: hover a ship for its buffs and debuffs and their sources.',
+    'Combat simulator: playback ships now show small pilot portraits.',
+    'Combat simulator: a multi-hex boss now shows its name once during playback.',
+    'Combat simulator: boss mode hides the encounter load and save controls.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

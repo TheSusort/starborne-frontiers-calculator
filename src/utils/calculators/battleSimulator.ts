@@ -91,7 +91,7 @@ import { computeAffinityModifiers } from './affinityUtils';
  *  `activeDebuffs` list like any other debuff. Stack-independent on purpose: `activeDebuffs`
  *  is a de-duplicating set, so a per-application "×N" suffix would proliferate a new chip on
  *  every re-application. (The chronological combat log keeps the "dotType ×stacks" detail.) */
-const DOT_DEBUFF_LABELS: Record<DoTType, string> = {
+export const DOT_DEBUFF_LABELS: Record<DoTType, string> = {
     corrosion: 'Corrosion',
     inferno: 'Inferno',
     bomb: 'Bomb',

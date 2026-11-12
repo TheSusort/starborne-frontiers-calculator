@@ -62,6 +62,9 @@ interface PlacementBoardProps {
     footerSlot?: React.ReactNode;
     /** Leaves out the grid's click-instructions line; the host shows it once for both boards. */
     hideHint?: boolean;
+    /** Leaves out the "Load encounter" dropdown and "Save as encounter", e.g. while the side is
+     *  a bounty boss. */
+    hideEncounterControls?: boolean;
 }
 
 /** One placement board: a side heading, an optional "load encounter" dropdown, a FormationGrid,
@@ -86,6 +89,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     headerSlot,
     footerSlot,
     hideHint = false,
+    hideEncounterControls = false,
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
     const resolveStoredShip = useShipIdResolver();
@@ -129,7 +133,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
         <div className="card">
             <h2 className="text-lg font-semibold mb-2">{title}</h2>
             {headerSlot && <div className="mb-3">{headerSlot}</div>}
-            {encounters.length > 0 && (
+            {!hideEncounterControls && encounters.length > 0 && (
                 <div className="mb-3">
                     <Select
                         label="Load encounter"
@@ -143,26 +147,30 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                     />
                 </div>
             )}
-            <div className="mb-3 flex gap-2">
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={formation.length === 0}
-                    onClick={() => setIsSaveModalOpen(true)}
-                >
-                    Save as encounter
-                </Button>
-                {onCopyToOtherSide && (
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={formation.length === 0}
-                        onClick={onCopyToOtherSide}
-                    >
-                        {copyLabel}
-                    </Button>
-                )}
-            </div>
+            {(!hideEncounterControls || onCopyToOtherSide) && (
+                <div className="mb-3 flex gap-2">
+                    {!hideEncounterControls && (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={formation.length === 0}
+                            onClick={() => setIsSaveModalOpen(true)}
+                        >
+                            Save as encounter
+                        </Button>
+                    )}
+                    {onCopyToOtherSide && (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={formation.length === 0}
+                            onClick={onCopyToOtherSide}
+                        >
+                            {copyLabel}
+                        </Button>
+                    )}
+                </div>
+            )}
             <FormationGrid
                 formation={formation}
                 selectedPosition={selectedPosition}
