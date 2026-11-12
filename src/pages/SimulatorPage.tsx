@@ -37,7 +37,7 @@ import {
     writeStoredSquadLeaderSelection,
 } from '../utils/simulator/squadLeaderSelection';
 import SimulatorSetupBar from '../components/simulator/SimulatorSetupBar';
-import { shipPortraitUrl } from '../components/board/shipPortrait';
+import { shipSmallPortraitUrl } from '../components/board/shipPortrait';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import SetupStrip from '../components/simulator/SetupStrip';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -107,7 +107,7 @@ const SimulatorPage: React.FC = () => {
     // images, and is never re-derived from the live boards).
     const portraitFor = useMemo(() => {
         const keys = new Map(units.map((u) => [u.name.toLowerCase(), u.imageKey]));
-        return (name: string) => shipPortraitUrl(keys.get(name.toLowerCase()));
+        return (name: string) => shipSmallPortraitUrl(keys.get(name.toLowerCase()));
     }, [units]);
 
     // Shared combat-stat resolution — see src/utils/ship/combatStats.ts (mirrors DPSCalculatorPage).
