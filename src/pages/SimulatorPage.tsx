@@ -838,9 +838,10 @@ const SimulatorPage: React.FC = () => {
                         </div>
                     </div>
 
+                    {/* Right padding clears the app's fixed bottom-right widget stack (App.tsx). */}
                     <div
                         data-testid="run-bar"
-                        className="sticky bottom-0 z-30 bg-dark border-t border-dark-border shadow-[0_-4px_12px_rgba(0,0,0,0.4)] px-4 py-3"
+                        className="sticky bottom-0 z-30 bg-dark border-t border-dark-border shadow-[0_-4px_12px_rgba(0,0,0,0.4)] pl-4 pr-24 py-3"
                     >
                         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
                             <div className="text-sm space-y-0.5">
