@@ -343,7 +343,11 @@ describe('SimulatorPage results area', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Compare to baseline' }));
 
-        expect(screen.getByText(/pin a run as baseline/i)).toBeInTheDocument();
+        expect(
+            screen.getByText(
+                'Run several seeds, then use Pin as baseline in the run controls to compare later runs against it.'
+            )
+        ).toBeInTheDocument();
         expect(screen.queryByText('Round 1 / 2')).toBeNull();
     });
 

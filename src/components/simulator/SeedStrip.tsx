@@ -13,7 +13,12 @@ interface Props {
 const SEEDS_PER_PAGE = 200;
 
 const WINNER_LABEL = { player: 'Your team', enemy: 'Enemy' } as const;
-const WINNER_COLOR = { player: 'bg-blue-500', enemy: 'bg-red-500' } as const;
+/** Enemy wins carry a diagonal stripe on top of the colour, so the two outcomes differ without
+ *  relying on hue. */
+const WINNER_STYLE = {
+    player: 'bg-blue-500',
+    enemy: 'bg-red-500 bg-[repeating-linear-gradient(135deg,transparent_0,transparent_2px,rgba(0,0,0,0.4)_2px,rgba(0,0,0,0.4)_4px)]',
+} as const;
 
 /** One small square per seed of a multi-seed run, coloured by winner; clicking one replays that
  *  fight. One seeded run reproduces a fight, so the strip is how a single fight is picked out of
@@ -51,6 +56,27 @@ const SeedStrip: React.FC<Props> = ({ runs, openedSeed, onOpenSeed }) => {
                     Seed {openedSeed} · {openedIndex + 1} of {runs.length}
                 </p>
             )}
+            <div className="flex flex-wrap items-center gap-4 text-xs text-theme-text-secondary">
+                {(['player', 'enemy'] as const).map((winner) => (
+                    <span key={winner} className="inline-flex items-center gap-1.5">
+                        <span
+                            aria-hidden="true"
+                            className={`h-3 w-3 rounded-sm ${WINNER_STYLE[winner]}`}
+                        />
+                        {winner === 'player' ? 'Your team wins' : 'Enemy wins'}
+                    </span>
+                ))}
+            </div>
+            {/* Before the squares, so a keyboard user reaches the page controls without tabbing
+                through every seed on the page. Scrolling to top on a page change would yank the
+                viewport away from the strip, so it is off. */}
+            <Pagination
+                currentPage={renderedPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                scrollToTop={false}
+                className="!mt-0"
+            />
             <div className="flex flex-wrap gap-1">
                 {visibleRuns.map((run) => {
                     const label = `Seed ${run.seed}: ${WINNER_LABEL[run.winner]} wins in round ${run.lastRound}`;
@@ -63,7 +89,7 @@ const SeedStrip: React.FC<Props> = ({ runs, openedSeed, onOpenSeed }) => {
                             title={label}
                             aria-pressed={isOpened}
                             onClick={() => onOpenSeed(run.seed)}
-                            className={`h-4 w-4 rounded-sm ${WINNER_COLOR[run.winner]} ${
+                            className={`h-6 w-6 sm:h-4 sm:w-4 rounded-sm ${WINNER_STYLE[run.winner]} ${
                                 isOpened
                                     ? 'ring-2 ring-white ring-offset-1 ring-offset-dark'
                                     : 'opacity-70 hover:opacity-100'
@@ -72,14 +98,6 @@ const SeedStrip: React.FC<Props> = ({ runs, openedSeed, onOpenSeed }) => {
                     );
                 })}
             </div>
-            {/* The strip sits mid-page, not at the top — scrolling to top on every page change
-                would yank the viewport away from what the click was about. */}
-            <Pagination
-                currentPage={renderedPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                scrollToTop={false}
-            />
         </div>
     );
 };

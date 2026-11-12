@@ -46,6 +46,9 @@ export interface UseSimulatorRunsResult {
     /** The seed `battleResult` replays, or `null` when no single fight is displayed. A finished
      *  multi-seed run opens its first seed, so a displayed aggregate always has one. */
     openedSeed: number | null;
+    /** Bumped each time a run lands a result. A cancelled or failed run does not bump it, and
+     *  neither does opening a seed, so a consumer can tell a new result from a re-display. */
+    completedRuns: number;
     aggregate: SeedSetAggregate | null;
     baseline: PinnedBaseline | null;
     runError: string | null;
@@ -110,6 +113,7 @@ export function useSimulatorRuns({
 }: UseSimulatorRunsArgs): UseSimulatorRunsResult {
     const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
     const [openedSeed, setOpenedSeed] = useState<number | null>(null);
+    const [completedRuns, setCompletedRuns] = useState(0);
     const [aggregate, setAggregate] = useState<SeedSetAggregate | null>(null);
     const [runError, setRunError] = useState<string | null>(null);
     const [baseline, setBaseline] = useState<PinnedBaseline | null>(null);
@@ -192,6 +196,7 @@ export function useSimulatorRuns({
                 setBattleResult(runSeededBattle(input, effectiveSeed, getGearPiece));
                 setOpenedSeed(effectiveSeed);
                 setProvenance({ input, overrides, gridMode: runGridMode });
+                setCompletedRuns((count) => count + 1);
             } catch (err) {
                 setBattleResult(null);
                 setOpenedSeed(null);
@@ -226,6 +231,7 @@ export function useSimulatorRuns({
                 setDivergence(null);
                 setAggregate(result);
                 setProvenance({ input, overrides, gridMode: runGridMode });
+                setCompletedRuns((count) => count + 1);
                 // Opened here, not in a page effect: strict mode double-fires effects, and this
                 // `.then` runs once per run. A replay failure leaves the aggregate displayed with
                 // no fight open.
@@ -356,6 +362,7 @@ export function useSimulatorRuns({
     return {
         battleResult,
         openedSeed,
+        completedRuns,
         aggregate,
         baseline,
         runError,

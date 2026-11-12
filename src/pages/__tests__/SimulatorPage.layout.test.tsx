@@ -166,6 +166,30 @@ describe('SimulatorPage setup strip', () => {
         expect(screen.queryByTestId('board-player')).not.toBeInTheDocument();
     });
 
+    it('stays expanded while a rerun is pending or cancelled, and folds when a new result lands', async () => {
+        renderPage();
+        placeShips();
+        fireEvent.change(screen.getByLabelText('Runs'), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
+        await screen.findByTestId('setup-strip');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit setup' }));
+        fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
+        // Running: the previous result is still shown and the setup stays open.
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+        expect(screen.getByTestId('board-player')).toBeInTheDocument();
+        expect(screen.queryByTestId('setup-strip')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        await screen.findByRole('button', { name: /Run Simulation/i });
+        expect(screen.getByTestId('board-player')).toBeInTheDocument();
+        expect(screen.queryByTestId('setup-strip')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
+        await screen.findByTestId('setup-strip');
+        expect(screen.queryByTestId('board-player')).not.toBeInTheDocument();
+    });
+
     it('opening a seed does not re-expand the setup', async () => {
         renderPage();
         placeShips();
@@ -238,6 +262,31 @@ describe('SimulatorPage board mode and footers', () => {
         expect(
             within(screen.getByTestId('header-enemy')).getByRole('button', { name: 'Bounty boss' })
         ).toBeDisabled();
+    });
+
+    it('says in visible text why Bounty boss is disabled on the small grid', () => {
+        renderPage();
+        expect(screen.queryByText('Bounty bosses need the normal board.')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Small · 7' }));
+        expect(screen.getByText('Bounty bosses need the normal board.')).toBeInTheDocument();
+    });
+
+    it('blocks the run in boss mode until a boss is chosen, without clearing the enemy team', () => {
+        renderPage();
+        placeShips();
+        expect(screen.getByRole('button', { name: /Run Simulation/i })).toBeEnabled();
+
+        fireEvent.click(
+            within(screen.getByTestId('header-enemy')).getByRole('button', { name: 'Bounty boss' })
+        );
+
+        expect(screen.getByRole('button', { name: /Run Simulation/i })).toBeDisabled();
+        expect(within(runBar()).getByText('Pick a bounty boss to run.')).toBeInTheDocument();
+        expect(screen.getByTestId('count-enemy')).toHaveTextContent('1');
+
+        fireEvent.click(screen.getByText('load boss enemy'));
+        expect(screen.getByRole('button', { name: /Run Simulation/i })).toBeEnabled();
+        expect(screen.queryByText('Pick a bounty boss to run.')).not.toBeInTheDocument();
     });
 });
 

@@ -66,12 +66,12 @@ const ShipBreakdownTable: React.FC<Props> = ({ roster, perActorMean }) => {
                         ))}
                     </tr>
                 </thead>
-                <tbody>
+                <>
                     {SIDES.map(({ side, title }) => {
                         const rows = roster.filter((entry) => entry.side === side);
                         if (rows.length === 0) return null;
                         return (
-                            <React.Fragment key={side}>
+                            <tbody key={side}>
                                 <tr>
                                     <th
                                         scope="rowgroup"
@@ -89,9 +89,12 @@ const ShipBreakdownTable: React.FC<Props> = ({ roster, perActorMean }) => {
                                             key={entry.actorId}
                                             className="border-t border-dark-border"
                                         >
-                                            <td className="py-1.5 pr-3 whitespace-nowrap">
+                                            <th
+                                                scope="row"
+                                                className="py-1.5 pr-3 text-left font-normal whitespace-nowrap"
+                                            >
                                                 {label}
-                                            </td>
+                                            </th>
                                             {COLUMNS.map((column) => {
                                                 const value = totals[column.metric];
                                                 const max = maxima[column.metric];
@@ -121,10 +124,10 @@ const ShipBreakdownTable: React.FC<Props> = ({ roster, perActorMean }) => {
                                         </tr>
                                     );
                                 })}
-                            </React.Fragment>
+                            </tbody>
                         );
                     })}
-                </tbody>
+                </>
             </table>
         </div>
     );

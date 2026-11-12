@@ -275,8 +275,8 @@ const SimulatorPage: React.FC = () => {
     const [bossModePicked, setBossModePicked] = useState(false);
     const enemyMode: 'team' | 'boss' =
         enemyHasBoss || (bossModePicked && gridMode === 'normal') ? 'boss' : 'team';
-    // Edit setup, a Run click and a load/restore set this; the setup is collapsed only while a
-    // result is displayed and this is false.
+    // Edit setup and a load/restore set this; a newly landed result clears it. The setup is
+    // collapsed only while a result is displayed and this is false.
     const [editingSetup, setEditingSetup] = useState(false);
     const isWide = useMediaQuery(WIDE_QUERY);
     // A boss board has no squad leader: the picker is hidden and the stored selection neither
@@ -288,6 +288,7 @@ const SimulatorPage: React.FC = () => {
     const {
         battleResult,
         openedSeed,
+        completedRuns,
         aggregate,
         baseline,
         divergence,
@@ -324,10 +325,18 @@ const SimulatorPage: React.FC = () => {
     const hasResult = battleResult !== null || aggregate !== null || divergence !== null;
     const collapsed = hasResult && !editingSetup;
 
-    const handleRunClick = () => {
+    // Folds the setup when a run lands a result, not when Run is clicked: a rerun that is still
+    // going, or was cancelled, leaves the boards open.
+    const seenCompletedRuns = useRef(completedRuns);
+    useEffect(() => {
+        if (completedRuns === seenCompletedRuns.current) return;
+        seenCompletedRuns.current = completedRuns;
         setEditingSetup(false);
-        handleRun();
-    };
+    }, [completedRuns]);
+
+    // Boss mode with no boss chosen leaves the enemy side as it was, so the hook's own check
+    // passes; the run is blocked here instead.
+    const bossPending = enemyMode === 'boss' && !enemyHasBoss;
 
     const handleEnemyModeChange = (mode: string) => {
         if (mode === 'boss') {
@@ -500,8 +509,8 @@ const SimulatorPage: React.FC = () => {
         runCount: effectiveRunCount,
         onSeedChange: setSeed,
         onRunCountChange: setRunCount,
-        onRun: handleRunClick,
-        canRun: canRun && !sweep.isSweeping,
+        onRun: handleRun,
+        canRun: canRun && !bossPending && !sweep.isSweeping,
         locked: baseline !== null,
         lockedReason: 'Seed and run count are fixed by the pinned baseline. Unpin to change them.',
         onUnpin: handleUnpinBaseline,
@@ -672,6 +681,11 @@ const SimulatorPage: React.FC = () => {
                                                     },
                                                 ]}
                                             />
+                                            {gridMode === 'small' && (
+                                                <p className="text-xs text-theme-text-secondary">
+                                                    Bounty bosses need the normal board.
+                                                </p>
+                                            )}
                                             {enemyMode === 'boss' && (
                                                 <BossEncounterPicker
                                                     board={enemyBoard}
@@ -812,8 +826,8 @@ const SimulatorPage: React.FC = () => {
                                 />
                             ) : (
                                 <p className="text-sm text-theme-text-secondary">
-                                    Pin a run as baseline from the run bar to compare it with later
-                                    runs.
+                                    Run several seeds, then use Pin as baseline in the run controls
+                                    to compare later runs against it.
                                 </p>
                             ))}
 
@@ -849,10 +863,16 @@ const SimulatorPage: React.FC = () => {
                                 {lastRunText && (
                                     <p className="text-theme-text-secondary">{lastRunText}</p>
                                 )}
-                                {!canRun && (
+                                {!canRun ? (
                                     <p className="text-theme-text-secondary">
                                         Place at least one ship on each team to run.
                                     </p>
+                                ) : (
+                                    bossPending && (
+                                        <p className="text-theme-text-secondary">
+                                            Pick a bounty boss to run.
+                                        </p>
+                                    )
                                 )}
                             </div>
                             <SeedRunControls {...seedRunProps} showInputs={isWide}>

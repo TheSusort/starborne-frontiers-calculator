@@ -7,7 +7,9 @@ import { ChangelogEntry } from '../types/changelog';
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: a finished run now opens its first seed automatically.',
     'Combat simulator: results lead with a verdict and a per-ship damage breakdown.',
-    'Combat simulator: Run stays pinned at the bottom and the setup folds away.',
+    'Combat simulator: the Run controls now stay pinned at the bottom of the screen.',
+    'Combat simulator: the setup now folds into a single row after a run.',
+    'Combat simulator: playback, baseline comparison and stat sweep now sit in tabs.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

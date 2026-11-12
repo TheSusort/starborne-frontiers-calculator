@@ -91,4 +91,22 @@ describe('ShipBreakdownTable', () => {
         render(<ShipBreakdownTable roster={roster} perActorMean={{ p0: totals(100) }} />);
         expect(barValue(rowFor('Hexa'), /dealt/i)).toBe(0);
     });
+
+    it('gives each side its own tbody led by its group header', () => {
+        const { container } = render(
+            <ShipBreakdownTable roster={roster} perActorMean={perActorMean} />
+        );
+        const bodies = container.querySelectorAll('tbody');
+        expect(bodies).toHaveLength(2);
+        expect(bodies[0].querySelector('th[scope="rowgroup"]')).toHaveTextContent('Your team');
+        expect(bodies[1].querySelector('th[scope="rowgroup"]')).toHaveTextContent('Enemy');
+        expect(bodies[1]).toHaveTextContent('Hexa');
+        expect(bodies[1]).not.toHaveTextContent('Vex');
+    });
+
+    it('names each ship cell as a row header', () => {
+        render(<ShipBreakdownTable roster={roster} perActorMean={perActorMean} />);
+        expect(screen.getByRole('rowheader', { name: 'Nova #1' })).toHaveAttribute('scope', 'row');
+        expect(screen.getByRole('rowheader', { name: 'Hexa' })).toBeInTheDocument();
+    });
 });

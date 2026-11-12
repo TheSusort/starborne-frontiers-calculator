@@ -74,4 +74,34 @@ describe('SeedStrip', () => {
         expect(screen.getByRole('button', { name: /seed 500:/i })).toBeInTheDocument();
         expect(screen.queryByLabelText(/next page/i)).not.toBeInTheDocument();
     });
+
+    it('shows a key naming what each colour means', () => {
+        render(<SeedStrip runs={runs} openedSeed={null} onOpenSeed={() => {}} />);
+        expect(screen.getByText('Your team wins')).toBeInTheDocument();
+        expect(screen.getByText('Enemy wins')).toBeInTheDocument();
+    });
+
+    it('marks enemy wins with more than colour', () => {
+        render(<SeedStrip runs={runs} openedSeed={null} onOpenSeed={() => {}} />);
+        const enemy = screen.getByRole('button', { name: /seed 501/i });
+        const player = screen.getByRole('button', { name: /seed 500/i });
+        expect(enemy.className).toMatch(/repeating-linear-gradient/);
+        expect(player.className).not.toMatch(/repeating-linear-gradient/);
+    });
+
+    it('makes the squares larger on phones', () => {
+        render(<SeedStrip runs={runs} openedSeed={null} onOpenSeed={() => {}} />);
+        expect(screen.getByRole('button', { name: /seed 500/i }).className).toMatch(
+            /\bh-6\b.*\bsm:h-4\b/
+        );
+    });
+
+    it('puts the page controls before the squares in tab order', () => {
+        render(<SeedStrip runs={manyRuns(250)} openedSeed={null} onOpenSeed={() => {}} />);
+        const next = screen.getByLabelText(/next page/i);
+        const firstSeed = screen.getByRole('button', { name: /seed 1000:/i });
+        expect(next.compareDocumentPosition(firstSeed) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+            Node.DOCUMENT_POSITION_FOLLOWING
+        );
+    });
 });
