@@ -97,6 +97,13 @@ describe('PlacementBoard load-from-encounter', () => {
         expect(board).toEqual({ T1: { ship: ownedShip } });
         expect(board.M2).toBeUndefined();
     });
+
+    it('leaves out Load encounter and Save as encounter when hideEncounterControls is set', () => {
+        renderBoard({ hideEncounterControls: true, onCopyToOtherSide: vi.fn() });
+        expect(screen.queryByRole('button', { name: /Load encounter/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Save as encounter' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Copy to other side' })).toBeInTheDocument();
+    });
 });
 
 describe('PlacementBoard save-as-encounter', () => {

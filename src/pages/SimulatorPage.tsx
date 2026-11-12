@@ -657,6 +657,7 @@ const SimulatorPage: React.FC = () => {
                                     resolveShip={(pos) => enemyBoard[pos]?.ship ?? null}
                                     cells={gridCells(gridMode)}
                                     onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
+                                    hideEncounterControls={enemyMode === 'boss'}
                                     onCopyToOtherSide={
                                         enemyHasBoss ? undefined : () => handleCopyBoard('enemy')
                                     }

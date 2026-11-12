@@ -55,6 +55,7 @@ vi.mock('../../components/simulator/PlacementBoard', () => ({
         headerSlot,
         footerSlot,
         hideHint,
+        hideEncounterControls,
     }: {
         title: string;
         formation: unknown[];
@@ -64,10 +65,15 @@ vi.mock('../../components/simulator/PlacementBoard', () => ({
         headerSlot?: React.ReactNode;
         footerSlot?: React.ReactNode;
         hideHint?: boolean;
+        hideEncounterControls?: boolean;
     }) => {
         const side = title.startsWith('Your') ? 'player' : 'enemy';
         return (
-            <div data-testid={`board-${side}`} data-hide-hint={String(Boolean(hideHint))}>
+            <div
+                data-testid={`board-${side}`}
+                data-hide-hint={String(Boolean(hideHint))}
+                data-hide-encounter-controls={String(Boolean(hideEncounterControls))}
+            >
                 <button onClick={() => onSelectPosition('T1')}>select {side}</button>
                 <button onClick={() => onPickShip(side === 'player' ? playerShip : enemyShip)}>
                     pick {side}
@@ -228,9 +234,17 @@ describe('SimulatorPage board mode and footers', () => {
     it('reveals the boss picker only in Bounty boss mode', () => {
         renderPage();
         const header = screen.getByTestId('header-enemy');
+        const enemyBoard = screen.getByTestId('board-enemy');
         expect(within(header).queryByLabelText('Encounter')).not.toBeInTheDocument();
+        expect(enemyBoard).toHaveAttribute('data-hide-encounter-controls', 'false');
         fireEvent.click(within(header).getByRole('button', { name: 'Bounty boss' }));
         expect(within(header).getByLabelText('Encounter')).toBeInTheDocument();
+        // A saved team encounter has no place on a boss board.
+        expect(enemyBoard).toHaveAttribute('data-hide-encounter-controls', 'true');
+        expect(screen.getByTestId('board-player')).toHaveAttribute(
+            'data-hide-encounter-controls',
+            'false'
+        );
         expect(within(header).getByRole('button', { name: 'Bounty boss' })).toHaveAttribute(
             'aria-pressed',
             'true'
