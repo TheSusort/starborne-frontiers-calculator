@@ -4,23 +4,21 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Combat simulator: a finished run now opens its first seed automatically.',
-    'Combat simulator: results lead with a verdict and a per-ship damage breakdown.',
-    'Combat simulator: the Run controls now stay pinned at the bottom of the screen.',
-    'Combat simulator: the setup now folds into a single row after a run.',
-    'Combat simulator: playback, baseline comparison and stat sweep now sit in tabs.',
-    'Combat simulator: playback now has a speed control, round buttons and arrow-key stepping.',
-    'Combat simulator: playback draws lines from the acting ship to its targets.',
-    'Combat simulator: buffs, debuffs and resists now float over ships during playback.',
-    'Combat simulator: hover a ship for its buffs and debuffs and their sources.',
-    'Combat simulator: playback ships now show small pilot portraits.',
-    'Combat simulator: a multi-hex boss now shows its name once during playback.',
-    'Combat simulator: boss mode hides the encounter load and save controls.',
-    'Combat simulator: bounty bosses now show their portrait on the boards and in playback.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.88.0',
+        date: '2026-11-12',
+        changes: [
+            'Combat simulator: redesigned page with a pinned Run bar and results up front.',
+            'Combat simulator: results lead with a verdict and a per-ship damage breakdown.',
+            'Combat simulator: playback has speed control, target lines and floating buff text.',
+            'Combat simulator: hover a ship for its buffs and debuffs and their sources.',
+            'Combat simulator: bounty bosses and ships now show their portraits in playback.',
+            '2 combat simulator fixes and adjustments.',
+        ],
+    },
     {
         version: '1.87.0',
         date: '2026-11-11',
