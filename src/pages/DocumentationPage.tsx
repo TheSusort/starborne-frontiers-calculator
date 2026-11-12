@@ -4916,6 +4916,20 @@ const DocumentationPage: React.FC = () => {
                                         baseline comparison and the stat sweep
                                     </li>
                                     <li>
+                                        The playback plays the fight turn by turn: Play and Pause,
+                                        Previous and Next turn, a button for each round (it shows
+                                        that round&apos;s end), and a Slow, Normal or Fast speed.
+                                        With focus on the playback, the left and right arrow keys
+                                        step a turn and Space plays or pauses. While a turn plays, a
+                                        thick line runs from the acting ship to its main target and
+                                        thin dashed lines to the ships its splash hits, and buffs,
+                                        debuffs and resists float over the ships they reach. Hover
+                                        or focus a ship to see its buffs and debuffs and who applied
+                                        each; they are exact as of the last round end. Click a ship
+                                        to pin its round, and read the round&apos;s events beside
+                                        the boards on wide screens
+                                    </li>
+                                    <li>
                                         A fight lasts at most 30 rounds. If both teams still have a
                                         ship standing when the last round ends, the enemy wins, as a
                                         timeout is a defeat in the game. When both teams lose their
