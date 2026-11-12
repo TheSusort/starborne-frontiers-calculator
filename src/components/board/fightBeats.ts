@@ -1,6 +1,7 @@
-import type { BattleResult } from '../../utils/calculators/battleSimulator';
+import { DOT_DEBUFF_LABELS, type BattleResult } from '../../utils/calculators/battleSimulator';
 import type { CombatLogEntry, CombatLogTurn } from '../../utils/combat/log/types';
 import type { Position } from '../../types/encounters';
+import type { DoTType } from '../../types/calculator';
 import type { FloatingHit } from './FloatingHits';
 
 export type FightSide = 'player' | 'enemy';
@@ -33,6 +34,13 @@ export interface FightHit extends FloatingHit {
     ship: number;
 }
 
+/** A ship the acting ship's own attacks reach this turn. */
+export interface FightTarget {
+    side: FightSide;
+    ship: number;
+    role: 'main' | 'splash';
+}
+
 /** One turn of the fight, with every ship's state after it. */
 export interface FightBeat {
     round: number;
@@ -42,6 +50,9 @@ export interface FightBeat {
     actorShip: number;
     /** Set when the actor fired its charged skill on this turn. */
     charged: { skillName?: string } | null;
+    /** Ships the actor's own attacks reach this turn (not reactions, not round effects), each
+     *  once. Empty for a beat without an actor, absent on a hand-built one. */
+    targets?: FightTarget[];
     /** In the order they happened, including the round's start- and end-of-round effects. */
     hits: FightHit[];
     /** Each side's ships in roster order: the order the side's placements were given to the
@@ -54,6 +65,12 @@ const clamp = (v: number) => Math.max(0, Math.min(100, v));
 
 const TIER = /^(.*\S)\s+(I|II|III|IV|V)$/;
 const TIER_RANK: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
+
+/** A status name without its tier numeral: "Attack Down II" -> "Attack Down". */
+export function statusBaseName(name: string): string {
+    const m = TIER.exec(name);
+    return m ? m[1] : name;
+}
 
 /**
  * Duplicate names removed, and of the tiers of one status ("Attack Down II", "Attack Down III")
@@ -86,7 +103,20 @@ const DAMAGE_KINDS = new Set<CombatLogEntry['kind']>([
     'bomb',
     'reversed-repair',
 ]);
+const STATUS_KINDS = new Set<CombatLogEntry['kind']>([
+    'buff',
+    'debuff',
+    'dot-applied',
+    'debuff-resisted',
+]);
 const HEAL_KINDS = new Set<CombatLogEntry['kind']>(['heal', 'hot-ticked']);
+
+/** The debuff chip a DoT shows on its holder: its family name, as the round snapshot labels it
+ *  (the log's `note` reads "corrosion III ×3"). */
+const dotChipName = (note: string | undefined): string | undefined => {
+    const family = note?.split(' ')[0] as DoTType | undefined;
+    return family ? DOT_DEBUFF_LABELS[family] : undefined;
+};
 
 const freshSide = (position: Position): FightShipState => ({
     position,
@@ -130,8 +160,14 @@ interface Seat {
  *
  * Max HP is read per ship from its turns' `statsSnapshot`s; without one, that ship's heals,
  * grants and absorbed damage leave its bars alone until the round end.
+ *
+ * With `statusFloats`, a status landing or resisted also pops a hit (`buff`, `debuff`,
+ * `resisted`) on the ship it reached.
  */
-export function buildFightBeats(result: BattleResult): FightBeat[] {
+export function buildFightBeats(
+    result: BattleResult,
+    { statusFloats = false }: { statusFloats?: boolean } = {}
+): FightBeat[] {
     const lastRound = result.outcome.lastRound;
     const seats = new Map<string, Seat>();
     const state: Record<FightSide, FightShipState[]> = { player: [], enemy: [] };
@@ -179,7 +215,17 @@ export function buildFightBeats(result: BattleResult): FightBeat[] {
             const { side, ship } = seat;
             const s = stateOf(seat);
             const amount = target.amount ?? 0;
-            if (DAMAGE_KINDS.has(entry.kind)) {
+            if (STATUS_KINDS.has(entry.kind)) {
+                if (!statusFloats || entry.attemptOnly) continue;
+                const base = { side, ship, amount: 0, crit: false };
+                if (entry.kind === 'debuff-resisted') {
+                    hits.push({ ...base, kind: 'resisted' });
+                    continue;
+                }
+                const label = entry.kind === 'dot-applied' ? dotChipName(entry.note) : entry.note;
+                if (!label) continue;
+                hits.push({ ...base, kind: entry.kind === 'buff' ? 'buff' : 'debuff', label });
+            } else if (DAMAGE_KINDS.has(entry.kind)) {
                 if (target.didHit === false) {
                     hits.push({ side, ship, kind: 'miss', amount: 0, crit: false });
                     continue;
@@ -217,6 +263,29 @@ export function buildFightBeats(result: BattleResult): FightBeat[] {
         for (const reaction of entry.reactions) apply(reaction, hits);
     };
 
+    /**
+     * The ships `actorId`'s own top-level attacks reach, each once. A victim the engine flags
+     * primary is `main` (a whole-battlefield attack flags every victim); an attack that flags
+     * none treats its first victim as main. Main in any one attack stays main.
+     */
+    const attackTargets = (actorId: string, entries: readonly CombatLogEntry[]): FightTarget[] => {
+        const out = new Map<string, FightTarget>();
+        for (const e of entries) {
+            if (e.kind !== 'attack' || e.actorId !== actorId) continue;
+            const flagged = e.targets.some((t) => t.isPrimary);
+            e.targets.forEach((t, i) => {
+                const seat = seats.get(t.targetId);
+                if (!seat) return;
+                const main = flagged ? !!t.isPrimary : i === 0;
+                const key = `${seat.side}:${seat.ship}`;
+                const prev = out.get(key);
+                if (!prev) out.set(key, { ...seat, role: main ? 'main' : 'splash' });
+                else if (main) prev.role = 'main';
+            });
+        }
+        return [...out.values()];
+    };
+
     /** `hits` may already hold the numbers of entries applied before the turn's snapshot. */
     const pushBeat = (
         round: number,
@@ -238,6 +307,7 @@ export function buildFightBeats(result: BattleResult): FightBeat[] {
                     ? { skillName: chargedEntry.skillName }
                     : {}
                 : null,
+            targets: turn && seat ? attackTargets(turn.actorId, entries) : [],
             hits,
             ...copyAll(),
         });

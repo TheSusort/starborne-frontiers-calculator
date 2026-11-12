@@ -614,17 +614,23 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         const existing = ctx.openAttackEntry.targets.find((t) => t.targetId === e.targetId);
         // A hit turned into a DoT landed nothing: the row shows no number and no HP, only that it
         // was converted (the DoT's ticks carry the damage).
+        const primary = e.isPrimaryTarget === true;
         if (e.convertedToDot) {
-            if (existing) return;
+            if (existing) {
+                if (primary) existing.isPrimary = true;
+                return;
+            }
             ctx.openAttackEntry.targets.push({
                 targetId: e.targetId,
                 didCrit: e.didCrit,
                 didHit: true,
                 convertedToDot: true,
+                ...(primary ? { isPrimary: true as const } : {}),
             });
             return;
         }
         if (existing) {
+            if (primary) existing.isPrimary = true;
             if (existing.convertedToDot) {
                 delete existing.convertedToDot;
                 existing.amount = rowDamage ?? 0;
@@ -649,6 +655,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             didCrit: e.didCrit,
             shieldWasHit: e.shieldWasHit,
             didHit: true,
+            ...(primary ? { isPrimary: true as const } : {}),
         };
         ctx.openAttackEntry.targets.push(target);
         ctx.claimHp(target);

@@ -694,3 +694,162 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())('buildFightBeats (corpu
         expect(last.enemy[0]).toMatchObject({ hpPct: 0, alive: false, buffs: [], debuffs: [] });
     });
 });
+
+describe('buildFightBeats targets and status floats', () => {
+    const roster = ['p0', 'p1', 'e0', 'e1', 'e2'].map((actorId) => ({
+        actorId,
+        side: actorId.startsWith('p') ? 'player' : 'enemy',
+        name: actorId,
+        position: 'M2' as const,
+    }));
+    const snapshotShip = (actorId: string) => ({
+        actorId,
+        side: actorId.startsWith('p') ? 'player' : 'enemy',
+        hpPct: 100,
+        shieldPct: 0,
+        alive: true,
+        activeBuffs: [],
+        activeDebuffs: [],
+    });
+    const fight = (turns: CombatLogTurn[]): BattleResult =>
+        ({
+            outcome: { winner: 'player', lastRound: 1 },
+            roster,
+            combatLog: [logRound(1, turns)],
+            rounds: [
+                { round: 1, turnOrder: [], ships: roster.map((r) => snapshotShip(r.actorId)) },
+            ],
+        }) as unknown as BattleResult;
+
+    describe('targets', () => {
+        it('marks the flagged victim main and the rest splash, by ship', () => {
+            const beats = buildFightBeats(
+                fight([
+                    turn('p0', [
+                        entry('attack', 'p0', [
+                            { targetId: 'e1', amount: 10, isPrimary: true },
+                            { targetId: 'e0', amount: 5 },
+                            { targetId: 'e2', didHit: false },
+                        ]),
+                    ]),
+                ])
+            );
+            expect(beats[0].targets).toEqual([
+                { side: 'enemy', ship: 1, role: 'main' },
+                { side: 'enemy', ship: 0, role: 'splash' },
+                { side: 'enemy', ship: 2, role: 'splash' },
+            ]);
+        });
+
+        it('draws every flagged victim of a whole-battlefield attack as main', () => {
+            const beats = buildFightBeats(
+                fight([
+                    turn('p0', [
+                        entry('attack', 'p0', [
+                            { targetId: 'e0', amount: 5, isPrimary: true },
+                            { targetId: 'e1', amount: 5, isPrimary: true },
+                        ]),
+                    ]),
+                ])
+            );
+            expect(beats[0].targets?.map((t) => t.role)).toEqual(['main', 'main']);
+        });
+
+        it('treats the first target as main when no victim is flagged', () => {
+            const beats = buildFightBeats(
+                fight([
+                    turn('p0', [
+                        entry('attack', 'p0', [
+                            { targetId: 'e2', amount: 5 },
+                            { targetId: 'e0', amount: 5 },
+                        ]),
+                    ]),
+                ])
+            );
+            expect(beats[0].targets).toEqual([
+                { side: 'enemy', ship: 2, role: 'main' },
+                { side: 'enemy', ship: 0, role: 'splash' },
+            ]);
+        });
+
+        it('keeps a ship main when another attack of the turn only splashed it', () => {
+            const beats = buildFightBeats(
+                fight([
+                    turn('p0', [
+                        entry('attack', 'p0', [{ targetId: 'e0', amount: 5, isPrimary: true }]),
+                        entry('attack', 'p0', [
+                            { targetId: 'e1', amount: 5, isPrimary: true },
+                            { targetId: 'e0', amount: 5 },
+                        ]),
+                    ]),
+                ])
+            );
+            expect(beats[0].targets).toEqual([
+                { side: 'enemy', ship: 0, role: 'main' },
+                { side: 'enemy', ship: 1, role: 'main' },
+            ]);
+        });
+
+        it('ignores reactions, other actors entries and non-attack entries', () => {
+            const beats = buildFightBeats(
+                fight([
+                    turn('p0', [
+                        entry('attack', 'p0', [{ targetId: 'e0', amount: 5, isPrimary: true }], {
+                            reactions: [
+                                entry('attack', 'e1', [{ targetId: 'p0', amount: 1 }]),
+                                entry('attack', 'p0', [{ targetId: 'e2', amount: 1 }]),
+                            ],
+                        }),
+                        entry('attack', 'e1', [{ targetId: 'p1', amount: 1 }]),
+                        entry('debuff', 'p0', [{ targetId: 'e2' }], { note: 'Attack Down II' }),
+                    ]),
+                ])
+            );
+            expect(beats[0].targets).toEqual([{ side: 'enemy', ship: 0, role: 'main' }]);
+        });
+
+        it('is empty for a beat of round effects only', () => {
+            const r = fight([]);
+            r.combatLog = [
+                logRound(
+                    1,
+                    [],
+                    [entry('attack', 'p0', [{ targetId: 'e0', amount: 5, isPrimary: true }])]
+                ),
+            ];
+            expect(buildFightBeats(r)[0].targets).toEqual([]);
+        });
+    });
+
+    describe('status floats', () => {
+        const casting = () =>
+            fight([
+                turn('p0', [
+                    entry('buff', 'p0', [{ targetId: 'p1' }], { note: 'Attack Up II' }),
+                    entry('debuff', 'p0', [{ targetId: 'e0' }], { note: 'Defense Down I' }),
+                    entry('dot-applied', 'p0', [{ targetId: 'e1' }], { note: 'corrosion III ×2' }),
+                    entry('debuff-resisted', 'p0', [{ targetId: 'e2' }], { note: 'Inferno' }),
+                    entry('debuff', 'p0', [{ targetId: 'e2' }], {
+                        note: 'Provoke',
+                        attemptOnly: true,
+                    }),
+                    entry('debuff', 'p0', [{ targetId: 'nobody' }], { note: 'Stun' }),
+                ]),
+            ]);
+
+        it('adds no status hits unless asked', () => {
+            expect(buildFightBeats(casting())[0].hits).toEqual([]);
+        });
+
+        it('adds buff, debuff, DoT and resisted hits with labels, skipping attempts and unseated targets', () => {
+            const beats = buildFightBeats(casting(), { statusFloats: true });
+            const base = { amount: 0, crit: false };
+            expect(beats[0].hits).toEqual([
+                { side: 'player', ship: 1, kind: 'buff', label: 'Attack Up II', ...base },
+                { side: 'enemy', ship: 0, kind: 'debuff', label: 'Defense Down I', ...base },
+                { side: 'enemy', ship: 1, kind: 'debuff', label: 'Corrosion', ...base },
+                { side: 'enemy', ship: 2, kind: 'resisted', ...base },
+            ]);
+        });
+    });
+});

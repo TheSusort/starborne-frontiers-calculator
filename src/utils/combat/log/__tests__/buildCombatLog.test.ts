@@ -569,6 +569,108 @@ describe('buildCombatLog', () => {
         expect(targetC!.didHit).toBe(true);
     });
 
+    it('flags the primary victim isPrimary and leaves the splash victim unflagged', () => {
+        const attack = [
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+                didCrit: false,
+                critHits: 0,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 1000,
+                isPrimaryTarget: true,
+                didCrit: false,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'C',
+                round: 1,
+                damage: 500,
+                isPrimaryTarget: false,
+                didCrit: false,
+            }),
+        ];
+        const targets = buildCombatLog(oneTurn(...attack), roster, initialCharge)[0].turns[0]
+            .entries[0].targets;
+        expect(targets.find((t) => t.targetId === 'B')?.isPrimary).toBe(true);
+        expect(targets.find((t) => t.targetId === 'C')).not.toHaveProperty('isPrimary');
+    });
+
+    it('flags a primary victim whose row a passive-slot hit opened first', () => {
+        const events = oneTurn(
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 10,
+                didCrit: false,
+                critHits: 0,
+                didHit: true,
+            }),
+            ev({
+                type: 'passive-slot-damage',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 5,
+            } as unknown as CombatEvent),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 10,
+                isPrimaryTarget: true,
+                didCrit: false,
+            })
+        );
+        const target = buildCombatLog(events, roster, initialCharge)[0].turns[0].entries[0]
+            .targets[0];
+        expect(target.isPrimary).toBe(true);
+    });
+
+    it('flags a primary victim whose hit became a damage-over-time effect', () => {
+        const events = oneTurn(
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 0,
+                didCrit: false,
+                critHits: 0,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 0,
+                isPrimaryTarget: true,
+                didCrit: false,
+                convertedToDot: true,
+            })
+        );
+        const target = buildCombatLog(events, roster, initialCharge)[0].turns[0].entries[0]
+            .targets[0];
+        expect(target).toMatchObject({ convertedToDot: true, isPrimary: true });
+    });
+
     // ─── Behavior 2: Multi-hit single-target dedup ────────────────────────────
 
     it('multi-hit on same target: exactly one target entry, amount not summed, didCrit ORed', () => {
