@@ -6,7 +6,11 @@ import { Button } from '../ui/Button';
 import { Ship } from '../../types/ship';
 import { useShipsData } from '../../hooks/useShipsData';
 import { SHIP_TYPES } from '../../constants/shipTypes';
+import { bountyImageKey } from '../../constants/bounties';
 import { ChevronLeftIcon, ChevronRightIcon, GearIcon } from '../ui/icons';
+
+/** Display width a bounty boss's full-size portrait is scaled to on a grid cell. */
+const BOSS_IMAGE_WIDTH = 320;
 
 interface FormationGridProps {
     formation: ShipPosition[] | SharedShipPosition[];
@@ -184,7 +188,14 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                         const fullShip = ship && isFullShip(ship) ? ship : null;
                         const template = ship ? getTemplateData(ship.name) : null;
                         const rawImageKey = fullShip?.imageKey || template?.imageKey;
-                        const imageKey = rawImageKey ? `${rawImageKey}_BigPortrait.jpg` : undefined;
+                        // A boss's portrait shows on its anchor cell only, like its name.
+                        const bossImageKey =
+                            ship && !rawImageKey && !isSecondary
+                                ? bountyImageKey(ship.name)
+                                : undefined;
+                        const imageKey = rawImageKey
+                            ? `${rawImageKey}_BigPortrait.jpg`
+                            : bossImageKey;
                         const affinity =
                             fullShip?.affinity ||
                             (template?.affinity?.toLowerCase() as Ship['affinity']);
@@ -221,6 +232,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                     isActive={!!ship}
                                     isSelected={selectedPosition === targetPos}
                                     imageKey={imageKey}
+                                    imageWidth={bossImageKey ? BOSS_IMAGE_WIDTH : undefined}
                                     affinity={affinity}
                                     rarity={rarity}
                                     roleIconUrl={roleIconUrl}

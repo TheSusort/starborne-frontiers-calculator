@@ -1,4 +1,8 @@
-import { Cloudinary } from '@cloudinary/url-gen';
+import { Cloudinary, type CloudinaryImage } from '@cloudinary/url-gen';
+import { scale } from '@cloudinary/url-gen/actions/resize';
+import { format, quality } from '@cloudinary/url-gen/actions/delivery';
+import { auto as autoFormat } from '@cloudinary/url-gen/qualifiers/format';
+import { auto as autoQuality } from '@cloudinary/url-gen/qualifiers/quality';
 import { AdvancedImage, lazyload } from '@cloudinary/react';
 import { useState, memo } from 'react';
 
@@ -6,6 +10,15 @@ import { useState, memo } from 'react';
 const cld = new Cloudinary({
     cloud: { cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME },
 });
+
+/** `image` scaled to `width` px wide, delivered in the browser's best format and quality. For
+ *  full-size uploads such as the bounty boss art. */
+// eslint-disable-next-line react-refresh/only-export-components
+export const scaledImage = (image: CloudinaryImage, width: number): CloudinaryImage =>
+    image
+        .resize(scale().width(width))
+        .delivery(format(autoFormat()))
+        .delivery(quality(autoQuality()));
 
 interface ImageProps {
     src: string;
@@ -17,6 +30,9 @@ interface ImageProps {
     style?: React.CSSProperties;
     /** Rendered in place of the "No image available" placeholder when there is no src or it fails to load. */
     fallback?: React.ReactNode;
+    /** Scales the image to this many px wide on delivery (see `scaledImage`). Leave it out for
+     *  images already uploaded at display size. */
+    width?: number;
 }
 
 export const Image = memo(
@@ -28,6 +44,7 @@ export const Image = memo(
         aspectRatio,
         style,
         fallback,
+        width,
     }: ImageProps) => {
         const [imageError, setImageError] = useState(false);
         const [isLoading, setIsLoading] = useState(true);
@@ -45,7 +62,7 @@ export const Image = memo(
             );
         }
 
-        const myImage = cld.image(src);
+        const myImage = width ? scaledImage(cld.image(src), width) : cld.image(src);
 
         return (
             <div

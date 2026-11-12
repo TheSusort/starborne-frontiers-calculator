@@ -6,6 +6,13 @@ import { bossFootprintOfId, bossShip } from '../../../constants/bountyBosses';
 
 vi.mock('../../../contexts/ShipsContext', () => ({ useShips: () => ({ ships: [] }) }));
 vi.mock('../../../hooks/useShipsData', () => ({ useShipsData: () => ({ ships: [] }) }));
+// Lazy loading never sets `src` under jsdom; render the built URL directly.
+vi.mock('@cloudinary/react', () => ({
+    AdvancedImage: ({ cldImg, alt }: { cldImg: { toURL: () => string }; alt?: string }) => (
+        <img src={cldImg.toURL()} alt={alt} />
+    ),
+    lazyload: () => () => undefined,
+}));
 
 const boss = bossShip('fenri', 32)!;
 
@@ -50,5 +57,22 @@ describe('FormationGrid multi-hex units', () => {
         expect(screen.getByRole('button', { name: `${boss.name} (also covers M2)` })).toBe(
             secondary
         );
+    });
+});
+
+describe('FormationGrid boss portrait', () => {
+    it('draws the boss with its bounty portrait, scaled down', () => {
+        const { container } = render(
+            <FormationGrid
+                formation={[{ position: 'M1', shipId: boss.id }]}
+                resolveShip={(pos) => (pos === 'M1' ? boss : null)}
+                footprintOf={bossFootprintOfId}
+            />
+        );
+        const srcs = [...container.querySelectorAll('img')].map((img) => img.getAttribute('src'));
+        const portraits = srcs.filter((src) => src?.includes('Fenri_Khaliriz'));
+        // On the anchor cell only, not repeated on the cell it also covers.
+        expect(portraits).toHaveLength(1);
+        expect(portraits[0]).toMatch(/w_\d+/);
     });
 });

@@ -17,6 +17,9 @@ export interface Bounty {
     abyssalSet: string;
     /** False while the bounty's abyssal level is unreleased; the level is then not offered. */
     abyssalAvailable: boolean;
+    /** The boss's portrait: a Cloudinary public id of full-size art, so scale it on delivery
+     *  (`bountyPortraitUrl`). */
+    imageKey: string;
 }
 
 export interface BountyDrop {
@@ -67,6 +70,7 @@ export const BOUNTIES: Bounty[] = [
         sets: ['Attack', 'Speed', 'Critical'],
         abyssalSet: 'Burner',
         abyssalAvailable: true,
+        imageKey: 'Fenri_Khaliriz',
     },
     {
         id: 'colosso',
@@ -74,6 +78,7 @@ export const BOUNTIES: Bounty[] = [
         sets: ['Fortitude', 'Defense', 'Reflect'],
         abyssalSet: 'Hardened',
         abyssalAvailable: true,
+        imageKey: 'General_Colosso',
     },
     {
         id: 'eelun',
@@ -81,6 +86,7 @@ export const BOUNTIES: Bounty[] = [
         sets: ['Shield', 'Repair', 'Boost'],
         abyssalSet: 'Viral',
         abyssalAvailable: false,
+        imageKey: 'Eelun_Naphula',
     },
     {
         id: 'maglienza',
@@ -88,8 +94,14 @@ export const BOUNTIES: Bounty[] = [
         sets: ['Hacking', 'Protection', 'Decimation'],
         abyssalSet: 'Piercer',
         abyssalAvailable: true,
+        imageKey: 'Mamma_Maglienza',
     },
 ];
+
+/** The portrait image key of the bounty boss named `name` (any case); `undefined` for any other
+ *  unit. */
+export const bountyImageKey = (name: string): string | undefined =>
+    BOUNTIES.find((bounty) => bounty.name.toLowerCase() === name.toLowerCase())?.imageKey;
 
 const RARITY_LETTERS: Record<'c' | 'u' | 'r' | 'e' | 'l', RarityName> = {
     c: 'common',
