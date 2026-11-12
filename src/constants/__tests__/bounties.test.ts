@@ -6,7 +6,22 @@ import {
     BACKGROUND_TIERS,
     BACKGROUND_ENERGY_FACTOR,
     parseDrops,
+    bountyImageKey,
 } from '../bounties';
+
+describe('bounty portraits', () => {
+    it('every bounty names its portrait image after the boss', () => {
+        for (const bounty of BOUNTIES) {
+            expect(bounty.imageKey).toBe(bounty.name.replace(/ /g, '_'));
+        }
+    });
+
+    it('finds a portrait by boss name, ignoring case', () => {
+        expect(bountyImageKey('Mamma Maglienza')).toBe('Mamma_Maglienza');
+        expect(bountyImageKey('fenri khaliriz')).toBe('Fenri_Khaliriz');
+        expect(bountyImageKey('Capo')).toBeUndefined();
+    });
+});
 
 describe('parseDrops', () => {
     it('parses star, rarity letter and percent', () => {

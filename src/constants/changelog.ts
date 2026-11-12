@@ -17,6 +17,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: playback ships now show small pilot portraits.',
     'Combat simulator: a multi-hex boss now shows its name once during playback.',
     'Combat simulator: boss mode hides the encounter load and save controls.',
+    'Combat simulator: bounty bosses now show their portrait on the boards and in playback.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

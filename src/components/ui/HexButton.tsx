@@ -21,6 +21,8 @@ interface HexButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     isActive?: boolean;
     isSelected?: boolean;
     imageKey?: string;
+    /** Scales `imageKey` to this many px wide on delivery (`Image`'s `width`). */
+    imageWidth?: number;
     affinity?: AffinityName;
     rarity?: string;
     roleIconUrl?: string;
@@ -32,6 +34,7 @@ export const HexButton: React.FC<HexButtonProps> = ({
     isActive,
     isSelected,
     imageKey,
+    imageWidth,
     affinity,
     rarity,
     roleIconUrl,
@@ -77,6 +80,7 @@ export const HexButton: React.FC<HexButtonProps> = ({
                         <div className="absolute inset-0 transform rotate-[-30deg] scale-[1.15]">
                             <Image
                                 src={imageKey}
+                                width={imageWidth}
                                 className="w-full h-full"
                                 imageClassName="w-full h-full object-cover object-top"
                             />
