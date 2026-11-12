@@ -152,6 +152,10 @@ interface AnimatedHexBoardProps {
      *  button, to anchor a popover to, when the pointer enters or focus lands on it, and with
      *  `null` when it leaves. */
     onHoverCell?: (cell: Position | null, el: HTMLElement | null) => void;
+    /** The occupied cell whose button is described by the element with id `descriptionId`
+     *  (`aria-describedby`), e.g. the popover `onHoverCell` opened for it. */
+    describedCell?: Position | null;
+    descriptionId?: string;
     className?: string;
 }
 
@@ -178,12 +182,16 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
     selectedCell = null,
     secondaryCells,
     onHoverCell,
+    describedCell = null,
+    descriptionId,
     className = '',
 }) => {
     const layout = hexBoardLayout(cells);
-    /** Hover and focus handlers for the occupied cell `at`, spread on its button. */
-    const hoverProps = (at: Position) =>
-        onHoverCell
+    /** Hover and focus handlers for the occupied cell `at`, and its description link, spread on
+     *  its button. */
+    const hoverProps = (at: Position) => ({
+        'aria-describedby': describedCell === at ? descriptionId : undefined,
+        ...(onHoverCell
             ? {
                   onMouseEnter: (e: React.MouseEvent<HTMLElement>) =>
                       onHoverCell(at, e.currentTarget),
@@ -191,7 +199,8 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
                   onFocus: (e: React.FocusEvent<HTMLElement>) => onHoverCell(at, e.currentTarget),
                   onBlur: () => onHoverCell(null, null),
               }
-            : {};
+            : {}),
+    });
     return (
         <div
             role="group"

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { BattleResult } from '../../utils/calculators/battleSimulator';
 import type { Position } from '../../types/encounters';
 import { ALL_POSITIONS } from '../../utils/targeting/board';
@@ -93,6 +93,7 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({
     // Pinned ship (synthetic roster actorId) for the per-ship detail card; null = none.
     const [pinned, setPinned] = useState<string | null>(null);
     const [hovered, setHovered] = useState<HoveredCell | null>(null);
+    const hoverCardId = useId();
     const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
     const boardsRef = useRef<HTMLDivElement>(null);
     // The delay a turn arms its timer with, read when it is armed: a speed change takes effect
@@ -228,6 +229,8 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({
                 onSelectCell={pinCell(side)}
                 selectedCell={pinnedCell(side)}
                 onHoverCell={hoverCell(side)}
+                describedCell={hovered?.side === side ? hovered.cell : null}
+                descriptionId={hoverCardId}
             />
         </section>
     );
@@ -297,9 +300,12 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({
     );
 
     return (
+        // Uncontrolled, the player is itself focusable so its keys (Space plays) are reachable
+        // without first focusing one of its buttons, which keep Space for themselves.
         <section
             aria-label="Battle playback"
-            className="space-y-4"
+            className="space-y-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+            tabIndex={controlled ? undefined : 0}
             onKeyDown={controlled ? undefined : onKeyDown}
         >
             {controlled && (
@@ -466,7 +472,7 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({
                 className="card w-60 space-y-2 text-xs shadow-lg"
             >
                 {hoveredShip && hovered && (
-                    <>
+                    <div id={hoverCardId} role="tooltip" className="space-y-2">
                         <div>
                             <div className="text-sm font-semibold">
                                 {hoveredShip.name} · {hovered.cell}
@@ -484,7 +490,7 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({
                         </div>
                         {statusList('Buffs', hoveredShip.buffs)}
                         {statusList('Debuffs', hoveredShip.debuffs)}
-                    </>
+                    </div>
                 )}
             </Tooltip>
         </section>

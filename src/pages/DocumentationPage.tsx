@@ -5132,12 +5132,11 @@ const DocumentationPage: React.FC = () => {
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         The outcome (which team wins, and the round it ended) is
-                                        shown at the top
+                                        shown at the start of the playback controls
                                     </li>
                                     <li>
-                                        Pick a round with First, Previous, Next, Last or the slider:
-                                        the boards show how every ship stands at that round&apos;s
-                                        end
+                                        Pick a round with its numbered button: the boards show how
+                                        every ship stands at that round&apos;s end
                                     </li>
                                     <li>
                                         Press Play to watch the fight turn by turn on animated hex

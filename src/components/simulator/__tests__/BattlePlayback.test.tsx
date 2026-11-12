@@ -302,6 +302,11 @@ describe('BattlePlayback round buttons and keys', () => {
         expect(screen.getByLabelText('Play')).toBeInTheDocument();
     });
 
+    it('the player is focusable when uncontrolled, so its keys are reachable', () => {
+        render(<BattlePlayback result={turnFight()} />);
+        expect(player()).toHaveAttribute('tabindex', '0');
+    });
+
     it('Space on a button is left to the button, so it acts once', () => {
         render(<BattlePlayback result={turnFight()} />);
         const play = screen.getByLabelText('Play');
@@ -457,6 +462,18 @@ describe('BattlePlayback floating status text', () => {
 });
 
 describe('BattlePlayback hover card', () => {
+    it('is a tooltip that describes the focused ship', () => {
+        render(<BattlePlayback result={richFight()} />);
+        const nova = screen.getByLabelText(/Nova at T1/);
+        expect(nova).not.toHaveAttribute('aria-describedby');
+        fireEvent.focus(nova);
+        const card = screen.getByRole('tooltip');
+        expect(card.id).not.toBe('');
+        expect(nova).toHaveAttribute('aria-describedby', card.id);
+        fireEvent.blur(nova);
+        expect(nova).not.toHaveAttribute('aria-describedby');
+    });
+
     it('shows a ship’s statuses with who applied them, and hides on leave', () => {
         render(<BattlePlayback result={richFight()} />);
         const nova = screen.getByLabelText(/Nova at T1/);
