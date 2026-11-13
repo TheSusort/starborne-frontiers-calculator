@@ -1127,6 +1127,61 @@ function countGateCondition(clause: string): Condition | null {
     return { subject, derivable: true, countComparator: comparator, countThreshold: threshold };
 }
 
+/** One branch of a two-way count gate: the raw-text span of its sentence and the gate. */
+export interface CountGateBranch {
+    start: number;
+    end: number;
+    gate: Condition;
+}
+
+/**
+ * The two branches of an either/or count gate written as two sentences: the first ends in "if
+ * <count gate>", the next opens with "If <the complementary gate>," (Major Grand: "… then inflicts
+ * Marked for 10 turns if it has less than 2 debuffs. If it has 2 or more debuffs, this Unit
+ * cleanses 2 debuffs and grants Security Up II"). Each sentence is a whole branch, so every effect
+ * in it takes its sentence's gate. Empty when the text has no such complementary pair: a lone
+ * gate governs only the effect it is written on. Spans index the raw `text`.
+ */
+export function detectCountGateBranches(text: string): CountGateBranch[] {
+    // Both maskings are length-preserving, so spans found here index the raw `text`.
+    const abbrevMasked = maskAbbrev(text);
+    const masked = abbrevMasked.replace(/<[^>]*>/g, (tag) => ' '.repeat(tag.length));
+    const spans: Array<{ start: number; end: number }> = [];
+    const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
+    let start = 0;
+    let m: RegExpExecArray | null;
+    while ((m = boundary.exec(abbrevMasked)) !== null) {
+        spans.push({ start, end: m.index + m[0].length });
+        start = m.index + m[0].length;
+    }
+    if (start < text.length) spans.push({ start, end: text.length });
+    const out: CountGateBranch[] = [];
+    for (let i = 0; i + 1 < spans.length; i++) {
+        const first = masked.slice(spans[i].start, spans[i].end);
+        const second = masked.slice(spans[i + 1].start, spans[i + 1].end);
+        const lead = /^\s*if\b[^,]*,/i.exec(second);
+        const trail = /\bif\b[^,]*[.;]?\s*$/i.exec(first);
+        if (!lead || !trail) continue;
+        const a = countGateCondition(trail[0]);
+        const b = countGateCondition(lead[0]);
+        if (!a || !b || !complementaryCountGates(a, b)) continue;
+        out.push({ ...spans[i], gate: a }, { ...spans[i + 1], gate: b });
+    }
+    return out;
+}
+
+/** "fewer than N" against "N or more", over the same subject (either order). */
+function complementaryCountGates(a: Condition, b: Condition): boolean {
+    if (a.subject !== b.subject || a.buffName !== b.buffName) return false;
+    const [lte, gte] = a.countComparator === 'lte' ? [a, b] : [b, a];
+    return (
+        lte.countComparator === 'lte' &&
+        gte.countComparator === 'gte' &&
+        lte.countThreshold !== undefined &&
+        gte.countThreshold === lte.countThreshold + 1
+    );
+}
+
 /**
  * Detects the condition(s) gating a granted/inflicted buff or debuff, scoped to the
  * sentence that mentions `buffName` (so an unconditional buff in the same skill isn't
@@ -2886,6 +2941,18 @@ export function detectDestroyedTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, DESTROYED_ALLY_REPAIR_RE, anchorPos, 'on-destroyed');
+}
+
+// The caster's own death, any cause: "Upon dying, this Unit …" / "When this Unit dies …".
+const SELF_DEATH_RE = /\bupon\s+dying\b|\bwhen\s+this\s+unit\s+dies\b/i;
+
+/** 'on-destroyed' when `anchorPos` falls inside a sentence naming the caster's own death
+ *  ("Upon dying, this Unit cleanses 3 debuffs from all allies"); otherwise undefined. */
+export function detectSelfDeathTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, SELF_DEATH_RE, anchorPos, 'on-destroyed');
 }
 
 // Rikra's per-kill self-heal phrasing: "for each enemy destroyed by this Unit". It does not match
@@ -6506,6 +6573,8 @@ const ADJACENT_ALLIES_RE = /\badjacent allies\b/i;
 const SELF_RECEIVER_RE = /\bitself\b/i;
 // The clause deals damage itself ("deals 170% damage and grants …").
 const DEALS_DAMAGE_RE = /\bdeals?\s+\d+(?:\.\d+)?%\s+damage\b/i;
+// A cleanse that names no receiver ("this Unit cleanses 2 debuffs and grants …").
+const BARE_CLEANSE_RE = /\bcleanses?\s+(?:\d+|all)\s+debuffs?\b(?!\s+from\b)/i;
 // A status a ship only ever grants itself: a receiver-less grant of one routes to self, not to
 // all allies. Lower-case canonical names.
 const SELF_ONLY_GRANT_NAMES: ReadonlySet<string> = new Set(['taunt']);
@@ -6707,6 +6776,12 @@ function detectGrantScopes(
         // ally's hits taken stay unbuffed). Such a skill's targeting pattern is its OFFENSIVE one,
         // so there is no support pattern for the engine to narrow an all-allies grant with.
         if (DEALS_DAMAGE_RE.test(clause)) return ['self'];
+        // A receiver-less grant joined to a receiver-less cleanse, in a skill that deals damage,
+        // shares the cleanse's receiver: the caster (`flipBareSupportTarget` keeps a bare cleanse
+        // on a damaging skill on the caster).
+        if (BARE_CLEANSE_RE.test(clause) && DEALS_DAMAGE_RE.test(stripUnitTags(skillText))) {
+            return ['self'];
+        }
         // Receiver-less grant → all players (the locked routing rule; the engine narrows it to
         // the skill's support pattern).
         return ['all-allies'];

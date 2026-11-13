@@ -88,6 +88,8 @@ import {
     detectEndOfRoundDamageTrigger,
     detectRoundStartContinuationTrigger,
     detectKilledByDirectDamageTrigger,
+    detectSelfDeathTrigger,
+    detectCountGateBranches,
     detectDealDamageToRoleTrigger,
     detectPurgeEnemyTypeCondition,
     detectMostBuffsTarget,
@@ -1118,6 +1120,30 @@ function markBoardWide(positioned: PositionedAbility[], text: string): void {
         if (at >= 0 && /^(?:on|from) all enemies\b/i.test(rest.slice(at))) {
             p.ability.boardWide = true;
         }
+    }
+}
+
+/**
+ * Gates every on-cast ability of an either/or count-gate sentence pair on its own sentence's
+ * branch (`detectCountGateBranches`), so the two branches are exclusive: an effect the gate is
+ * not written on (the Major Grand's 60% hit, its self cleanse) still belongs to one branch. An
+ * ability already carrying that gate is left as is.
+ */
+function markCountGateBranches(positioned: PositionedAbility[], text: string): void {
+    const branches = detectCountGateBranches(text);
+    if (branches.length === 0) return;
+    for (const p of positioned) {
+        if (p.ability.trigger !== 'on-cast') continue;
+        const branch = branches.find((b) => p.pos >= b.start && p.pos < b.end);
+        if (!branch) continue;
+        const has = p.ability.conditions.some(
+            (c) =>
+                c.subject === branch.gate.subject &&
+                c.buffName === branch.gate.buffName &&
+                c.countComparator === branch.gate.countComparator &&
+                c.countThreshold === branch.gate.countThreshold
+        );
+        if (!has) p.ability.conditions = [...p.ability.conditions, { ...branch.gate }];
     }
 }
 
@@ -2760,6 +2786,7 @@ function abilitiesFromText(
         //    after it.
         //  - ally-shield-destroyed ("cleanses all debuffs when an ally has their Shield
         //    destroyed") -> on-ally-shield-destroyed.
+        //  - self-death ("Upon dying, this Unit cleanses ...") -> on-destroyed, any cause.
         //  - a PASSIVE-slot cleanse whose sentence carries a direct-damage reaction phrase ->
         //    on-attacked. An active/charged cleanse is on-cast.
         const reactiveTrigger =
@@ -2767,6 +2794,7 @@ function abilitiesFromText(
             detectAllyCritTrigger(text, cleansePos) ??
             detectEveryTurnTrigger(text, cleansePos) ??
             detectAllyShieldDestroyedTrigger(text, cleansePos) ??
+            detectSelfDeathTrigger(text, cleansePos) ??
             (slot === 'passive' &&
             detectDamageReactionTrigger(text, cleansePos)?.trigger === 'on-attacked'
                 ? ('on-attacked' as const)
@@ -4418,6 +4446,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         markPatternScoped(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         markKillerScope(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         markBoardWide(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
+        markCountGateBranches(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         positioned.sort((a, b) => a.pos - b.pos);
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }

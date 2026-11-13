@@ -61,9 +61,10 @@ describe('General Colosso encounter', () => {
         expect(grandAttacks.length).toBeGreaterThan(0);
         expect(grandAttacks.every((e) => e.kind === 'attack' && e.slot !== 'charged')).toBe(true);
         const colosso = turns.filter((t) => t.actorId.startsWith('e:boss:colosso:32'));
+        // Read off any entry of his turn: which entries a cast logs depends on his branch.
         const colossoSlots = colosso
             .flatMap((t) => t.entries)
-            .flatMap((e) => (e.kind === 'attack' ? [e.slot] : []));
+            .flatMap((e) => (e.slot !== undefined ? [e.slot] : []));
         expect(colossoSlots).toContain('active');
         expect(colossoSlots).toContain('charged');
     });

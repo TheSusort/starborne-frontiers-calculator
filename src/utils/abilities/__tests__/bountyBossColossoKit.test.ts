@@ -3,7 +3,11 @@ import { buildShipAbilities } from '../buildShipAbilities';
 import { bossShip, npcShip } from '../../../constants/bountyBosses';
 import { BUFFS } from '../../../constants/buffs';
 import { UNREMOVABLE_STATUSES } from '../../combat/cheatDeathBuffs';
-import { classifyEnemyEffect, parseDotImmune } from '../../skillTextParser';
+import {
+    classifyEnemyEffect,
+    detectCountGateBranches,
+    parseDotImmune,
+} from '../../skillTextParser';
 import { MANUAL_BUFF_ADDITIONS } from '../../dataUpdate/buffDataOverrides';
 import { parseBuffEffects, isStackable } from '../../calculators/buffParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
@@ -110,6 +114,116 @@ describe('Major Grand kit (bounty add): no charged skill', () => {
 
     it('never mints a charged slot with abilities', () => {
         expect(abilitiesOf(skills, 'charged')).toEqual([]);
+    });
+});
+
+describe('Major Grand kit (bounty add): the own-debuff branches and the death cleanse', () => {
+    const skills = buildShipAbilities(npcShip('major-grand', 124)!);
+    const under2 = { subject: 'self-debuff', countComparator: 'lte', countThreshold: 1 };
+    const twoPlus = { subject: 'self-debuff', countComparator: 'gte', countThreshold: 2 };
+    const summary = (a: Ability) => ({
+        type: a.type,
+        target: a.target,
+        trigger: a.trigger,
+        conditions: a.conditions.map(({ subject, countComparator, countThreshold }) => ({
+            subject,
+            countComparator,
+            countThreshold,
+        })),
+        config: a.config,
+    });
+
+    it('active: under 2 own debuffs Hacking Up III, the hit and Marked; 2+ the self cleanse and Security Up II', () => {
+        expect(abilitiesOf(skills, 'active').map(summary)).toEqual([
+            {
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [under2],
+                config: expect.objectContaining({ buffName: 'Hacking Up III', duration: 1 }),
+            },
+            {
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [under2],
+                config: { type: 'damage', multiplier: 60 },
+            },
+            {
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [under2],
+                config: expect.objectContaining({
+                    buffName: 'Marked',
+                    duration: 10,
+                    application: 'inflict',
+                }),
+            },
+            {
+                type: 'cleanse',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [twoPlus],
+                config: { type: 'cleanse', count: 2 },
+            },
+            {
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [twoPlus],
+                config: expect.objectContaining({ buffName: 'Security Up II', duration: 2 }),
+            },
+        ]);
+    });
+
+    it('passive: on its own death, cleanses 3 debuffs from all allies, whatever killed it', () => {
+        const passive = abilitiesOf(skills, 'passive');
+        expect(passive.map(summary)).toEqual([
+            {
+                type: 'cleanse',
+                target: 'all-allies',
+                trigger: 'on-destroyed',
+                conditions: [],
+                config: { type: 'cleanse', count: 3 },
+            },
+        ]);
+        expect(passive[0].triggerRequiresDirectDeath).toBeUndefined();
+    });
+});
+
+describe('either/or count-gate branches (parse rule)', () => {
+    const gate = (comparator: 'lte' | 'gte', threshold: number) => ({
+        subject: 'self-debuff',
+        derivable: true,
+        countComparator: comparator,
+        countThreshold: threshold,
+    });
+
+    it('splits a trailing "if fewer than N" and a following "If N or more," into two branches', () => {
+        const text =
+            'Deals 60% damage if it has less than 2 debuffs. If it has 2 or more debuffs, cleanses 2 debuffs.';
+        const branches = detectCountGateBranches(text);
+        expect(branches.map((b) => b.gate)).toEqual([gate('lte', 1), gate('gte', 2)]);
+        expect(text.slice(branches[0].start, branches[0].end)).toBe(
+            'Deals 60% damage if it has less than 2 debuffs.'
+        );
+        expect(text.slice(branches[1].start, branches[1].end).trim()).toBe(
+            'If it has 2 or more debuffs, cleanses 2 debuffs.'
+        );
+    });
+
+    it('needs the complement: a lone sentence-leading gate is no branch pair', () => {
+        expect(
+            detectCountGateBranches(
+                'Deals 60% damage if it has less than 2 debuffs. If it has 3 or more debuffs, cleanses 2 debuffs.'
+            )
+        ).toEqual([]);
+        expect(
+            detectCountGateBranches(
+                'Deals 60% damage. If this Unit has no debuffs, it gains one extra action.'
+            )
+        ).toEqual([]);
     });
 });
 
