@@ -301,7 +301,8 @@ export function effectiveOutgoingStatsOf(
 
 /** The owner's PASSIVE-slot self modifiers on the `outgoingDamageSeparate` channel — where
  *  `buildShipAbilitiesWithEquipment` puts implant abilities (Arcane Siege). Only this channel:
- *  `effectiveOutgoingStatsOf` folds no other modifier channel. */
+ *  `effectiveOutgoingStatsOf` folds no other modifier channel. A reactive proc also reads the
+ *  ship's own passive `outgoingDamage` modifiers — see `reactiveOutgoingModifiersOf`. */
 export function separateOutgoingModifiersOf(skills: ShipSkills | undefined): Ability[] {
     return (skills?.slots.find((sl) => sl.slot === 'passive')?.abilities ?? []).filter(
         (a) =>
@@ -495,4 +496,29 @@ export function effectiveDamageStatsOf(args: {
         outgoingSeparateFactor: mod.outgoingDamageSeparateFactor,
         totals,
     };
+}
+
+/** Condition subjects a reactive proc can answer for its owner's passive damage modifiers: the
+ *  engine supplies each live at the hit (`applyReactiveDamage`). A modifier gated on any other
+ *  subject is left out, never folded against a guessed reading;
+ *  `reactiveOutgoingModifierSubjects.test.ts` lists the corpus ships this leaves out. */
+export const REACTIVE_OUTGOING_SUBJECTS: ReadonlySet<string> = new Set(['enemy-destroyed']);
+
+/**
+ * The ship's OWN passive-slot self modifiers on the `outgoingDamage` channel that a reactive
+ * damage proc (a start-of-round or end-of-round hit, an on-crit proc) adds to its Out. Damage
+ * term — Judge's "20% more direct damage for each destroyed enemy" reaches his start-of-round hit
+ * (owner's Mamma fight, #519: 27,943 in game). Equipment modifiers are not included, and neither
+ * are counters and reflected hits: no measurement covers them.
+ */
+export function reactiveOutgoingModifiersOf(skills: ShipSkills | undefined): Ability[] {
+    return (skills?.slots.find((sl) => sl.slot === 'passive')?.abilities ?? []).filter(
+        (a) =>
+            a.type === 'modifier' &&
+            a.target === 'self' &&
+            a.source !== 'equipment' &&
+            a.config.type === 'modifier' &&
+            a.config.channel === 'outgoingDamage' &&
+            a.conditions.every((c) => REACTIVE_OUTGOING_SUBJECTS.has(c.subject))
+    );
 }
