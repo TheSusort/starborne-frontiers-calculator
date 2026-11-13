@@ -182,7 +182,7 @@ export function buildRoundContext(state: {
      *  (`adjacentAllyIds`, `adjacentEnemyIdsFor`) plus the per-side `opposingRoster` kill tally.
      *  Passed through with NO `?? 0`: a fabricated 0 here would silently mean "measured, nothing
      *  adjacent", which is a different (and wrong) answer from "cannot measure". See
-     *  ConditionContext's own doc on the three fields for the history. */
+     *  ConditionContext's own doc on the live-count fields for the history. */
     /** Living same-side allies board-adjacent to the ACTING unit (the actor itself excluded). */
     adjacentAllyCount?: number;
     /** Living opposing actors board-adjacent to this cast's resolved TARGET (target excluded).

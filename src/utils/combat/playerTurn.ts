@@ -1216,7 +1216,7 @@ export interface PlayerTurnArgs {
     /** True when this run can MEASURE the live adjacency / kill counts below — false under
      *  `mode: 'dps'`, where the board and the opposing roster are synthetic and a live reading
      *  would be a permanent structural 0 rather than an observation. False (or absent) withholds
-     *  all three counts from the round contexts, which is what routes their conditions back to the
+     *  these live counts from the round contexts, which is what routes their conditions back to the
      *  user's manual `manualCount ?? 1`. Set by engine.ts's `liveCountsMeasurable`. */
     liveCountsMeasurable?: boolean;
     /** Opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed the kill (owner
@@ -2341,7 +2341,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *
      *  Each member is ABSENT (not 0) when this caller cannot measure it, which routes the
      *  condition to its manual `manualCount ?? 1` fallback — see ConditionContext's doc on the
-     *  three fields. That distinction is the whole point: a fabricated 0 would read as "measured,
+     *  live-count fields. That distinction is the whole point: a fabricated 0 would read as "measured,
      *  nothing there", silently zeroing Panguan/Centurion/Judge in single-ship DPS mode where the
      *  user's manual count is the only honest answer.
      *

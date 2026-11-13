@@ -64,7 +64,7 @@ export interface ConditionContext {
      *  'self-crit' evaluates 1/0; when undefined (e.g. modifierCtx — see the two-tier
      *  note in the spec), it falls back to effectiveCritRate/100 as a probability. */
     roundCrit?: boolean;
-    /** LIVE-OR-MANUAL counts (see `evaluateCondition`'s dedicated arms). All three are OPTIONAL,
+    /** LIVE-OR-MANUAL counts (see `evaluateCondition`'s dedicated arms). Each is OPTIONAL,
      *  and ABSENT is the sentinel meaning "this caller has no board / no roster to count on",
      *  which routes the condition to its manual `manualCount ?? 1` fallback — the single-ship DPS
      *  behaviour. A PRESENT value is a real live reading and wins, including a real `0`.

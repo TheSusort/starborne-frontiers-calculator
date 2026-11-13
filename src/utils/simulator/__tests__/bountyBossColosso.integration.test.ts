@@ -67,4 +67,20 @@ describe('General Colosso encounter', () => {
         expect(colossoSlots).toContain('active');
         expect(colossoSlots).toContain('charged');
     });
+
+    it('carries his 100% shield penetration and DoT immunity onto his combat actor', () => {
+        setupKeyedRng(1);
+        const playerBoard: BoardState = { M1: { ship: reference('Butcher') } };
+        let colosso: { stats: { shieldPenetration?: number }; dotImmune?: boolean } | undefined;
+        simulateBattle({
+            playerTeam: buildTeam(playerBoard, deps),
+            enemyTeam: buildTeam(encounterBoard(), deps),
+            rounds: 1,
+            __testTapActors: (actors) => {
+                colosso = actors.find((a) => a.id.startsWith('e:boss:colosso:32'));
+            },
+        });
+        expect(colosso?.stats.shieldPenetration).toBe(100);
+        expect(colosso?.dotImmune).toBe(true);
+    });
 });
