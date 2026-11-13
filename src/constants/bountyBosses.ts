@@ -213,9 +213,11 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
             'Upon dying, this Unit <unit-aid>cleanses 3 debuffs</unit-aid> from all allies.',
         stats: {
             hp: 42050,
-            // Attack, crit damage and defence are fitted to measured in-game hits (#519).
+            // Attack and crit damage are fitted to measured in-game hits (#519). Defence is fitted
+            // to Asphyxiator's opening crit on a Major Grand under Graphite's Overclock III and his
+            // own Defense Down III (`bountyBossReplay.integration.test.ts`).
             attack: 10470,
-            defence: 3050,
+            defence: 9086,
             hacking: 270,
             security: 160,
             crit: 22,

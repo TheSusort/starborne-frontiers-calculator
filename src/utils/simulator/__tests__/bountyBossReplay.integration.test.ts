@@ -1,9 +1,10 @@
 /**
  * Replays of the owner's in-game bounty fights (#519): Judge (T4), Graphite (M3), Grif (B1) and
- * Thresh (B4) at their planner final stats, against Fenri Lv32 and against Mamma Maglienza Lv32
- * with her three Capos. Each pin is a hit read off the in-game combat log. The Fenri block checks
- * the harness itself (Fenri's stats were fitted in an earlier fight); the Mamma block checks
- * Mamma's and the Capo's stats and row choices.
+ * Thresh (B4) at their planner final stats, against Fenri Lv32, against Mamma Maglienza Lv32
+ * with her three Capos, and against General Colosso Lv32 with his three Major Grands (that team,
+ * Los alone, and Graphite with Asphyxiator). Each pin is a hit read off the in-game combat log.
+ * The Fenri block checks the harness itself (Fenri's stats were fitted in an earlier fight); the
+ * other blocks check the encounter's fitted stats and targeting.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { buildTeam } from '../buildTeam';
@@ -28,6 +29,7 @@ beforeAll(() => {
 const deps = { getGearPiece: () => undefined, getEngineeringStatsForShipType: () => undefined };
 
 interface FleetShip {
+    /** The ship's cell in the owner's four-ship team; other fights place it themselves. */
     position: Position;
     affinity: Ship['affinity'];
     type: Ship['type'];
@@ -103,7 +105,42 @@ const FLEET: Record<string, FleetShip> = {
             defensePenetration: 7,
         },
     },
+    Los: {
+        position: 'M4',
+        affinity: 'electric',
+        type: 'ATTACKER',
+        refits: 6,
+        stats: {
+            hp: 19248.7,
+            attack: 22100.2,
+            defence: 5144.1,
+            hacking: 166,
+            security: 36,
+            crit: 103,
+            critDamage: 212,
+            speed: 118.88,
+            defensePenetration: 0,
+        },
+    },
+    Asphyxiator: {
+        position: 'M3',
+        affinity: 'thermal',
+        type: 'DEBUFFER',
+        refits: 3,
+        stats: {
+            hp: 20861.7,
+            attack: 14230.7,
+            defence: 2786,
+            hacking: 300,
+            security: 39,
+            crit: 97,
+            critDamage: 128,
+            speed: 164.95,
+        },
+    },
 };
+
+const OWNER_TEAM = ['Judge', 'Graphite', 'Grif', 'Thresh'] as const;
 
 // Thresh carries an epic Intrusion implant; Graphite wears the Boost set (her Overclock lasts 3
 // turns in game). The pieces carry no stats: each ship's planner stats are its overrides.
@@ -143,17 +180,24 @@ const fleetShip = (name: string): Ship => {
     };
 };
 
-/** The owner's team; `extra` is spread over a ship's planner stats. */
-const playerTeam = (
+/** The named ships on the given cells at their planner stats; `extra` is spread over a ship's
+ *  planner stats. */
+const teamOf = (
+    layout: Partial<Record<string, Position>>,
     extra: Partial<Record<string, BattlePlacement['statOverrides']>> = {}
 ): BattlePlacement[] => {
     const board: BoardState = {};
-    for (const name of Object.keys(FLEET)) board[FLEET[name].position] = { ship: fleetShip(name) };
+    for (const [name, position] of Object.entries(layout))
+        board[position!] = { ship: fleetShip(name) };
     return buildTeam(board, deps).map((p) => ({
         ...p,
         statOverrides: { ...p.statOverrides, ...FLEET[p.ship.name].stats, ...extra[p.ship.name] },
     }));
 };
+
+/** The owner's four-ship team on its own cells. */
+const playerTeam = (extra: Partial<Record<string, BattlePlacement['statOverrides']>> = {}) =>
+    teamOf(Object.fromEntries(OWNER_TEAM.map((name) => [name, FLEET[name].position])), extra);
 
 interface LoggedEntry {
     round: number;
@@ -389,4 +433,153 @@ describe('a full Mamma fight with the owner team that ends on her death', () => 
             expect(alive('Capo')).toBeGreaterThanOrEqual(1);
         }
     );
+});
+
+/** Each attack target row of `actorName`'s casts in `round`, nested reactions included. */
+const hitsBy = (result: ReturnType<typeof simulateBattle>, actorName: string, round: number) => {
+    const actors = new Set(result.roster.filter((r) => r.name === actorName).map((r) => r.actorId));
+    return entriesOf(result)
+        .filter(
+            ({ round: r, entry }) =>
+                r === round && entry.kind === 'attack' && actors.has(entry.actorId)
+        )
+        .flatMap(({ entry }) => entry.targets);
+};
+
+const colossoFight = (playerTeam: BattlePlacement[], rounds: number) =>
+    simulateBattle(
+        { playerTeam, enemyTeam: buildTeam(encounterBoard('colosso', 32)!, deps), rounds },
+        getGearPiece
+    );
+
+// Los alone on M4, the front of the middle row: every Major Grand's row scan reaches him.
+describe('replay: Los alone against General Colosso Lv32 and his Major Grands', () => {
+    setupKeyedRng(1);
+    const result = colossoFight(teamOf({ Los: 'M4' }), 1);
+    const los = idOf(result, 'Los');
+
+    it("Los's opening charged skill crits Colosso for 32,237", () => {
+        const hit = hitsBy(result, 'Los', 1).find(
+            (t) => t.targetId === idOf(result, 'General Colosso')
+        );
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 32_237, TIGHT);
+    });
+
+    it('a Major Grand hits Los for 1,908 without a crit', () => {
+        const hit = hitsBy(result, 'Major Grand', 1).find((t) => t.targetId === los);
+        expect(hit?.didCrit).not.toBe(true);
+        expectMeasured(hit?.amount, 1_908, TIGHT);
+    });
+
+    it("Colosso's Marked hit on Los is 19,017 without a crit, every Major Grand alive", () => {
+        const hits = hitsBy(result, 'General Colosso', 1);
+        expect(hits.map((t) => t.targetId)).toEqual([los]);
+        expect(hits[0].didCrit).not.toBe(true);
+        expectMeasured(hits[0].amount, 19_017, TIGHT);
+        const roster = result.roster.filter((r) => r.name === 'Major Grand').map((r) => r.actorId);
+        const deaths = entriesOf(result).filter(
+            ({ entry }) => entry.kind === 'death' && roster.includes(entry.actorId)
+        );
+        expect(deaths).toEqual([]);
+    });
+});
+
+// Graphite on M4 at the front of the middle row, Asphyxiator directly behind it on M3: a Major
+// Grand's line strikes Graphite and splashes Asphyxiator. Graphite acts first, so Asphyxiator's
+// opening hit carries her Overclock III.
+describe('replay: Graphite and Asphyxiator against General Colosso Lv32', () => {
+    setupKeyedRng(1);
+    const result = colossoFight(teamOf({ Graphite: 'M4', Asphyxiator: 'M3' }), 1);
+    const graphite = idOf(result, 'Graphite');
+    const asphyxiator = idOf(result, 'Asphyxiator');
+
+    it("Asphyxiator's opening active crits a Major Grand for 38,404", () => {
+        const hit = hitsBy(result, 'Asphyxiator', 1).find((t) =>
+            t.targetId.includes('major-grand')
+        );
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 38_404, TIGHT);
+    });
+
+    it('a Major Grand hits Graphite for 2,911 and splashes Asphyxiator for 1,749', () => {
+        const casts = entriesOf(result).filter(
+            ({ entry }) =>
+                entry.kind === 'attack' &&
+                nameOf(result, entry.actorId) === 'Major Grand' &&
+                entry.targets.some((t) => t.targetId === graphite)
+        );
+        expect(casts.length).toBeGreaterThan(0);
+        const targets = casts[0].entry.targets;
+        expect(targets.find((t) => t.targetId === graphite)?.didCrit).not.toBe(true);
+        expectMeasured(targets.find((t) => t.targetId === graphite)?.amount, 2_911, TIGHT);
+        expectMeasured(targets.find((t) => t.targetId === asphyxiator)?.amount, 1_749, TIGHT);
+        const marked = entriesOf(result)
+            .filter(({ entry }) => entry.kind === 'debuff' && entry.note === 'Marked')
+            .flatMap(({ entry }) => entry.targets.map((t) => t.targetId));
+        expect(new Set(marked)).toEqual(new Set([graphite, asphyxiator]));
+    });
+
+    // The Major Grand Asphyxiator struck dies to his Inferno III before Colosso acts: Colosso
+    // holds Defense Up III, which his defence-scaled hits read.
+    it('with one Major Grand dead Colosso hits Asphyxiator for 52,470 and Graphite for 46,452', () => {
+        const order = entriesOf(result).filter(
+            ({ entry }) =>
+                (entry.kind === 'death' && nameOf(result, entry.actorId) === 'Major Grand') ||
+                (entry.kind === 'attack' && nameOf(result, entry.actorId) === 'General Colosso')
+        );
+        expect(order.map(({ entry }) => entry.kind)).toEqual(['death', 'attack']);
+        const hits = hitsBy(result, 'General Colosso', 1);
+        expect(hits.every((t) => !t.didCrit)).toBe(true);
+        expectMeasured(hits.find((t) => t.targetId === asphyxiator)?.amount, 52_470, TIGHT);
+        expectMeasured(hits.find((t) => t.targetId === graphite)?.amount, 46_452, TIGHT);
+    });
+});
+
+describe('replay: the owner team against General Colosso Lv32', () => {
+    // Seed 8: Colosso's round-1 hit on Graphite crits and his round-2 hit does not.
+    setupKeyedRng(8);
+    const result = colossoFight(playerTeam(), 2);
+    const graphite = idOf(result, 'Graphite');
+
+    it("Colosso's round-1 Marked hit crits Graphite for 31,478, every Major Grand alive", () => {
+        const hit = hitsBy(result, 'General Colosso', 1).find((t) => t.targetId === graphite);
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 31_478, TIGHT);
+    });
+
+    it("Colosso's round-2 hit on Graphite is 29,528 with one Enrage Damage III stack", () => {
+        const hit = hitsBy(result, 'General Colosso', 2).find((t) => t.targetId === graphite);
+        expect(hit?.didCrit).not.toBe(true);
+        expectMeasured(hit?.amount, 29_528, TIGHT);
+    });
+
+    // The two measured hits overkill Colosso (261,112 against 251,155 HP), so they come from a
+    // different fight than his measured hits on Graphite. Each is matched by one extra buff worth
+    // +45% crit power on the hitter (Crit Power Up III, Thresh's fifth buff); no ship in the team's
+    // round-1 casts grants it.
+    it.todo(
+        "Judge's opening active crits Colosso for 115,783 (needs the Crit Power Up III source)"
+    );
+    it.todo(
+        "Thresh's opening active crits Colosso for 145,329 (needs the Crit Power Up III source)"
+    );
+});
+
+describe('a full Colosso fight with the owner team', () => {
+    // A side wins by wiping the other or, for the player, by Colosso's death; a fight that
+    // reaches the round cap is decided without either.
+    it.each([1, 2, 3])('seed %i: the fight ends on a wipe, his death or the round cap', (seed) => {
+        setupKeyedRng(seed);
+        const result = colossoFight(playerTeam(), 30);
+        const last = result.rounds[result.rounds.length - 1];
+        const alive = (name: string) =>
+            last.ships.filter((s) => nameOf(result, s.actorId) === name && s.alive).length;
+        const playerWiped = OWNER_TEAM.every((name) => alive(name) === 0);
+        const colossoDead = alive('General Colosso') === 0;
+        const cap = result.outcome.lastRound === 30;
+        expect(result.outcome.lastRound).toBe(result.rounds.length);
+        if (result.outcome.winner === 'player') expect(colossoDead || cap).toBe(true);
+        else expect(playerWiped || cap).toBe(true);
+    });
 });

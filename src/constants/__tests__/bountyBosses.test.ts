@@ -109,7 +109,7 @@ describe('Major Grand', () => {
         expect(ship.baseStats).toMatchObject({
             hp: 42050,
             attack: 10470,
-            defence: 3050,
+            defence: 9086,
             speed: 106,
         });
         expect(ship.chargeSkillText).toBe('');
