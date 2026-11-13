@@ -113,6 +113,7 @@ import {
     parseStasisBreakExemption,
     parseChargeLossImmune,
     parseControlImmune,
+    parseDotImmune,
     parseInfiniteHacking,
     parseAlwaysCrits,
     detectIgnoresForcedTargeting,
@@ -405,6 +406,9 @@ function forEachCondition(sentence: string): Condition | null {
     // the actor, so `self-buff` would count the wrong thing and count it on the wrong unit.
     if (/^all(?:y|ies)\b.*\bshield\b/.test(what.trim()))
         return { subject: 'ally-shield-count', derivable: true };
+    // General Colosso: "for each dead ally ship" — own-side units destroyed so far.
+    if (/^dead\s+all(?:y|ies)\b/.test(what.trim()))
+        return { subject: 'ally-destroyed', derivable: false };
     if (/destroy/.test(what)) return { subject: 'enemy-destroyed', derivable: false };
     // "for each debuffed enemy" counts enemy UNITS, as the heal parser's mapHealCountPhrase does.
     if (/^debuffed\s+enem/.test(what.trim()))
@@ -636,6 +640,30 @@ function parseModifiers(text: string): ParsedModifier[] {
             target: isAllyScoped ? 'all-allies' : 'self',
             conditions,
         });
+    }
+
+    // "Outgoing damage increases by X% for each <thing>" (General Colosso's "for each dead ally
+    // ship") → an additive outgoing-damage modifier scaled by the count, capped only when the
+    // sentence states a cap.
+    const increasesM = plain.match(/outgoing\s+damage\s+increases\s+by\s+(\d+(?:\.\d+)?)%/i);
+    if (increasesM) {
+        const sentence = sentenceContaining(plain, increasesM.index!);
+        const countCond = /for each/i.test(sentence) ? forEachCondition(sentence) : null;
+        if (countCond) {
+            const cap = capFromSentence(sentence);
+            out.push({
+                channel: 'outgoingDamage',
+                value: 0,
+                isMultiplicative: false,
+                target: 'self',
+                conditions: [countCond],
+                scaling: {
+                    conditionIndex: 0,
+                    perUnit: parseFloat(increasesM[1]),
+                    ...(cap !== undefined ? { cap } : {}),
+                },
+            });
+        }
     }
 
     // Sub-project I, PR I4a: "N% additional <DoT> damage … for every M% crit power"
@@ -4411,6 +4439,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
 
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
     const controlImmune = getShipSkillRows(ship).some((row) => parseControlImmune(row.text));
+    const dotImmune = getShipSkillRows(ship).some((row) => parseDotImmune(row.text));
     const alwaysLandsDebuffs = getShipSkillRows(ship).some((row) => parseInfiniteHacking(row.text));
     const alwaysCrits = getShipSkillRows(ship).some((row) => parseAlwaysCrits(row.text));
 
@@ -4429,6 +4458,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ...(!doesntBreakStasis && stasisBreakExemptWhen ? { stasisBreakExemptWhen } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
         ...(controlImmune ? { controlImmune: true } : {}),
+        ...(dotImmune ? { dotImmune: true } : {}),
         ...(alwaysLandsDebuffs ? { alwaysLandsDebuffs: true } : {}),
         ...(alwaysCrits ? { alwaysCrits: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),

@@ -25,6 +25,7 @@ const SUBJECT_VALUES: ConditionSubject[] = [
     'adjacent-ally',
     'enemy-adjacent',
     'enemy-destroyed',
+    'ally-destroyed',
     'hp-threshold',
     'enemy-hp-pct',
     'enemy-hp-missing-pct',
@@ -80,6 +81,7 @@ const COUNT_SUBJECTS: ConditionSubject[] = [
     'adjacent-ally',
     'enemy-adjacent',
     'enemy-destroyed',
+    'ally-destroyed',
     'enemy-hp-pct',
     'enemy-hp-missing-pct',
 ];

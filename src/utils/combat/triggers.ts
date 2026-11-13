@@ -104,6 +104,7 @@ import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx, RateGate } 
 import { MARKED_STATUS, type ActorTargetingStatus } from './positionalBinding';
 import { extendsDotFrom } from './dotDurationExtension';
 import { immuneToEnemyStatus } from './controlImmunity';
+import { immuneToDot } from './dotImmunity';
 
 /** The trigger values the engine consumes — defined next to AbilityTrigger in
  *  types/abilities.ts (so UI consumers don't import the engine for one constant)
@@ -6501,6 +6502,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             for (const cid of cleansedEnemyIds) {
                 const victim = ctx.actorById?.(cid);
                 const victimId = victim?.id ?? cid;
+                // A DoT-immune victim is never attempted (`immuneToDot`).
+                if (immuneToDot(victim, cfg.dotType)) continue;
                 // IMMUNITY BEFORE THE DRAW, aligned with BOTH siblings. The sibling `debuff`
                 // branch folds immunity into its landing condition via an `&&` short-circuit, and
                 // the single-victim DoT path below returns before its draw — so the engine's rule
@@ -6580,6 +6583,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // A unit-test ctx without an `actorById` delegate cannot resolve the object but still
             // knows the id — keep using it rather than inventing a target.
             const victimId = victim?.id ?? recipientId;
+            // A DoT-immune victim is never attempted (`immuneToDot`).
+            if (immuneToDot(victim, cfg.dotType)) continue;
             // Block Debuff: an immune target auto-resists this reactive DoT — block
             // it AND emit a resist event. Placed AFTER the inert-DoT guard above so a
             // zero-stack/tier DoT doesn't surface a spurious resist.

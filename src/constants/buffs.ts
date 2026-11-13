@@ -930,6 +930,11 @@ export const BUFFS: Buff[] = [
         type: 'buff',
     },
     {
+        name: 'Enrage Damage III',
+        description: '+6% Outgoing Damage, Stackable',
+        type: 'buff',
+    },
+    {
         name: 'Marked',
         description: 'Marked for attack. Unremovable.',
         type: 'debuff',

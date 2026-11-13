@@ -22,6 +22,7 @@ export const CONDITION_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>>
     'adjacent-ally': 'per adjacent ally',
     'enemy-adjacent': 'per unit adjacent to the enemy',
     'enemy-destroyed': 'per destroyed enemy',
+    'ally-destroyed': 'per destroyed ally',
     'self-crit': 'on critical hit',
     'enemy-type': 'when enemy matches type',
     // Formerly EXTRA_SUBJECT_LABELS (src/components/skills/ConditionRow.tsx).
@@ -95,6 +96,8 @@ const countThresholdPhrase = (
             return `while ${comparatorWord} ${n} ${plural ? 'units are' : 'unit is'} adjacent to the enemy`;
         case 'enemy-destroyed':
             return `while ${comparatorWord} ${n} ${plural ? 'enemies have' : 'enemy has'} been destroyed`;
+        case 'ally-destroyed':
+            return `while ${comparatorWord} ${n} ${plural ? 'allies have' : 'ally has'} been destroyed`;
         case 'buffs-purged-this-cast':
             return `after this skill purges ${comparatorWord} ${n} ${plural ? 'buffs' : 'buff'}`;
         default:

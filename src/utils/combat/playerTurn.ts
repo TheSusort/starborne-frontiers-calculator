@@ -146,6 +146,7 @@ export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
 import { scaledStatusCount } from './statusCountScaling';
 import { isStasis } from './stasisBuffs';
 import { immuneToEnemyStatus } from './controlImmunity';
+import { immuneToDot, withoutImmuneDots } from './dotImmunity';
 export { scaledStatusCount };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
@@ -804,6 +805,7 @@ const CONDITION_CONTEXT_SUBJECT = {
     adjacentAllyCount: 'caster',
     enemyAdjacentCount: 'victim',
     enemyDestroyedCount: 'caster',
+    allyDestroyedCount: 'caster',
     selfHpPct: 'caster',
     enemyHpPct: 'victim',
     targetHpPct: 'caster',
@@ -1224,6 +1226,10 @@ export interface PlayerTurnArgs {
      *  for non-positional/DPS callers with no opposing roster to tally; the condition then keeps
      *  its manual `manualCount ?? 1` fallback. See ConditionContext's doc on the field. */
     enemyDestroyedCount?: number;
+    /** Own-side actors destroyed SO FAR THIS BATTLE, the acting unit excluded — the live source
+     *  for General Colosso's "Outgoing damage increases by 15% for each dead ally ship" (#519),
+     *  the same-side mirror of `enemyDestroyedCount` with the same ABSENT-not-0 contract. */
+    allyDestroyedCount?: number;
     /** Resolves the SOURCE of a top-up buff-steal (Meatshield's charged Protection clause) — the
      *  LIVE opposing actor holding at least one stack of `buffName` that ranks first by board
      *  position (`positionTurnRank`; read its doc for the ordering). Supplied by engine.ts's
@@ -2245,6 +2251,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         blockDebuffPendingFor,
         liveCountsMeasurable,
         enemyDestroyedCount: enemyDestroyedCountArg,
+        allyDestroyedCount: allyDestroyedCountArg,
         selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
         // No default — undefined is the no-target / DPS sentinel (see PlayerTurnArgs doc).
@@ -2356,6 +2363,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         adjacentAllyCount?: number;
         enemyAdjacentCount?: number;
         enemyDestroyedCount?: number;
+        allyDestroyedCount?: number;
     } = {
         ...(liveCountsMeasurable && adjacentAllyIds
             ? { adjacentAllyCount: adjacentAllyIds.length }
@@ -2365,6 +2373,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             : {}),
         ...(enemyDestroyedCountArg !== undefined
             ? { enemyDestroyedCount: enemyDestroyedCountArg }
+            : {}),
+        ...(allyDestroyedCountArg !== undefined
+            ? { allyDestroyedCount: allyDestroyedCountArg }
             : {}),
     };
 
@@ -3773,6 +3784,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
             for (const rid of recipients) {
                 if (rid === undefined || rid === targetId) continue;
+                // A DoT-immune enemy is never attempted (`immuneToDot`).
+                if (immuneToDot(opposingVictimById?.get(rid), dot.type)) continue;
                 const list = covered.get(rid);
                 if (list) list.push(dot);
                 else covered.set(rid, [dot]);
@@ -3836,12 +3849,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               };
     let primaryDotPlan: { castRoll: boolean; landed: DoTApplicationConfig } | undefined;
     const planPrimaryDots = (
-        dots: DoTApplicationConfig
+        castDots: DoTApplicationConfig
     ): { castRoll: boolean; landed: DoTApplicationConfig } => {
         if (primaryDotPlan) return primaryDotPlan;
         // Every caller is fenced on `hasVictim`; no victim lands nothing and draws nothing.
         const victim = enemy;
         if (victim === undefined) return { castRoll: true, landed: [] };
+        // A DoT-immune victim is never attempted (`immuneToDot`): no draw for those entries.
+        const dots = withoutImmuneDots(victim, castDots);
         // With nothing to apply no draw is taken and `castRoll` is vacuously true, preserving the
         // all-landing fixtures where no-DoT rounds report dotsLanded:true.
         const castRoll = dots.length > 0 ? roundDebuffLanded() : true;
@@ -6170,10 +6185,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // vs a failed roll). `dotsLanded` is false when no stack landed, so the downstream display
     // surfaces the DoTs as resisted (symmetric with timed/persistent resists).
     let dotsLanded: boolean;
+    /** The cast's DoTs the bound target can receive: a DoT-immune target is never attempted
+     *  (`immuneToDot`), so those entries are neither applied, resisted nor reported. */
+    const primaryDotsConfig = hasVictim ? withoutImmuneDots(enemy, dotsConfig) : dotsConfig;
     /** The primary's DoTs the round row reports: the stacks that landed when any did, otherwise
      *  the configured DoTs (all resisted when `dotsLanded` is false). A stack resisted beside a
      *  landed one shows only in the combat log. */
-    let reportedDots: DoTApplicationConfig = dotsConfig;
+    let reportedDots: DoTApplicationConfig = primaryDotsConfig;
     if (!hasVictim) {
         // No victim — this cast's DoT clauses have nobody to be inflicted on, so none is
         // applied and none is resisted (a resist implies a target that resisted it), and no landing
@@ -6184,9 +6202,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // REPORTED list is emptied to match at the return (`dotsConfig:` there); see that comment
         // for why `false` would be worse than `true` and why emptying the list is the real answer.
         dotsLanded = true;
-    } else if (dotsConfig.length > 0 && targetImmuneToDebuffs) {
+    } else if (primaryDotsConfig.length > 0 && targetImmuneToDebuffs) {
         dotsLanded = false;
-        for (const dot of dotsConfig) {
+        for (const dot of primaryDotsConfig) {
             // NOTE: a blocked `bomb` DoT emits the resist event but has NO `resistedDots`
             // row — the engine's resistedDots derivation filters to corrosion/inferno only
             // (bombs are display-only elsewhere too). Event-yes/surface-no is intentional.
@@ -6217,13 +6235,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // resist: one event per stack, so the combat log shows each resisted stack and an
         // on-resist reaction counting resisted debuffs counts each. Already decided when a count
         // gate written after a DoT clause asked for it.
-        const { castRoll, landed: landedPrimaryDots } = planPrimaryDots(dotsConfig);
+        const { castRoll, landed: landedPrimaryDots } = planPrimaryDots(primaryDotsConfig);
         // Capture every container's pre-application length so 'inflicted'-scope extensions
         // touch only the DoTs, Bombs and accumulators this cast adds below.
         const primaryBefore = debuffEntryLengths(primaryHolder);
         // Over the DoTs rolled against the primary only: one aimed at its neighbours, or inert,
         // was never resisted here.
-        dotsLanded = !dotsConfig.some(rollsOnPrimary) || landedPrimaryDots.length > 0;
+        dotsLanded = !primaryDotsConfig.some(rollsOnPrimary) || landedPrimaryDots.length > 0;
         if (landedPrimaryDots.length > 0) reportedDots = landedPrimaryDots;
         const primaryDotsHeld = landCastDots(enemy.id, landedPrimaryDots, (dots, emit) =>
             applyNewDoTs({

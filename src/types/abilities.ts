@@ -474,6 +474,9 @@ export type ConditionSubject =
     | 'adjacent-ally'
     | 'enemy-adjacent'
     | 'enemy-destroyed'
+    // Own-side units destroyed so far this battle, the owner excluded (General Colosso's "for
+    // each dead ally ship"): the same-side mirror of 'enemy-destroyed'.
+    | 'ally-destroyed'
     | 'hp-threshold'
     // HP-percentage COUNT subjects: the count IS the enemy's current (or missing)
     // HP percentage (0..100), for HP-proportional scaling — Akula ("up to 30% more,
@@ -1656,6 +1659,9 @@ export interface ShipSkills {
     /** True when the ship's passive text declares immunity to control debuffs (Fenri). Read
      *  onto `CombatActor.controlImmune`, whose doc holds what the immunity does. */
     controlImmune?: boolean;
+    /** True when the ship's passive text declares immunity to damage over time effects (General
+     *  Colosso). Read onto `CombatActor.dotImmune`, whose doc holds what the immunity does. */
+    dotImmune?: boolean;
     /** True when the ship's passive text says it "has infinite Hacking" (Mamma Maglienza, #519):
      *  every debuff it inflicts lands, with no landing roll, whatever the victim's security or
      *  affinity (owner ruling 2026-11-11). */

@@ -17,7 +17,8 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     const critDamage = extract(/([+-]\d+)%\s*(?:Outgoing\s*)?Crit\s*Power/);
     if (critDamage !== undefined) effects.critDamage = critDamage;
 
-    const outgoingDamage = extract(/([+-]\d+)%\s*Outgoing\s*Direct\s*Damage/);
+    // "Outgoing Damage" (Enrage Damage III) reads as the same channel as "Outgoing Direct Damage".
+    const outgoingDamage = extract(/([+-]\d+)%\s*Outgoing\s*(?:Direct\s*)?Damage/);
     if (outgoingDamage !== undefined) effects.outgoingDamage = outgoingDamage;
 
     const outgoingHeal = extract(/([+-]\d+(?:\.\d+)?)%\s*Outgoing\s*Repair/);

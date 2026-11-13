@@ -128,7 +128,8 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
                 speed: 93,
                 hpRegen: 0,
                 shield: 0,
-                shieldPenetration: 0,
+                // Assimilated Armor: "has 100% Shield Penetration".
+                shieldPenetration: 100,
                 defensePenetration: 0,
                 damageReduction: 0,
             },

@@ -78,6 +78,9 @@ export interface ConditionContext {
     adjacentAllyCount?: number;
     enemyAdjacentCount?: number;
     enemyDestroyedCount?: number;
+    /** Own-side actors destroyed so far this battle, the owner excluded — the same-side mirror of
+     *  `enemyDestroyedCount`, with the same absent-means-manual contract. */
+    allyDestroyedCount?: number;
     selfHpPct: number; // 0..100
     /** SP-4d: OPTIONAL, and absent means "there is no enemy to ask about" — not "an enemy at full
      *  health". Absent on a no-victim turn (an ally-targeted cast resolves nobody) and at drain
@@ -232,6 +235,7 @@ const LIVE_OR_MANUAL_SUBJECTS: ReadonlySet<Condition['subject']> = new Set<Condi
     'adjacent-ally',
     'enemy-adjacent',
     'enemy-destroyed',
+    'ally-destroyed',
 ]);
 
 /** Resolve one condition to a count (>= 0), or `undefined` when the condition's SUBJECT DOES NOT
@@ -248,18 +252,20 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         return Math.max(0, cond.manualCount ?? 1);
     }
     // LIVE-OR-MANUAL subjects: the same shape as `ally-on-team` above, and handled ahead of the
-    // `derivable:false` early return for the same reason — the parser emits all three as
+    // `derivable:false` early return for the same reason — the parser emits each of them as
     // `derivable:false` (a single-ship DPS run has no board and no opposing roster to count), so
     // routing them through that return would leave their switch arms permanently unreachable.
     // The combat engine supplies a real count and it wins; every other caller keeps the manual
-    // fallback byte-identical. See ConditionContext's doc on the three fields.
+    // fallback byte-identical. See ConditionContext's doc on the live-count fields.
     if (LIVE_OR_MANUAL_SUBJECTS.has(cond.subject)) {
         const live =
             cond.subject === 'adjacent-ally'
                 ? ctx.adjacentAllyCount
                 : cond.subject === 'enemy-adjacent'
                   ? ctx.enemyAdjacentCount
-                  : ctx.enemyDestroyedCount;
+                  : cond.subject === 'ally-destroyed'
+                    ? ctx.allyDestroyedCount
+                    : ctx.enemyDestroyedCount;
         return live ?? Math.max(0, cond.manualCount ?? 1);
     }
     // A bare `enemy-buff` count is LIVE-OR-MANUAL too, and wins over the union below as well —
@@ -303,12 +309,13 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             // the legacy probability (0..1) used as gate (>0) and expected-value scaler.
             if (ctx.roundCrit !== undefined) return ctx.roundCrit ? 1 : 0;
             return ctx.effectiveCritRate / 100;
-        // Unreachable — LIVE_OR_MANUAL_SUBJECTS above returns for all three before this switch.
+        // Unreachable — LIVE_OR_MANUAL_SUBJECTS above returns for each of these before this switch.
         // Kept so the subject union stays exhaustively covered here (removing them would make a
         // future subject rename silently fall through instead of failing the `never` check).
         case 'adjacent-ally':
         case 'enemy-adjacent':
         case 'enemy-destroyed':
+        case 'ally-destroyed':
             throw new Error(`evaluateCondition: ${cond.subject} must resolve above the switch`);
         case 'enemy-stealth-count':
             return ctx.stealthedEnemyCount ?? 0;

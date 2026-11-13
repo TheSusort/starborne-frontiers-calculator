@@ -40,12 +40,9 @@ const COLOSSO_DEFENCE = 10_000;
 /** 175% of his defence against a 0-defence victim. */
 const FULL = 17_500;
 
-/** His real active and charged, and his kit-level control immunity. The passive is left out: its
- *  Defense Up III would scale every number here. */
-const colossoKit = (): ShipSkills => {
-    const kit = buildShipAbilities(bossShip('colosso', 32)!);
-    return { ...kit, slots: kit.slots.filter((s) => s.slot !== 'passive') };
-};
+/** His real kit. No ally of his dies on these boards and every number is read off his first
+ *  cast, so his passive adds nothing: no Defense Up III, no dead-ally bonus, no Enrage stack yet. */
+const colossoKit = (): ShipSkills => buildShipAbilities(bossShip('colosso', 32)!);
 
 const colosso = (position: Position, kit: ShipSkills = colossoKit()): BoardUnit => ({
     id: 'colosso',

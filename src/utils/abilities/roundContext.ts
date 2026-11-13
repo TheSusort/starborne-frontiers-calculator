@@ -191,6 +191,9 @@ export function buildRoundContext(state: {
     /** Opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed the kill (owner
      *  ruling 2026-08-30). Cumulative across rounds — it never resets. */
     enemyDestroyedCount?: number;
+    /** Own-side actors destroyed so far this battle, the owner excluded — cumulative, like
+     *  `enemyDestroyedCount`. */
+    allyDestroyedCount?: number;
     /** SP-4d — true when this round/reaction has NO opposing victim to ask a per-victim question
      *  about (e.g. an ally-targeted cast that resolves nobody). Default `false`/omitted preserves
      *  every existing caller's behaviour unchanged (a real victim, or the DPS-assumption default).
@@ -238,6 +241,7 @@ export function buildRoundContext(state: {
         adjacentAllyCount: state.adjacentAllyCount,
         enemyAdjacentCount: state.enemyAdjacentCount,
         enemyDestroyedCount: state.enemyDestroyedCount,
+        allyDestroyedCount: state.allyDestroyedCount,
         selfHpPct: state.selfHpPct ?? 100,
         targetHpPct: state.targetHpPct ?? 100,
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,

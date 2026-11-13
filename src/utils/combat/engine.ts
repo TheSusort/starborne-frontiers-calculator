@@ -56,6 +56,7 @@ import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
 import { composeDotDamageFactor } from '../damageComposition';
 import { ONE_SHOT_PERSISTENT_BUFFS } from '../../constants/oneShotPersistentBuffs';
 import { dotResistLabel, isBlockDebuff, targetCarriesBlockDebuff } from './debuffImmunity';
+import { immuneToDot } from './dotImmunity';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { aliveTargetsOf, type AliveRoster } from './targetableActors';
 import {
@@ -1093,6 +1094,7 @@ export function buildEnemyPlayerActorRuntime(
         alwaysCrits: e.shipSkills?.alwaysCrits,
         alwaysLandsDebuffs: e.shipSkills?.alwaysLandsDebuffs,
         controlImmune: e.shipSkills?.controlImmune,
+        dotImmune: e.shipSkills?.dotImmune,
         affinity: e.affinity,
         preFight: e.preFight,
     });
@@ -2548,6 +2550,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         alwaysCrits: input.shipSkills.alwaysCrits,
         alwaysLandsDebuffs: input.shipSkills.alwaysLandsDebuffs,
         controlImmune: input.shipSkills.controlImmune,
+        dotImmune: input.shipSkills.dotImmune,
         affinity: input.affinity,
         preFight: input.preFight,
     });
@@ -2673,6 +2676,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             alwaysCrits: t.walk?.shipSkills.alwaysCrits,
             alwaysLandsDebuffs: t.walk?.shipSkills.alwaysLandsDebuffs,
             controlImmune: t.walk?.shipSkills.controlImmune,
+            dotImmune: t.walk?.shipSkills.dotImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
@@ -10726,6 +10730,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                           enemyDestroyedCount: tb.opposingRoster.filter(
                               (x) => x.destroyedRound !== undefined
                           ).length,
+                          // General Colosso ("15% for each dead ally ship"): the same tally on
+                          // the acting unit's own side, itself excluded, any cause of death.
+                          allyDestroyedCount: [...allActorsById.values()].filter(
+                              (x) =>
+                                  x.side === a.side &&
+                                  x.id !== a.id &&
+                                  x.destroyedRound !== undefined
+                          ).length,
                       }
                     : {}),
                 // Opt-in NAMES on the resolved target for name-specific
@@ -14339,7 +14351,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // applyNewDoTs's corrosion entry shape.
             for (const allyId of adjacentIds) {
                 const ally = allActorsById.get(allyId);
-                if (!ally) continue;
+                // A DoT-immune ally is never attempted (`immuneToDot`).
+                if (!ally || immuneToDot(ally, 'corrosion')) continue;
                 const blocked = targetCarriesBlockDebuff(statusEngine, allyId);
                 const lands =
                     !blocked &&

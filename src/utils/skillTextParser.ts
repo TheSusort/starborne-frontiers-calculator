@@ -1842,6 +1842,8 @@ const ALLY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+ally\b[^.]*?\bgains?\b[^.]*?\btaunt\
 const ANY_SHIP_DIES_RE = /\bwhenever\s+any\s+ship\s+dies\b/i;
 // Mamma Maglienza: "… and after attacking, gains …" — after each of the owner's attack casts.
 const AFTER_ATTACKING_RE = /\bafter\s+attacking\b/i;
+// General Colosso: "With each ally death, the Boss gains …" — another own-side unit's death.
+const WITH_EACH_ALLY_DEATH_RE = /\bwith\s+each\s+ally\s+death\b/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -1871,8 +1873,9 @@ const AFTER_ATTACKING_RE = /\bafter\s+attacking\b/i;
  *    it to the family with detectInflictedStatusFilter.
  *  - "if this Unit's debuff is resisted" → 'on-own-debuff-resisted' (the inflictor-scoped
  *    mirror of the resister-side on-debuff-resisted).
- *  - "after attacking" → 'on-attack-cast'; "whenever any ship dies" → 'on-ally-destroyed'
- *    (Mamma Maglienza; owner-ruled same-side only). Checked first, after-attacking before the death phrase.
+ *  - "after attacking" → 'on-attack-cast'; "whenever any ship dies" (Mamma Maglienza;
+ *    owner-ruled same-side only) and "with each ally death" (General Colosso) →
+ *    'on-ally-destroyed'. Checked first, after-attacking before the death phrase.
  *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained'. Narrow and
  *    name-specific to Taunt — distinct from the broad, unfiltered on-enemy-buffed
  *    (ENEMY_BUFFED_RE).
@@ -1899,7 +1902,8 @@ export function detectReactiveTrigger(
     // "after attacking" before "whenever any ship dies": a grant after "…, and after attacking,"
     // keeps the sentence-leading death trigger in its clause, and the later trigger governs it.
     if (AFTER_ATTACKING_RE.test(clause)) return 'on-attack-cast';
-    if (ANY_SHIP_DIES_RE.test(clause)) return 'on-ally-destroyed';
+    if (ANY_SHIP_DIES_RE.test(clause) || WITH_EACH_ALLY_DEATH_RE.test(clause))
+        return 'on-ally-destroyed';
     // "when an ally critically hits" → on-ally-crit (Hermes's Everliving Regeneration buff grant).
     // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
@@ -3997,6 +4001,14 @@ export function parseChargeLossImmune(text: string | null | undefined): boolean 
 const CONTROL_IMMUNE_RE = /\bimmune to control\b/i;
 export function parseControlImmune(text: string | null | undefined): boolean {
     return !!text && CONTROL_IMMUNE_RE.test(stripUnitTags(text));
+}
+
+/** True iff this skill text declares the unit is immune to damage over time effects ("immune to
+ *  Control, damage over time effects and Charge Loss effects", General Colosso). A reduction of DoT
+ *  damage ("takes 50% less damage from DoTs") is not an immunity. */
+const DOT_IMMUNE_RE = /\bimmune to\b[^.]*?\bdamage over time effects\b/i;
+export function parseDotImmune(text: string | null | undefined): boolean {
+    return !!text && DOT_IMMUNE_RE.test(stripUnitTags(text));
 }
 
 /** True iff this skill text says the unit "has infinite Hacking" (Mamma Maglienza): its debuffs
