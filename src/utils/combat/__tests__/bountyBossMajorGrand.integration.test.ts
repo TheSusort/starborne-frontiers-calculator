@@ -225,6 +225,99 @@ describe.each(SIDES)('Major Grand with fewer than 2 debuffs, on the %s side', (p
     });
 });
 
+describe.each(SIDES)(
+    'a self-gated hacking gain after a self-cleanse, on the %s side',
+    (placement) => {
+        /** "Cleanses 2 debuffs, gains Hacking Up III if it has 2 or more debuffs, deals 60% damage
+         *  and inflicts Marked": the cleanse is written ahead of the damage, so it resolves first and
+         *  the gain's gate reads what is left. */
+        const kit = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'cleanse',
+                            type: 'cleanse',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'cleanse', count: 2 },
+                        },
+                        {
+                            id: 'hacking-up',
+                            type: 'buff',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            conditions: [
+                                {
+                                    subject: 'self-debuff',
+                                    derivable: true,
+                                    countComparator: 'gte',
+                                    countThreshold: 2,
+                                },
+                            ],
+                            config: {
+                                type: 'buff',
+                                buffName: 'Hacking Up III',
+                                duration: 1,
+                                stacks: 1,
+                                isStackable: false,
+                                parsedEffects: { hacking: 60 },
+                            },
+                        },
+                        {
+                            id: 'hit',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 60 },
+                        },
+                        {
+                            ...debuffAbility('Marked'),
+                            config: {
+                                ...debuffAbility('Marked').config,
+                                application: 'inflict',
+                                duration: 10,
+                            },
+                        } as Ability,
+                    ],
+                },
+            ],
+        });
+
+        it('with exactly 2 debuffs the cleanse leaves none: no Hacking Up III, no raised roll', () => {
+            // The hexer lands 2 debuffs on it every round; 40 hacking vs 0 security is a 40% roll.
+            const opp = [hexer('m3', 'M3', 2), dummy('m2', 'M2')];
+            const caster = grand('M1', { kit: kit(), hacking: 40 });
+            const { input, id } = boardInput(placement, caster, [], opp, 4);
+            const bus = createEventBus();
+            const out = { granted: 0, landed: 0, resisted: 0, cleansed: 0 };
+            bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
+                if (e.granterId === id(caster) && e.buffName === 'Hacking Up III') out.granted++;
+            });
+            bus.on(
+                'cleanse-performed',
+                (e: Extract<CombatEvent, { type: 'cleanse-performed' }>) => {
+                    if (e.casterId === id(caster)) out.cleansed += e.count;
+                }
+            );
+            bus.on('debuff-applied', (e: Extract<CombatEvent, { type: 'debuff-applied' }>) => {
+                if (e.sourceId === id(caster) && e.buffName === 'Marked') out.landed++;
+            });
+            bus.on('debuff-resisted', (e: Extract<CombatEvent, { type: 'debuff-resisted' }>) => {
+                if (e.sourceId === id(caster) && e.buffName === 'Marked') out.resisted++;
+            });
+            runCombat({ ...input, bus });
+            expect(out.cleansed).toBe(8);
+            expect(out.granted).toBe(0);
+            expect(out.landed + out.resisted).toBe(8);
+            expect(out.resisted).toBeGreaterThan(0);
+        });
+    }
+);
+
 describe.each(SIDES)('Major Grand counting DoT stacks as debuffs, on the %s side', (placement) => {
     const dot = (id: string, dotType: 'corrosion' | 'inferno', tier: number): Ability => ({
         id,

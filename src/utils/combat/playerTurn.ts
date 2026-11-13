@@ -3156,9 +3156,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *
      *  A self-state-only gate is decidable before the rolls: one reading only the caster's own
      *  debuffs (`PRE_ROLL_GATE_SUBJECTS`) is asked here, through `conditionsMet`, against the
-     *  caster's at-cast readings — the count before this cast's own cleanse, as the cast's
-     *  branch gates read it (the Major Grand's "Hacking Up III … if it has less than 2
-     *  debuffs"). A gate on any other subject waits for its gate context in the loop below. */
+     *  same own-debuff readings every later gate context of this cast reads (after a self-cleanse
+     *  written ahead of the damage). The Major Grand's "Hacking Up III … if it has less than 2
+     *  debuffs" is one. A gate on any other subject waits for its gate context in the loop below. */
     const preRollGateCtx = buildRoundContext({
         selfBuffNames: [],
         landedEnemyDebuffCount: 0,
@@ -3166,8 +3166,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         infernoStacks: 0,
         bombStacks: 0,
         effectiveCritRate: 0,
-        selfDebuffNames: selfDebuffNamesIn,
-        selfDebuffCount: selfDebuffCountIn,
+        selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
     });
     const decidableBeforeRolls = (conditions: TimedStatus['conditions']): boolean =>
         conditions.every((c) => PRE_ROLL_GATE_SUBJECTS.has(c.subject)) &&
