@@ -143,25 +143,29 @@ const FLEET: Record<string, FleetShip> = {
 const OWNER_TEAM = ['Judge', 'Graphite', 'Grif', 'Thresh'] as const;
 
 // Thresh carries an epic Intrusion implant; Graphite wears the Boost set (her Overclock lasts 3
-// turns in game). The pieces carry no stats: each ship's planner stats are its overrides.
+// turns in game) and, in one Colosso fight, a legendary Resonating Fury implant. The pieces carry
+// no stats: each ship's planner stats are its overrides.
 const INTRUSION_ID = 'replay-intrusion';
 const BOOST_SLOTS = ['weapon', 'hull', 'generator', 'sensor'] as const;
 const boostId = (slot: string) => `replay-boost-${slot}`;
+const RESONATING_FURY_ID = 'replay-resonating-fury';
 const getGearPiece = (id: string) =>
     id === INTRUSION_ID
         ? ({ id, setBonus: 'INTRUSION', rarity: 'epic' } as unknown as GearPiece)
-        : id.startsWith('replay-boost-')
-          ? ({
-                id,
-                slot: id.slice('replay-boost-'.length),
-                level: 16,
-                stars: 6,
-                rarity: 'legendary',
-                mainStat: null,
-                subStats: [],
-                setBonus: 'BOOST',
-            } as GearPiece)
-          : undefined;
+        : id === RESONATING_FURY_ID
+          ? ({ id, setBonus: 'RESONATING_FURY', rarity: 'legendary' } as unknown as GearPiece)
+          : id.startsWith('replay-boost-')
+            ? ({
+                  id,
+                  slot: id.slice('replay-boost-'.length),
+                  level: 16,
+                  stars: 6,
+                  rarity: 'legendary',
+                  mainStat: null,
+                  subStats: [],
+                  setBonus: 'BOOST',
+              } as GearPiece)
+            : undefined;
 
 const fleetShip = (name: string): Ship => {
     const entry = FLEET[name];
@@ -452,6 +456,30 @@ const colossoFight = (playerTeam: BattlePlacement[], rounds: number) =>
         getGearPiece
     );
 
+/** Whether `holderName` was granted `buffName` in `round` before `attackerName`'s first attack
+ *  of that round, in log order. */
+const grantedBeforeAttack = (
+    result: ReturnType<typeof simulateBattle>,
+    buffName: string,
+    holderName: string,
+    attackerName: string,
+    round: number
+): boolean => {
+    const inRound = entriesOf(result).filter(({ round: r }) => r === round);
+    const attack = inRound.findIndex(
+        ({ entry }) => entry.kind === 'attack' && nameOf(result, entry.actorId) === attackerName
+    );
+    const holder = idOf(result, holderName);
+    return inRound
+        .slice(0, attack)
+        .some(
+            ({ entry }) =>
+                entry.kind === 'buff' &&
+                entry.note === buffName &&
+                entry.targets.some((t) => t.targetId === holder)
+        );
+};
+
 // Los alone on M4, the front of the middle row: every Major Grand's row scan reaches him.
 describe('replay: Los alone against General Colosso Lv32 and his Major Grands', () => {
     setupKeyedRng(1);
@@ -466,7 +494,8 @@ describe('replay: Los alone against General Colosso Lv32 and his Major Grands', 
         expectMeasured(hit?.amount, 32_237, TIGHT);
     });
 
-    it('a Major Grand hits Los for 1,908 without a crit', () => {
+    // Seed 1 rolls no crit on the first Major Grand's hit on Los; another seed may.
+    it('the first Major Grand hits Los for 1,908 without a crit', () => {
         const hit = hitsBy(result, 'Major Grand', 1).find((t) => t.targetId === los);
         expect(hit?.didCrit).not.toBe(true);
         expectMeasured(hit?.amount, 1_908, TIGHT);
@@ -499,6 +528,9 @@ describe('replay: Graphite and Asphyxiator against General Colosso Lv32', () => 
             t.targetId.includes('major-grand')
         );
         expect(hit?.didCrit).toBe(true);
+        expect(grantedBeforeAttack(result, 'Overclock III', 'Asphyxiator', 'Asphyxiator', 1)).toBe(
+            true
+        );
         expectMeasured(hit?.amount, 38_404, TIGHT);
     });
 
@@ -548,22 +580,68 @@ describe('replay: the owner team against General Colosso Lv32', () => {
         expectMeasured(hit?.amount, 31_478, TIGHT);
     });
 
-    it("Colosso's round-2 hit on Graphite is 29,528 with one Enrage Damage III stack", () => {
+    it("Colosso's round-2 hit on Graphite is 29,528 with one Enrage Damage III stack, every Major Grand alive", () => {
         const hit = hitsBy(result, 'General Colosso', 2).find((t) => t.targetId === graphite);
         expect(hit?.didCrit).not.toBe(true);
         expectMeasured(hit?.amount, 29_528, TIGHT);
+        const entries = entriesOf(result);
+        const attack = entries.findIndex(
+            ({ round, entry }) =>
+                round === 2 &&
+                entry.kind === 'attack' &&
+                nameOf(result, entry.actorId) === 'General Colosso'
+        );
+        const before = entries.slice(0, attack).map(({ entry }) => entry);
+        expect(
+            before.filter((e) => e.kind === 'buff' && e.note === 'Enrage Damage III')
+        ).toHaveLength(1);
+        expect(
+            before.filter((e) => e.kind === 'death' && nameOf(result, e.actorId) === 'Major Grand')
+        ).toEqual([]);
+    });
+});
+
+// A separate fight from the block above: Graphite's Resonating Fury procs on her round-1 shield
+// and grants Judge and Thresh Crit Power Up III (Thresh's fifth buff, so 44.5% penetration), and
+// Thresh's hit destroys Colosso.
+describe('replay: the owner team with Resonating Fury on Graphite against General Colosso Lv32', () => {
+    // Seed 5: the legendary implant's proc lands on Graphite's round-1 shield.
+    setupKeyedRng(5);
+    const team = playerTeam().map((p) =>
+        p.ship.name === 'Graphite'
+            ? {
+                  ...p,
+                  ship: {
+                      ...p.ship,
+                      implants: { implant_major: RESONATING_FURY_ID },
+                  },
+              }
+            : p
+    );
+    const result = colossoFight(team, 2);
+    const colosso = idOf(result, 'General Colosso');
+
+    it("Judge's opening active crits Colosso for 115,783 under Crit Power Up III", () => {
+        expect(grantedBeforeAttack(result, 'Crit Power Up III', 'Judge', 'Judge', 1)).toBe(true);
+        const hit = hitsBy(result, 'Judge', 1).find((t) => t.targetId === colosso);
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 115_783, TIGHT);
     });
 
-    // The two measured hits overkill Colosso (261,112 against 251,155 HP), so they come from a
-    // different fight than his measured hits on Graphite. Each is matched by one extra buff worth
-    // +45% crit power on the hitter (Crit Power Up III, Thresh's fifth buff); no ship in the team's
-    // round-1 casts grants it.
-    it.todo(
-        "Judge's opening active crits Colosso for 115,783 (needs the Crit Power Up III source)"
-    );
-    it.todo(
-        "Thresh's opening active crits Colosso for 145,329 (needs the Crit Power Up III source)"
-    );
+    it("Thresh's opening active crits Colosso for 145,329 under Crit Power Up III", () => {
+        expect(grantedBeforeAttack(result, 'Crit Power Up III', 'Thresh', 'Thresh', 1)).toBe(true);
+        const hit = hitsBy(result, 'Thresh', 1).find((t) => t.targetId === colosso);
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 145_329, TIGHT);
+    });
+
+    it("Thresh's hit destroys Colosso and the player wins in round 1", () => {
+        const death = entriesOf(result).find(
+            ({ entry }) => entry.kind === 'death' && entry.actorId === colosso
+        );
+        expect(death && nameOf(result, death.entry.targets[0].targetId)).toBe('Thresh');
+        expect(result.outcome).toMatchObject({ winner: 'player', lastRound: 1 });
+    });
 });
 
 describe('a full Colosso fight with the owner team', () => {
