@@ -74,4 +74,41 @@ describe('encounterBoard', () => {
         expect(result.enemyBoard.T2?.overrides).toEqual({ speed: 5 });
         expect(result.enemyBoard.M4?.ship.id).toBe('npc:capo:124');
     });
+
+    it('places Colosso on his anchor and a Major Grand on each add cell', () => {
+        const board = encounterBoard('colosso', 32)!;
+        expect(Object.keys(board).sort()).toEqual(['B1', 'M2', 'T1', 'T3']);
+        expect(board.T3?.ship.id).toBe('boss:colosso:32');
+        for (const cell of ['T1', 'M2', 'B1'] as const) {
+            expect(board[cell]?.ship.id).toBe('npc:major-grand:124');
+        }
+        expect(loadedBossShipId(board)).toBe('boss:colosso:32');
+        expect(withoutStrayBossCells(board)).toBe(board);
+    });
+
+    it('round-trips Colosso and his Major Grands through a saved setup', () => {
+        const board = encounterBoard('colosso', 32)!;
+        board.M2 = { ...board.M2!, overrides: { speed: 5 } };
+        const setup = serializeSetup({
+            name: 'x',
+            playerBoard: {},
+            enemyBoard: board,
+            seed: 1,
+            runCount: 1,
+            gridMode: 'normal',
+            savedAt: 0,
+        });
+        const result = deserializeSetup(setup, (id) =>
+            resolveShipId(id, {
+                getShipById: () => undefined,
+                units: [],
+                getAscensionStats: () => null,
+            })
+        );
+        expect(result.dropped).toEqual([]);
+        expect(Object.keys(result.enemyBoard).sort()).toEqual(['B1', 'M2', 'T1', 'T3']);
+        expect(result.enemyBoard.T3?.ship.id).toBe('boss:colosso:32');
+        expect(result.enemyBoard.M2?.overrides).toEqual({ speed: 5 });
+        expect(result.enemyBoard.B1?.ship.id).toBe('npc:major-grand:124');
+    });
 });

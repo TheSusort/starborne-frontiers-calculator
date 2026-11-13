@@ -4825,16 +4825,22 @@ const DocumentationPage: React.FC = () => {
                                         Switch the enemy board from Team to Bounty boss and use its
                                         Encounter option to load a bounty boss fight in place of a
                                         team: Fenri Khaliriz (level 32) alone, or Mamma Maglienza
-                                        (level 32) with three level 124 Capo escorts. Mamma fills
-                                        four cells and each Capo one, so the rest of the enemy board
-                                        stays closed and none of them can be moved or removed alone.
-                                        Shift+Click still opens the stat editor on each. The enemy
-                                        squad leader is replaced by a note that bosses have none.
-                                        Killing the boss wins the fight even with escorts left
-                                        standing. Mamma and the Capos hit a whole row of your team:
-                                        the fullest row for Mamma, the emptiest for the Capos.
-                                        Encounters need the normal board; None brings the empty
-                                        board back
+                                        (level 32) with three level 124 Capo escorts, or General
+                                        Colosso (level 32) with three level 124 Major Grand escorts.
+                                        Mamma fills four cells and each Capo one, and Colosso fills
+                                        four cells and each Major Grand one, so the rest of the
+                                        enemy board stays closed and none of them can be moved or
+                                        removed alone. Shift+Click still opens the stat editor on
+                                        each. The enemy squad leader is replaced by a note that
+                                        bosses have none. Killing the boss wins the fight even with
+                                        escorts left standing. Mamma and the Capos hit a whole row
+                                        of your team: the fullest row for Mamma, the emptiest for
+                                        the Capos. The Major Grands tag your ships with Marked, and
+                                        Colosso hits every Marked ship one by one; if none are
+                                        Marked he hits your front ship with splash on its
+                                        neighbours. Colosso cannot be controlled, takes no damage
+                                        over time and never loses charge. Encounters need the normal
+                                        board; None brings the empty board back
                                     </li>
                                 </ul>
                             </div>
