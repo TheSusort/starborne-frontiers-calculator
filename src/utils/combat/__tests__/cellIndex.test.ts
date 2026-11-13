@@ -179,16 +179,11 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         reason: 'Mode gate: is the caster placed and is any opposing unit targetable.',
         count: 6,
     },
-    // --- the CASTER's own cell: a multi-hex caster casts from its anchor ---
+    // --- the CASTER's own cell: a multi-hex caster casts from its centre (`aimCellOf`) ---
     {
-        file: 'combat/engine.ts',
-        snippet: 'a.position!,',
-        reason: 'Caster row-scan origin for target selection (`selectTurnTarget`).',
-    },
-    {
-        file: 'combat/engine.ts',
-        snippet: 'actingPosition: actor.position!',
-        reason: 'Caster row-scan origin for the per-hit re-resolution.',
+        file: 'combat/cellIndex.ts',
+        snippet: 'footprintLabelCell(a.footprint) : a.position',
+        reason: '`aimCellOf`: a one-hex caster casts from its own cell.',
     },
     {
         file: 'combat/engine.ts',

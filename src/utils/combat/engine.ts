@@ -106,7 +106,7 @@ import {
     resolvesPositionalVictim,
     type PositionalActing,
 } from './positionalBinding';
-import type { CellOccupant } from './cellIndex';
+import { aimCellOf, type CellOccupant } from './cellIndex';
 import {
     applyPositionalDamage,
     damagedVictim,
@@ -10383,7 +10383,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             const selected =
                 resolvesPositionalVictim(a.position, tb.opposingRoster) && target
                     ? resolvePositionalTargetCell(
-                          a.position!,
+                          aimCellOf(a)!,
                           target,
                           tb.opposingRoster,
                           statusLookupFor(tb.opposingRoster),
@@ -11272,7 +11272,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 hitCrits: sel.hitCrits,
                 pattern: sel.pattern,
                 target: sel.target,
-                actingPosition: actor.position!,
+                actingPosition: aimCellOf(actor)!,
                 // Both reads are needed: selectTurnTarget picks the cast's `tgt`, while this loop
                 // re-resolves the anchor for every hit — a bypass read at only one of them would
                 // let the two disagree about which victim the cast is actually pointed at.

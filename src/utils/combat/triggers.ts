@@ -4496,7 +4496,7 @@ export function debuffHolderCounts(
 ): Record<string, number> {
     const counts: Record<string, number> = {};
     for (const { id } of actors) {
-        for (const name of ownerDebuffNamesFor(statusEngine, id)) {
+        for (const name of new Set(ownerDebuffNamesFor(statusEngine, id))) {
             counts[name] = (counts[name] ?? 0) + 1;
         }
     }

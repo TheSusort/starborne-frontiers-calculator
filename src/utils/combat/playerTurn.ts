@@ -507,17 +507,17 @@ export interface PlayerTurnResult {
         phase: 'before-damage' | 'after-damage'
     ) => DeferredEnemyApplication[];
     /**
-     * Fires this cast's passive gains that ride each hit (`TimedStatus.perHit`) for ONE
-     * sub-attack, gated on the enemies that sub-attack did damage to (`directVictimIds`, R178,
-     * #655). The engine calls it at every sub-attack's end, the first included. Present only on a
-     * positional cast carrying such a gain, like `applyDebuffsForSubAttack`.
-     */
-    /**
      * The statuses this cast's `remove-target-status` clauses clear from every primary target it
      * struck, after the hit. The engine removes them at each sub-attack's end. Empty for a cast
      * with no such clause.
      */
     primaryStatusRemovals: string[];
+    /**
+     * Fires this cast's passive gains that ride each hit (`TimedStatus.perHit`) for ONE
+     * sub-attack, gated on the enemies that sub-attack did damage to (`directVictimIds`, R178,
+     * #655). The engine calls it at every sub-attack's end, the first included. Present only on a
+     * positional cast carrying such a gain, like `applyDebuffsForSubAttack`.
+     */
     applyPerHitSelfStatusesForSubAttack?: (sub: {
         index: number;
         anchorId: string;

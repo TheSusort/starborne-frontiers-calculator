@@ -420,3 +420,68 @@ describe.each(SIDES)('Marked is unremovable, holder on the %s side', (placement)
         expect(debuffs.get(id(holder))).not.toContain('Speed Down I');
     });
 });
+
+describe.each(SIDES)('multi-hex Colosso aims from his centre, on the %s side', (placement) => {
+    // His real footprint T3/M3/M4/B3: anchor T3, centre M3. Enemies hold rows T and M. Scanning
+    // from his anchor row T would hit t4; from his centre row M he hits m4, and the horseshoe
+    // around M4 covers M3, T3 and T4.
+    const FOOTPRINT = ['T3', 'M3', 'M4', 'B3'] as const;
+
+    it('hits the M-row front with the horseshoe around it, nobody Marked', () => {
+        const opp = [
+            dummy('t4', 'T4'),
+            dummy('t3', 'T3'),
+            dummy('t2', 'T2'),
+            dummy('m4', 'M4'),
+            dummy('m3', 'M3'),
+            dummy('m2', 'M2'),
+        ];
+        const caster = colosso('T3');
+        const { input, id } = boardInput(placement, caster, [], opp, 1);
+        const withFootprint =
+            placement === 'player'
+                ? { ...input, footprint: FOOTPRINT }
+                : {
+                      ...input,
+                      enemyAttackers: input.enemyAttackers.map((e) =>
+                          e.id === caster.id ? { ...e, footprint: FOOTPRINT } : e
+                      ),
+                  };
+        const { hits } = runRound1(withFootprint, id(caster));
+        const byId = (unitId: string) => id(opp.find((u) => u.id === unitId)!);
+        expect(hits.get(byId('m4'))).toEqual({ taken: FULL, primary: [true] });
+        for (const covered of ['m3', 't3', 't4'])
+            expect(hits.get(byId(covered))).toEqual({ taken: FULL / 2, primary: [false] });
+        expect(hits.has(byId('m2'))).toBe(false);
+        expect(hits.has(byId('t2'))).toBe(false);
+    });
+
+    it('every hit of a multi-hit cast re-resolves from his centre too', () => {
+        // Two hits: the second re-resolves its anchor from the live board.
+        const kit = colossoKit();
+        const twoHits: ShipSkills = {
+            ...kit,
+            slots: kit.slots.map((slot) => ({
+                ...slot,
+                abilities: slot.abilities.map((a) =>
+                    a.config.type === 'damage' ? { ...a, config: { ...a.config, hits: 2 } } : a
+                ),
+            })),
+        };
+        const opp = [dummy('t4', 'T4'), dummy('m4', 'M4')];
+        const caster = colosso('T3', twoHits);
+        const { input, id } = boardInput(placement, caster, [], opp, 1);
+        const withFootprint =
+            placement === 'player'
+                ? { ...input, footprint: FOOTPRINT }
+                : {
+                      ...input,
+                      enemyAttackers: input.enemyAttackers.map((e) =>
+                          e.id === caster.id ? { ...e, footprint: FOOTPRINT } : e
+                      ),
+                  };
+        const { hits } = runRound1(withFootprint, id(caster));
+        expect(hits.get(id(opp[1]))?.primary).toEqual([true, true]);
+        expect(hits.get(id(opp[0]))?.primary).toEqual([false, false]);
+    });
+});
