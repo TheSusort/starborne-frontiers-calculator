@@ -71,8 +71,25 @@ describe('FormationGrid boss portrait', () => {
         );
         const srcs = [...container.querySelectorAll('img')].map((img) => img.getAttribute('src'));
         const portraits = srcs.filter((src) => src?.includes('Fenri_Khaliriz'));
-        // On the anchor cell only, not repeated on the cell it also covers.
-        expect(portraits).toHaveLength(1);
-        expect(portraits[0]).toMatch(/w_\d+/);
+        // On every cell the boss covers.
+        expect(portraits).toHaveLength(bossFootprintOfId(boss.id)!.length);
+        for (const src of portraits) expect(src).toMatch(/w_\d+/);
+    });
+});
+
+describe('FormationGrid boss name', () => {
+    it('draws the name on the middle hex of the footprint, keeping the anchor named', () => {
+        const mamma = bossShip('maglienza', 32)!;
+        render(
+            <FormationGrid
+                formation={[{ position: 'T1', shipId: mamma.id }]}
+                resolveShip={(pos) => (pos === 'T1' ? mamma : null)}
+                footprintOf={bossFootprintOfId}
+            />
+        );
+        const middle = screen.getByRole('button', { name: `${mamma.name} (also covers M2)` });
+        expect(middle).toHaveTextContent(mamma.name);
+        expect(screen.getAllByText(mamma.name)).toHaveLength(1);
+        expect(screen.getByRole('button', { name: mamma.name })).not.toHaveTextContent(mamma.name);
     });
 });

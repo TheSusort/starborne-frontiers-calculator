@@ -63,6 +63,21 @@ export function neighbors(pos: Position): Position[] {
     return out;
 }
 
+/** Where a multi-hex unit's name is drawn: the footprint cell touching the most of its other
+ *  cells, so the label sits in the middle of the unit. Ties keep the earlier cell (the anchor). */
+export function footprintLabelCell(footprint: readonly Position[]): Position {
+    let best = footprint[0];
+    let bestCount = -1;
+    for (const cell of footprint) {
+        const count = neighbors(cell).filter((n) => footprint.includes(n)).length;
+        if (count > bestCount) {
+            best = cell;
+            bestCount = count;
+        }
+    }
+    return best;
+}
+
 /** The small grid: M3 and its six neighbours, a hex "flower" of seven cells (two on top, three
  *  in the middle, two at the bottom). Pinned against `neighbors('M3')` by `board.test.ts`. */
 export const SMALL_GRID_POSITIONS: readonly Position[] = ['T2', 'T3', 'M2', 'M3', 'M4', 'B2', 'B3'];

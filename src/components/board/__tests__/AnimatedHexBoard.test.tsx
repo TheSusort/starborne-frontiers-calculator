@@ -104,6 +104,27 @@ describe('AnimatedHexBoard multi-hex units', () => {
         expect(picked).toEqual(['M1']);
     });
 
+    it('draws the unit’s portrait and hull on a covered cell, hidden from assistive tech', () => {
+        const { container } = render(
+            <AnimatedHexBoard
+                cells={ALL_POSITIONS}
+                ships={{ M1: ship({ name: 'Boss', imageUrl: 'boss.png', hpPct: 40 }) }}
+                secondaryCells={{ M2: 'M1' }}
+                tone="enemy"
+                label="Board"
+            />
+        );
+        const m2 = container.querySelector('[data-cell="M2"]') as HTMLElement;
+        expect(m2.querySelector('img')).toHaveAttribute('src', 'boss.png');
+        expect(
+            within(m2).getByRole('progressbar', { name: 'Boss hull', hidden: true })
+        ).toHaveAttribute('aria-valuenow', '40');
+        expect(within(m2).queryByRole('progressbar', { name: 'Boss hull' })).toBeNull();
+        expect(
+            within(m2).queryByRole('progressbar', { name: 'Boss charge', hidden: true })
+        ).toBeNull();
+    });
+
     it('keeps a covered cell’s rim and dimmed look when the unit is destroyed', () => {
         const { container } = render(
             <AnimatedHexBoard

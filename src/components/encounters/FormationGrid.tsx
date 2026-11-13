@@ -7,6 +7,7 @@ import { Ship } from '../../types/ship';
 import { useShipsData } from '../../hooks/useShipsData';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { bountyImageKey } from '../../constants/bounties';
+import { footprintLabelCell } from '../../utils/targeting/board';
 import { ChevronLeftIcon, ChevronRightIcon, GearIcon } from '../ui/icons';
 
 /** Display width a bounty boss's full-size portrait is scaled to on a grid cell. */
@@ -109,6 +110,16 @@ const FormationGrid: React.FC<FormationGridProps> = ({
         }
         return map;
     }, [formation, footprintOf]);
+    // Anchor cell -> the footprint cell its name is drawn on, for units whose name moves.
+    const labelCellOf = useMemo(() => {
+        const map = new Map<Position, Position>();
+        if (!footprintOf) return map;
+        for (const entry of formation) {
+            const footprint = footprintOf(entry.shipId);
+            if (footprint) map.set(entry.position, footprintLabelCell(footprint));
+        }
+        return map;
+    }, [formation, footprintOf]);
     const rows: Position[][] = [
         ['T1', 'T2', 'T3', 'T4'],
         ['M1', 'M2', 'M3', 'M4'],
@@ -183,16 +194,16 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                         const isSecondary = anchorPos !== undefined;
                         // Every interaction on a unit's secondary cell acts on its anchor.
                         const targetPos = anchorPos ?? pos;
+                        // The cell that carries the unit's name, stars and override marker.
+                        const isLabelCell = (labelCellOf.get(targetPos) ?? targetPos) === pos;
                         const shipPosition = formation.find((s) => s.position === targetPos);
                         const ship = getShipForPosition(targetPos);
                         const fullShip = ship && isFullShip(ship) ? ship : null;
                         const template = ship ? getTemplateData(ship.name) : null;
                         const rawImageKey = fullShip?.imageKey || template?.imageKey;
-                        // A boss's portrait shows on its anchor cell only, like its name.
+                        // A boss's portrait shows on every cell it covers; its name on the anchor only.
                         const bossImageKey =
-                            ship && !rawImageKey && !isSecondary
-                                ? bountyImageKey(ship.name)
-                                : undefined;
+                            ship && !rawImageKey ? bountyImageKey(ship.name) : undefined;
                         const imageKey = rawImageKey
                             ? `${rawImageKey}_BigPortrait.jpg`
                             : bossImageKey;
@@ -205,7 +216,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                         // The cell's hex clip-path removes the corners, so the override marker rides in the
                         // bottom stack with the ship name rather than floating in a corner.
                         const overrideMarker =
-                            hasOverrides?.(targetPos) && !isSecondary ? (
+                            hasOverrides?.(targetPos) && isLabelCell ? (
                                 <span className="text-[9px] font-bold text-amber-400 leading-tight">
                                     MOD
                                 </span>
@@ -240,10 +251,12 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                     aria-label={
                                         isSecondary && ship
                                             ? `${ship.name} (also covers ${pos})`
-                                            : undefined
+                                            : ship && !isLabelCell
+                                              ? ship.name
+                                              : undefined
                                     }
                                 >
-                                    {isSecondary ? null : ship ? (
+                                    {!isLabelCell ? null : ship ? (
                                         <div
                                             className="flex flex-col items-center justify-end w-full h-full
                     scale-[0.9151]"

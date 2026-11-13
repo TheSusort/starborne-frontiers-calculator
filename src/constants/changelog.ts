@@ -4,7 +4,11 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: bounty bosses now show portrait and health on every tile they cover.',
+    'Combat simulator: bounty boss names now sit on the middle hex.',
+    'Combat simulator: Capo now shows its portrait on the boards and in playback.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

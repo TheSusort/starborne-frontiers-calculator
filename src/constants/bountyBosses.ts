@@ -105,6 +105,9 @@ export interface BountyAdd {
     name: string;
     affinity: AffinityName;
     type: ShipTypeName;
+    /** The unit's portrait: a Cloudinary public id of full-size art, scaled on delivery like a
+     *  bounty boss's (`bountyPortraitUrl`). */
+    imageKey: string;
     level: number;
     activeTarget: string;
     activePattern: string;
@@ -123,6 +126,7 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
         name: 'Capo',
         affinity: 'electric',
         type: 'DEFENDER',
+        imageKey: 'Capo',
         level: 124,
         activeTarget: 'row-least',
         activePattern: 'Pattern-Row',

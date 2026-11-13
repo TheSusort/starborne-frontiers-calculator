@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     ALL_POSITIONS,
+    footprintLabelCell,
     neighbors,
     inBoundsAxial,
     positionToAxial,
@@ -80,5 +81,16 @@ describe('SMALL_GRID_POSITIONS', () => {
     it('is M3 and its six neighbours, each once', () => {
         expect(SMALL_GRID_POSITIONS).toHaveLength(7);
         expect(new Set(SMALL_GRID_POSITIONS)).toEqual(new Set(['M3', ...neighbors('M3')]));
+    });
+});
+
+describe('footprintLabelCell', () => {
+    it('picks the cell touching the most of the footprint', () => {
+        expect(footprintLabelCell(['T1', 'M2', 'M3', 'B1'])).toBe('M2');
+    });
+
+    it('keeps the anchor on a tie', () => {
+        expect(footprintLabelCell(['M1', 'M2'])).toBe('M1');
+        expect(footprintLabelCell(['M3'])).toBe('M3');
     });
 });

@@ -40,13 +40,55 @@ const TONE_RIM: Record<'player' | 'enemy', string> = {
     enemy: 'bg-red-500/70',
 };
 
+/** A unit's cell. `covered` draws one of a multi-hex unit's other cells: the portrait and the
+ *  hull and shield bars only, hidden from assistive tech (the cell's button names the unit); the
+ *  name, charge bar, status chips, floating numbers, hit flash and banner stay on the anchor. */
 const ShipCell: React.FC<{
     ship: HexBoardShip;
     mirrored: boolean;
     tone: 'player' | 'enemy';
     selected: boolean;
-}> = ({ ship, mirrored, tone, selected }) => {
+    covered?: boolean;
+}> = ({ ship, mirrored, tone, selected, covered = false }) => {
     const { hpPct: hp, shieldPct: shield, chargePct } = ship;
+    if (covered) {
+        return (
+            <HexTile
+                rimClassName={
+                    selected ? 'bg-yellow-500' : ship.acting ? 'bg-primary' : TONE_RIM[tone]
+                }
+                className={ship.alive ? '' : 'opacity-40 grayscale'}
+            >
+                <div aria-hidden="true">
+                    {ship.imageUrl && (
+                        <div className="absolute inset-x-[8%] top-[10%] bottom-[38%] flex items-center justify-center">
+                            <img
+                                src={ship.imageUrl}
+                                alt=""
+                                className={`max-h-full max-w-full object-contain ${mirrored && !ship.facesOpponent ? '-scale-x-100' : ''}`}
+                            />
+                        </div>
+                    )}
+                    <div className="absolute inset-x-[14%] top-[64%] space-y-px">
+                        <MeterBar
+                            percentage={hp}
+                            label={`${ship.name} hull`}
+                            fillClassName={hpFill(hp)}
+                            className="!h-1 sm:!h-1.5 !rounded-none"
+                        />
+                        <div className={shield > 0 ? '' : 'invisible'}>
+                            <MeterBar
+                                percentage={shield}
+                                label={`${ship.name} shield`}
+                                fillClassName="bg-sky-400"
+                                className="!h-0.5 sm:!h-1 !rounded-none"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </HexTile>
+        );
+    }
     return (
         <>
             <HexTile
@@ -145,8 +187,8 @@ interface AnimatedHexBoardProps {
     /** The cell drawn as selected (a yellow rim). */
     selectedCell?: Position | null;
     /** Cells covered by a multi-hex unit, each mapped to the unit's anchor cell (the key `ships`
-     *  uses). A covered cell draws the unit's rim only (the anchor cell carries the name and the
-     *  bars), and selects the anchor. */
+     *  uses). A covered cell draws the unit's portrait and hull and shield bars (the anchor cell
+     *  carries the rest), and selects the anchor. */
     secondaryCells?: Partial<Record<Position, Position>>;
     /** With `onSelectCell`, fired with an occupied cell (the anchor for a covered one) and its
      *  button, to anchor a popover to, when the pointer enters or focus lands on it, and with
@@ -215,12 +257,13 @@ export const AnimatedHexBoard: React.FC<AnimatedHexBoardProps> = ({
                 const ship = ships[cell];
                 if (anchor && anchorShip) {
                     const covered = (
-                        <HexTile
-                            rimClassName={
-                                selectedCell === anchor ? 'bg-yellow-500' : TONE_RIM[tone]
-                            }
-                            className={anchorShip.alive ? '' : 'opacity-40 grayscale'}
-                        ></HexTile>
+                        <ShipCell
+                            ship={anchorShip}
+                            mirrored={mirrored}
+                            tone={tone}
+                            selected={selectedCell === anchor}
+                            covered
+                        />
                     );
                     return (
                         <div

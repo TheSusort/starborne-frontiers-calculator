@@ -19,7 +19,11 @@ describe('bounty portraits', () => {
     it('finds a portrait by boss name, ignoring case', () => {
         expect(bountyImageKey('Mamma Maglienza')).toBe('Mamma_Maglienza');
         expect(bountyImageKey('fenri khaliriz')).toBe('Fenri_Khaliriz');
-        expect(bountyImageKey('Capo')).toBeUndefined();
+        expect(bountyImageKey('Judge')).toBeUndefined();
+    });
+
+    it('finds a bounty add portrait too', () => {
+        expect(bountyImageKey('capo')).toBe('Capo');
     });
 });
 
