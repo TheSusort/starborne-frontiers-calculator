@@ -185,6 +185,23 @@ export function conditionSummary(condition: Condition): string {
             }
             return fallbackLabel(condition.subject);
         }
+        // 'enemy-debuff-holder-count' counts enemies HOLDING the named debuff, so its buffName and
+        // threshold combine into one phrase; `eq 0` reads as an absence ("while no enemy has X").
+        case 'enemy-debuff-holder-count': {
+            if (
+                condition.buffName &&
+                condition.countComparator &&
+                condition.countThreshold !== undefined
+            ) {
+                const n = condition.countThreshold;
+                if (condition.countComparator === 'eq' && n === 0) {
+                    return `while no enemy has ${condition.buffName}`;
+                }
+                const comparatorWord = COUNT_COMPARATOR_WORDS[condition.countComparator];
+                return `while ${comparatorWord} ${n} ${n === 1 ? 'enemy has' : 'enemies have'} ${condition.buffName}`;
+            }
+            return fallbackLabel(condition.subject);
+        }
         default:
             return fallbackLabel(condition.subject);
     }

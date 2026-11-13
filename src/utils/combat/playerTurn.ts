@@ -6351,8 +6351,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // accumulators (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
         // Skipped when the cast's first roll failed and no later stack or accumulator landed
         // either: nothing was appended, and skipping keeps the deterministic extendChanceGate
-        // schedule free of phantom draws.
-        if (castRoll || landedPrimaryDots.length > 0 || accumulatorsLanded > 0) {
+        // schedule free of phantom draws. A cast whose every DoT the target is immune to
+        // (`immuneToDot`) gets the same skip: its `castRoll` is vacuously true with nothing
+        // attempted, so only a landed accumulator opens the pass.
+        const everyDotImmune = dotsConfig.length > 0 && primaryDotsConfig.length === 0;
+        if (
+            (castRoll && !everyDotImmune) ||
+            landedPrimaryDots.length > 0 ||
+            accumulatorsLanded > 0
+        ) {
             afterCastDots(enemy.id, primaryDotsHeld, () => {
                 extendInflictedDoTs({
                     abilities: [
