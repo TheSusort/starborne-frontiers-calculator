@@ -6699,6 +6699,8 @@ function findNthOccurrencePos(text: string, name: string, occurrenceIndex: numbe
  *      · NO explicit receiver, self-only status ("This Unit grants Taunt")   → 'self'
  *      · NO explicit receiver ("This Unit grants X")                         → 'all-allies'
  *      · NO explicit receiver in a clause that deals damage (Lionheart)        → 'self'
+ *      · NO explicit receiver beside a receiver-less cleanse, in a skill that
+ *        deals damage ("this Unit cleanses 2 debuffs and grants X")         → 'self'
  *
  * Returns a LIST because of that one combined receiver: the caster and its board neighbours are
  * disjoint recipient sets (`adjacentAllyIds` excludes the owner) and no single scope spans them.

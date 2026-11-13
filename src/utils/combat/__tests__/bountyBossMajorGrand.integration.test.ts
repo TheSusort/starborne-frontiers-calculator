@@ -184,6 +184,83 @@ describe.each(SIDES)('Major Grand with fewer than 2 debuffs, on the %s side', (p
         const { input, id } = boardInput(placement, caster, [], opp, 1);
         expect(runRound1(input, id(caster)).buffs.get(id(caster))).toContain(ATTACK_PROBE);
     });
+
+    /** Marked landings and resists over `rounds` rounds of the Major Grand's casts, at 40
+     *  hacking against 0-security victims: 40% without Hacking Up III's +60, certain with it. */
+    const markedRolls = (kit: ShipSkills, rounds: number) => {
+        const opp = [dummy('m3', 'M3'), dummy('m2', 'M2')];
+        const caster = grand('M1', { kit, hacking: 40 });
+        const { input, id } = boardInput(placement, caster, [], opp, rounds);
+        const bus = createEventBus();
+        const out = { landed: 0, resisted: 0 };
+        bus.on('debuff-applied', (e: Extract<CombatEvent, { type: 'debuff-applied' }>) => {
+            if (e.sourceId === id(caster) && e.buffName === 'Marked') out.landed++;
+        });
+        bus.on('debuff-resisted', (e: Extract<CombatEvent, { type: 'debuff-resisted' }>) => {
+            if (e.sourceId === id(caster) && e.buffName === 'Marked') out.resisted++;
+        });
+        runCombat({ ...input, bus });
+        return out;
+    };
+    const withoutHackingUp = (kit: ShipSkills): ShipSkills => ({
+        ...kit,
+        slots: kit.slots.map((slot) => ({
+            ...slot,
+            abilities: slot.abilities.filter(
+                (a) => !(a.config.type === 'buff' && a.config.buffName === 'Hacking Up III')
+            ),
+        })),
+    });
+
+    // KNOWN GAP (spec: "its self Hacking Up III raises the roll"): the engine lands a firing-slot
+    // hacking gain ahead of the cast's landing rolls only when it is UNGATED (playerTurn.ts,
+    // `selfStatusesBeforeRolls`); this one carries the under-2-debuffs gate, so it lands after the
+    // rolls. `it.fails` flips red once the gap closes — then make it a plain `it`.
+    it.fails('its own Hacking Up III counts toward the Marked roll of the same cast', () => {
+        expect(markedRolls(grandKit(), 4)).toEqual({ landed: 8, resisted: 0 });
+    });
+
+    it('validity: without Hacking Up III the same Marks are resisted at times', () => {
+        const { landed, resisted } = markedRolls(withoutHackingUp(grandKit()), 4);
+        expect(landed + resisted).toBe(8);
+        expect(resisted).toBeGreaterThan(0);
+    });
+});
+
+describe.each(SIDES)('Major Grand counting DoT stacks as debuffs, on the %s side', (placement) => {
+    const dot = (id: string, dotType: 'corrosion' | 'inferno', tier: number): Ability => ({
+        id,
+        type: 'dot',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'dot', dotType, tier, stacks: 1, duration: 3 },
+    });
+    /** A fast unit that lands `abilities` on the Major Grand (its row's front-most ship). */
+    const burner = (abilities: Ability[]): BoardUnit => ({
+        id: 'm3',
+        kit: { slots: [{ slot: 'active', abilities }] },
+        position: 'M3',
+        speed: 400,
+        attack: 1,
+        hacking: 100_000,
+    });
+
+    it.each([
+        ['two DoT stacks', [dot('c', 'corrosion', 3), dot('i', 'inferno', 15)]],
+        [
+            'a stat debuff and a DoT stack',
+            [debuffAbility('Attack Down I'), dot('c', 'corrosion', 3)],
+        ],
+    ])('with %s it takes the 2+ branch and cleanses both', (_what, abilities) => {
+        const opp = [burner(abilities), dummy('m2', 'M2')];
+        const caster = grand('M1');
+        const { input, id } = boardInput(placement, caster, [], opp, 1);
+        const r = runRound1(input, id(caster));
+        expect(r.hit.size).toBe(0);
+        expect(r.granted.get(id(caster))).toEqual(['Security Up II']);
+        expect(r.cleansed).toBe(2);
+    });
 });
 
 describe.each(SIDES)('Major Grand with 2 or more debuffs, on the %s side', (placement) => {
