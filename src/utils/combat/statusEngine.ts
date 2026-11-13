@@ -1420,7 +1420,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *    skips two of its turns). A cast never debuffs its own caster, so on the debuff side this
      *    is exactly "landed during a reaction on the holder's own turn". A reaction anywhere else
      *    needs no reprieve: its holder's next Post-Turn is after the holder's next turn anyway.
-     * Writes after the Post-Turn (turn-ended and round-ended drains, the Overclock hangover) find
+     * Writes after the Post-Turn (turn-ended and round-ended drains) find
      * `currentTurnActorId` cleared and tick normally.
      */
     const landsOnActingHolder = (holderId: string): boolean => holderId === currentTurnActorId;

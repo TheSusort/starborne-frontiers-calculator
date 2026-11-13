@@ -807,8 +807,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Overclock III',
-        description:
-            '+30% Attack, +60% Crit Power. On removal or expiration, apply Speed Down I and Attack Down I to self for 2 turns.',
+        description: '+30% Attack, +60% Crit Power',
         type: 'buff',
     },
     {

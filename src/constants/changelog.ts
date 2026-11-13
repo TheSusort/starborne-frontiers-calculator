@@ -8,6 +8,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: bounty bosses now show portrait and health on every tile they cover.',
     'Combat simulator: bounty boss names now sit on the middle hex.',
     'Combat simulator: Capo now shows its portrait on the boards and in playback.',
+    'Combat simulator: Overclock no longer slows or weakens its holder when it ends.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

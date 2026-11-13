@@ -57,11 +57,6 @@ import { composeDotDamageFactor } from '../damageComposition';
 import { ONE_SHOT_PERSISTENT_BUFFS } from '../../constants/oneShotPersistentBuffs';
 import { dotResistLabel, isBlockDebuff, targetCarriesBlockDebuff } from './debuffImmunity';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
-import {
-    createOverclockHangoverTracker,
-    isOverclock,
-    overclockHangoverStatuses,
-} from './overclockHangover';
 import { aliveTargetsOf, type AliveRoster } from './targetableActors';
 import {
     foldActorBuffTotals,
@@ -6216,29 +6211,6 @@ export function runCombat(rawInput: CombatEngineInput): {
         for (const victimId of markedVictims) {
             if (castStasisStandsOn(victimId)) continue;
             stasisBreakPending.set(victimId, (stasisBreakPending.get(victimId) ?? 0) + 1);
-        }
-    };
-
-    // Overclock's "on removal or expiration" hangover — see overclockHangover.ts.
-    const overclockHangover = createOverclockHangoverTracker();
-    const settleOverclockHangovers = (round: number): void => {
-        const lost = overclockHangover.settle(
-            (id) => selfBuffNamesForOwners(statusEngine, [id]).some(isOverclock),
-            [...allActorsById.values()].filter((a) => a.currentHp > 0).map((a) => a.id)
-        );
-        for (const holderId of lost) {
-            if (targetCarriesBlockDebuff(statusEngine, holderId)) continue;
-            for (const status of overclockHangoverStatuses(holderId)) {
-                statusEngine.applyTimedAbilityStatus(round, status, undefined, holderId);
-                bus.emit({
-                    type: 'debuff-applied',
-                    sourceId: holderId,
-                    targetId: holderId,
-                    round,
-                    buffName: status.payload.buffName,
-                    application: 'apply',
-                });
-            }
         }
     };
 
@@ -14069,9 +14041,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 for (const buffName of statusEngine.decrementEnemy(actor.id).expired) {
                     bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                 }
-                // After BOTH decrements, so a hangover landing on this actor keeps its full 2 turns.
-                settleOverclockHangovers(r);
-
                 bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
                 // Drain intents enqueued by end-of-turn triggers before the next actor acts.
                 drainReactions();
@@ -14358,9 +14327,6 @@ export function runCombat(rawInput: CombatEngineInput): {
         // after the turn loop; it resolves in turn order (see `drainInTurnOrder`).
         bus.emit({ type: 'round-ended', round: r });
         if (!bossEndedMatch) drainEndOfRound();
-        // An end-of-round purge ends after the last Post Turn settle; the hangover lands now.
-        settleOverclockHangovers(r);
-
         // Exposed is "removed after taking direct damage or at the end of the round": whatever
         // stacks no hit spent this round go now, after the round's last drain. The Post-Turn
         // countdown skips it (statusEngine's decrementEnemy), so this is its only expiry.

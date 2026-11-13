@@ -1329,7 +1329,6 @@ exports[`kit fingerprints > Howler 1`] = `
     "buff:charged",
     "charge-changed",
     "cleanse",
-    "debuff",
     "heal",
   ],
   "richEnemy": [
@@ -1339,7 +1338,6 @@ exports[`kit fingerprints > Howler 1`] = `
     "buff:charged",
     "charge-changed",
     "cleanse",
-    "debuff",
     "heal",
   ],
   "statusRich": [
@@ -1349,7 +1347,6 @@ exports[`kit fingerprints > Howler 1`] = `
     "buff:charged",
     "charge-changed",
     "cleanse",
-    "debuff",
     "heal",
   ],
   "wounded": [
@@ -1359,7 +1356,6 @@ exports[`kit fingerprints > Howler 1`] = `
     "buff:charged",
     "charge-changed",
     "cleanse",
-    "debuff",
     "heal",
   ],
 }

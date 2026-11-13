@@ -105,12 +105,26 @@ const FLEET: Record<string, FleetShip> = {
     },
 };
 
-// Thresh carries an epic Intrusion implant.
+// Thresh carries an epic Intrusion implant; Graphite wears the Boost set (her Overclock lasts 3
+// turns in game). The pieces carry no stats: each ship's planner stats are its overrides.
 const INTRUSION_ID = 'replay-intrusion';
+const BOOST_SLOTS = ['weapon', 'hull', 'generator', 'sensor'] as const;
+const boostId = (slot: string) => `replay-boost-${slot}`;
 const getGearPiece = (id: string) =>
     id === INTRUSION_ID
         ? ({ id, setBonus: 'INTRUSION', rarity: 'epic' } as unknown as GearPiece)
-        : undefined;
+        : id.startsWith('replay-boost-')
+          ? ({
+                id,
+                slot: id.slice('replay-boost-'.length),
+                level: 16,
+                stars: 6,
+                rarity: 'legendary',
+                mainStat: null,
+                subStats: [],
+                setBonus: 'BOOST',
+            } as GearPiece)
+          : undefined;
 
 const fleetShip = (name: string): Ship => {
     const entry = FLEET[name];
@@ -122,6 +136,10 @@ const fleetShip = (name: string): Ship => {
         id: `replay:${name}`,
         refits: Array.from({ length: entry.refits }, (_, i) => ({ id: `refit-${i}`, stats: [] })),
         implants: name === 'Thresh' ? ({ ultimate: INTRUSION_ID } as Ship['implants']) : {},
+        equipment:
+            name === 'Graphite'
+                ? Object.fromEntries(BOOST_SLOTS.map((slot) => [slot, boostId(slot)]))
+                : ship.equipment,
     };
 };
 
@@ -304,6 +322,23 @@ describe('replay: the owner team against Mamma Maglienza Lv32 and her Capos', ()
         const hit = first.targets.find((t) => nameOf(result, t.targetId) === 'Grif');
         expect(hit?.didCrit).not.toBe(true);
         expectMeasured(hit?.amount, 6_799, TIGHT);
+    });
+
+    // Graphite's Boosted Overclock lasts 3 turns, so Judge still holds it in round 5 and its
+    // expiry never slows him: he acts before Mamma and his active kills her.
+    it("Judge's round-5 active crits Mamma for 107,114 and wins in round 5", () => {
+        const hit = entries
+            .filter(
+                ({ round, entry }) =>
+                    round === 5 &&
+                    entry.kind === 'attack' &&
+                    entry.actorId === idOf(result, 'Judge')
+            )
+            .flatMap(({ entry }) => entry.targets)
+            .find((t) => t.targetId === mamma && (t.amount ?? 0) > 50_000);
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 107_114, TIGHT);
+        expect(result.outcome).toMatchObject({ winner: 'player', lastRound: 5 });
     });
 
     it('every hit Mamma lands strikes a single row', () => {
