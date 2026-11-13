@@ -146,6 +146,7 @@ export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
 import { scaledStatusCount } from './statusCountScaling';
 import { isStasis } from './stasisBuffs';
 import { immuneToEnemyStatus } from './controlImmunity';
+import { immuneToDot, withoutImmuneDots } from './dotImmunity';
 export { scaledStatusCount };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
@@ -507,6 +508,12 @@ export interface PlayerTurnResult {
         phase: 'before-damage' | 'after-damage'
     ) => DeferredEnemyApplication[];
     /**
+     * The statuses this cast's `remove-target-status` clauses clear from every primary target it
+     * struck, after the hit. The engine removes them at each sub-attack's end. Empty for a cast
+     * with no such clause.
+     */
+    primaryStatusRemovals: string[];
+    /**
      * Fires this cast's passive gains that ride each hit (`TimedStatus.perHit`) for ONE
      * sub-attack, gated on the enemies that sub-attack did damage to (`directVictimIds`, R178,
      * #655). The engine calls it at every sub-attack's end, the first included. Present only on a
@@ -798,6 +805,7 @@ const CONDITION_CONTEXT_SUBJECT = {
     adjacentAllyCount: 'caster',
     enemyAdjacentCount: 'victim',
     enemyDestroyedCount: 'caster',
+    allyDestroyedCount: 'caster',
     selfHpPct: 'caster',
     enemyHpPct: 'victim',
     targetHpPct: 'caster',
@@ -813,6 +821,7 @@ const CONDITION_CONTEXT_SUBJECT = {
     stealthedEnemyCount: 'caster',
     shieldedAllyCount: 'caster',
     debuffedEnemyCount: 'caster',
+    enemyDebuffHolderCounts: 'caster',
     selfCritPower: 'caster',
     targetCritPower: 'victim',
     selfSpeed: 'caster',
@@ -829,6 +838,12 @@ const CONDITION_CONTEXT_SUBJECT = {
 const VICTIM_CONTEXT_KEYS = (
     Object.keys(CONDITION_CONTEXT_SUBJECT) as (keyof typeof CONDITION_CONTEXT_SUBJECT)[]
 ).filter((k) => CONDITION_CONTEXT_SUBJECT[k] === 'victim');
+
+/** Condition subjects a firing-slot hacking gain's gate may read and still land before the cast's
+ *  landing rolls: the caster's own at-cast state, known before anything in the cast resolves. */
+const PRE_ROLL_GATE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set<ConditionSubject>([
+    'self-debuff',
+]);
 
 /** Condition subjects that ask about the enemy a cast strikes ("If the target has a shield", "If
  *  the primary target has 3 or more damage over time effects"). A self gain gated on one fires
@@ -1033,6 +1048,9 @@ export interface PlayerTurnArgs {
     /** Living opposing units carrying a debuff, read before the cast. NO default: absent keeps
      *  the `debuffed-enemy-count` fallback. See ConditionContext.debuffedEnemyCount. */
     debuffedEnemyCount?: number;
+    /** Living opposing units holding each named debuff, read before the cast. See
+     *  ConditionContext.enemyDebuffHolderCounts. */
+    enemyDebuffHolderCounts?: Readonly<Record<string, number>>;
     /** Count (not union) of living opposing actors currently holding
      *  the Stealth self-buff, for this actor's `enemy-stealth-count` scaling condition
      *  (Selenite's "10% more direct damage for every enemy with Stealth"). Same per-turn
@@ -1204,7 +1222,7 @@ export interface PlayerTurnArgs {
     /** True when this run can MEASURE the live adjacency / kill counts below — false under
      *  `mode: 'dps'`, where the board and the opposing roster are synthetic and a live reading
      *  would be a permanent structural 0 rather than an observation. False (or absent) withholds
-     *  all three counts from the round contexts, which is what routes their conditions back to the
+     *  these live counts from the round contexts, which is what routes their conditions back to the
      *  user's manual `manualCount ?? 1`. Set by engine.ts's `liveCountsMeasurable`. */
     liveCountsMeasurable?: boolean;
     /** Opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed the kill (owner
@@ -1214,6 +1232,10 @@ export interface PlayerTurnArgs {
      *  for non-positional/DPS callers with no opposing roster to tally; the condition then keeps
      *  its manual `manualCount ?? 1` fallback. See ConditionContext's doc on the field. */
     enemyDestroyedCount?: number;
+    /** Own-side actors destroyed SO FAR THIS BATTLE, the acting unit excluded — the live source
+     *  for General Colosso's "Outgoing damage increases by 15% for each dead ally ship" (#519),
+     *  the same-side mirror of `enemyDestroyedCount` with the same ABSENT-not-0 contract. */
+    allyDestroyedCount?: number;
     /** Resolves the SOURCE of a top-up buff-steal (Meatshield's charged Protection clause) — the
      *  LIVE opposing actor holding at least one stack of `buffName` that ranks first by board
      *  position (`positionTurnRank`; read its doc for the ordering). Supplied by engine.ts's
@@ -2235,11 +2257,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         blockDebuffPendingFor,
         liveCountsMeasurable,
         enemyDestroyedCount: enemyDestroyedCountArg,
+        allyDestroyedCount: allyDestroyedCountArg,
         selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
         // No default — undefined is the no-target / DPS sentinel (see PlayerTurnArgs doc).
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         shieldedAllyCount: shieldedAllyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -2323,7 +2347,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *
      *  Each member is ABSENT (not 0) when this caller cannot measure it, which routes the
      *  condition to its manual `manualCount ?? 1` fallback — see ConditionContext's doc on the
-     *  three fields. That distinction is the whole point: a fabricated 0 would read as "measured,
+     *  live-count fields. That distinction is the whole point: a fabricated 0 would read as "measured,
      *  nothing there", silently zeroing Panguan/Centurion/Judge in single-ship DPS mode where the
      *  user's manual count is the only honest answer.
      *
@@ -2345,6 +2369,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         adjacentAllyCount?: number;
         enemyAdjacentCount?: number;
         enemyDestroyedCount?: number;
+        allyDestroyedCount?: number;
     } = {
         ...(liveCountsMeasurable && adjacentAllyIds
             ? { adjacentAllyCount: adjacentAllyIds.length }
@@ -2354,6 +2379,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             : {}),
         ...(enemyDestroyedCountArg !== undefined
             ? { enemyDestroyedCount: enemyDestroyedCountArg }
+            : {}),
+        ...(allyDestroyedCountArg !== undefined
+            ? { allyDestroyedCount: allyDestroyedCountArg }
             : {}),
     };
 
@@ -3121,11 +3149,29 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ? ownDebuffsNow.enemyAppliedFamilies
         : args.enemyAppliedFamilies;
 
-    /** Firing-slot self statuses landed ahead of the cast's landing rolls (written order): an
-     *  ungated hacking gain whose clause precedes an infliction (`beforeInflictClause` — Rys's
-     *  "gains Hacking Up III …, and inflicts Speed Down II"). The status loop below skips them. A
-     *  gated one waits for its gate context in that loop; a gain that cannot move the roll keeps
-     *  its place there too. */
+    /** Firing-slot self statuses landed ahead of the cast's landing rolls (written order): a
+     *  hacking gain whose clause precedes an infliction (`beforeInflictClause` — Rys's "gains
+     *  Hacking Up III …, and inflicts Speed Down II"). The status loop below skips them. A gain
+     *  that cannot move the roll keeps its place there.
+     *
+     *  A self-state-only gate is decidable before the rolls: one reading only the caster's own
+     *  debuffs (`PRE_ROLL_GATE_SUBJECTS`) is asked here, through `conditionsMet`, against the
+     *  same own-debuff readings every later gate context of this cast reads (after a self-cleanse
+     *  written ahead of the damage). The Major Grand's "Hacking Up III … if it has less than 2
+     *  debuffs" is one. A gate on any other subject waits for its gate context in the loop below. */
+    const preRollGateCtx = buildRoundContext({
+        selfBuffNames: [],
+        landedEnemyDebuffCount: 0,
+        corrosionStacks: 0,
+        infernoStacks: 0,
+        bombStacks: 0,
+        effectiveCritRate: 0,
+        selfDebuffNames: selfDebuffNamesArg,
+        selfDebuffCount: selfDebuffCountArg,
+    });
+    const decidableBeforeRolls = (conditions: TimedStatus['conditions']): boolean =>
+        conditions.every((c) => PRE_ROLL_GATE_SUBJECTS.has(c.subject)) &&
+        conditionsMet(conditions, preRollGateCtx);
     const selfStatusesBeforeRolls = new Set<TimedStatus>();
     if (hasVictim) {
         for (const status of timedSelfBySlot) {
@@ -3133,7 +3179,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 status.sourceSlot === action &&
                 status.beforeInflictClause === true &&
                 status.afterDamageClause !== true &&
-                status.conditions.length === 0 &&
+                decidableBeforeRolls(status.conditions) &&
                 (status.payload.parsedEffects.hacking ?? 0) !== 0
             ) {
                 applyTimedSelfStatus(status);
@@ -3538,6 +3584,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
@@ -3761,6 +3808,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             });
             for (const rid of recipients) {
                 if (rid === undefined || rid === targetId) continue;
+                // A DoT-immune enemy is never attempted (`immuneToDot`).
+                if (immuneToDot(opposingVictimById?.get(rid), dot.type)) continue;
                 const list = covered.get(rid);
                 if (list) list.push(dot);
                 else covered.set(rid, [dot]);
@@ -3824,12 +3873,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               };
     let primaryDotPlan: { castRoll: boolean; landed: DoTApplicationConfig } | undefined;
     const planPrimaryDots = (
-        dots: DoTApplicationConfig
+        castDots: DoTApplicationConfig
     ): { castRoll: boolean; landed: DoTApplicationConfig } => {
         if (primaryDotPlan) return primaryDotPlan;
         // Every caller is fenced on `hasVictim`; no victim lands nothing and draws nothing.
         const victim = enemy;
         if (victim === undefined) return { castRoll: true, landed: [] };
+        // A DoT-immune victim is never attempted (`immuneToDot`): no draw for those entries.
+        const dots = withoutImmuneDots(victim, castDots);
         // With nothing to apply no draw is taken and `castRoll` is vacuously true, preserving the
         // all-landing fixtures where no-DoT rounds report dotsLanded:true.
         const castRoll = dots.length > 0 ? roundDebuffLanded() : true;
@@ -4785,6 +4836,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
@@ -4950,6 +5002,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         enemyDebuffNames: enemyNamesWithCastLandings,
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
@@ -5325,6 +5378,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         // With this cast's before-damage landings counted in — see `enemyNamesWithCastLandings`.
         enemyDebuffNames: enemyNamesWithCastLandings,
         selfDebuffNames: selfDebuffNamesArg,
@@ -6155,10 +6209,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // vs a failed roll). `dotsLanded` is false when no stack landed, so the downstream display
     // surfaces the DoTs as resisted (symmetric with timed/persistent resists).
     let dotsLanded: boolean;
+    /** The cast's DoTs the bound target can receive: a DoT-immune target is never attempted
+     *  (`immuneToDot`), so those entries are neither applied, resisted nor reported. */
+    const primaryDotsConfig = hasVictim ? withoutImmuneDots(enemy, dotsConfig) : dotsConfig;
     /** The primary's DoTs the round row reports: the stacks that landed when any did, otherwise
      *  the configured DoTs (all resisted when `dotsLanded` is false). A stack resisted beside a
      *  landed one shows only in the combat log. */
-    let reportedDots: DoTApplicationConfig = dotsConfig;
+    let reportedDots: DoTApplicationConfig = primaryDotsConfig;
     if (!hasVictim) {
         // No victim — this cast's DoT clauses have nobody to be inflicted on, so none is
         // applied and none is resisted (a resist implies a target that resisted it), and no landing
@@ -6169,9 +6226,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // REPORTED list is emptied to match at the return (`dotsConfig:` there); see that comment
         // for why `false` would be worse than `true` and why emptying the list is the real answer.
         dotsLanded = true;
-    } else if (dotsConfig.length > 0 && targetImmuneToDebuffs) {
+    } else if (primaryDotsConfig.length > 0 && targetImmuneToDebuffs) {
         dotsLanded = false;
-        for (const dot of dotsConfig) {
+        for (const dot of primaryDotsConfig) {
             // NOTE: a blocked `bomb` DoT emits the resist event but has NO `resistedDots`
             // row — the engine's resistedDots derivation filters to corrosion/inferno only
             // (bombs are display-only elsewhere too). Event-yes/surface-no is intentional.
@@ -6202,13 +6259,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // resist: one event per stack, so the combat log shows each resisted stack and an
         // on-resist reaction counting resisted debuffs counts each. Already decided when a count
         // gate written after a DoT clause asked for it.
-        const { castRoll, landed: landedPrimaryDots } = planPrimaryDots(dotsConfig);
+        const { castRoll, landed: landedPrimaryDots } = planPrimaryDots(primaryDotsConfig);
         // Capture every container's pre-application length so 'inflicted'-scope extensions
         // touch only the DoTs, Bombs and accumulators this cast adds below.
         const primaryBefore = debuffEntryLengths(primaryHolder);
         // Over the DoTs rolled against the primary only: one aimed at its neighbours, or inert,
         // was never resisted here.
-        dotsLanded = !dotsConfig.some(rollsOnPrimary) || landedPrimaryDots.length > 0;
+        dotsLanded = !primaryDotsConfig.some(rollsOnPrimary) || landedPrimaryDots.length > 0;
         if (landedPrimaryDots.length > 0) reportedDots = landedPrimaryDots;
         const primaryDotsHeld = landCastDots(enemy.id, landedPrimaryDots, (dots, emit) =>
             applyNewDoTs({
@@ -6294,8 +6351,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // accumulators (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
         // Skipped when the cast's first roll failed and no later stack or accumulator landed
         // either: nothing was appended, and skipping keeps the deterministic extendChanceGate
-        // schedule free of phantom draws.
-        if (castRoll || landedPrimaryDots.length > 0 || accumulatorsLanded > 0) {
+        // schedule free of phantom draws. A cast whose every DoT the target is immune to
+        // (`immuneToDot`) gets the same skip: its `castRoll` is vacuously true with nothing
+        // attempted, so only a landed accumulator opens the pass.
+        const everyDotImmune = dotsConfig.length > 0 && primaryDotsConfig.length === 0;
+        if (
+            (castRoll && !everyDotImmune) ||
+            landedPrimaryDots.length > 0 ||
+            accumulatorsLanded > 0
+        ) {
             afterCastDots(enemy.id, primaryDotsHeld, () => {
                 extendInflictedDoTs({
                     abilities: [
@@ -8037,6 +8101,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             positionalLanding && perSubAttackDebuffRecipes.length > 0
                 ? applyDebuffsForSubAttack
                 : undefined,
+        primaryStatusRemovals: (gatedSkill?.abilities ?? []).flatMap((ab) =>
+            ab.config.type === 'remove-target-status' &&
+            ab.trigger === 'on-cast' &&
+            conditionsMet(ab.conditions, ctx)
+                ? [ab.config.buffName]
+                : []
+        ),
         applyPerHitSelfStatusesForSubAttack: perHitGainsFireFromEngine
             ? applyPerHitSelfStatusesForSubAttack
             : undefined,

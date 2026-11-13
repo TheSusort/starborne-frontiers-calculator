@@ -40,4 +40,17 @@ describe('BossEncounterPicker', () => {
         expect(board.T1?.ship.id).toBe('boss:maglienza:32');
         expect(board.T2?.ship.id).toBe('npc:capo:124');
     });
+
+    it('selecting Colosso loads him anchored at T3 with three Major Grands', () => {
+        const onChange = vi.fn();
+        render(<BossEncounterPicker board={{}} onChange={onChange} />);
+        fireEvent.click(trigger());
+        fireEvent.click(screen.getByRole('option', { name: 'General Colosso — Lv 32' }));
+        const board = onChange.mock.calls[0][0] as BoardState;
+        expect(Object.keys(board).sort()).toEqual(['B1', 'M2', 'T1', 'T3']);
+        expect(board.T3?.ship.id).toBe('boss:colosso:32');
+        expect(board.T1?.ship.id).toBe('npc:major-grand:124');
+        expect(board.M2?.ship.id).toBe('npc:major-grand:124');
+        expect(board.B1?.ship.id).toBe('npc:major-grand:124');
+    });
 });

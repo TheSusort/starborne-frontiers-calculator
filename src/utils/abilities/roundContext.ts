@@ -86,6 +86,9 @@ export function buildRoundContext(state: {
     /** Living opposing units carrying a debuff. Passed through with NO default — see
      *  ConditionContext.debuffedEnemyCount. */
     debuffedEnemyCount?: number;
+    /** Living opposing units holding each named debuff. Passed through with NO default — see
+     *  ConditionContext.enemyDebuffHolderCounts. */
+    enemyDebuffHolderCounts?: Readonly<Record<string, number>>;
     /** Sub-project I, PR I1 — NAMES on the opposing (primary) target, for name-specific
      *  `enemy-debuff` gates. SENTINEL: leave `undefined` (do NOT pass `[]`) to keep the legacy
      *  name-agnostic `enemyDebuffCount` path — this is the DPS-parity invariant (the DPS
@@ -179,7 +182,7 @@ export function buildRoundContext(state: {
      *  (`adjacentAllyIds`, `adjacentEnemyIdsFor`) plus the per-side `opposingRoster` kill tally.
      *  Passed through with NO `?? 0`: a fabricated 0 here would silently mean "measured, nothing
      *  adjacent", which is a different (and wrong) answer from "cannot measure". See
-     *  ConditionContext's own doc on the three fields for the history. */
+     *  ConditionContext's own doc on the live-count fields for the history. */
     /** Living same-side allies board-adjacent to the ACTING unit (the actor itself excluded). */
     adjacentAllyCount?: number;
     /** Living opposing actors board-adjacent to this cast's resolved TARGET (target excluded).
@@ -188,6 +191,9 @@ export function buildRoundContext(state: {
     /** Opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed the kill (owner
      *  ruling 2026-08-30). Cumulative across rounds — it never resets. */
     enemyDestroyedCount?: number;
+    /** Own-side actors destroyed so far this battle, the owner excluded — cumulative, like
+     *  `enemyDestroyedCount`. */
+    allyDestroyedCount?: number;
     /** SP-4d — true when this round/reaction has NO opposing victim to ask a per-victim question
      *  about (e.g. an ally-targeted cast that resolves nobody). Default `false`/omitted preserves
      *  every existing caller's behaviour unchanged (a real victim, or the DPS-assumption default).
@@ -235,6 +241,7 @@ export function buildRoundContext(state: {
         adjacentAllyCount: state.adjacentAllyCount,
         enemyAdjacentCount: state.enemyAdjacentCount,
         enemyDestroyedCount: state.enemyDestroyedCount,
+        allyDestroyedCount: state.allyDestroyedCount,
         selfHpPct: state.selfHpPct ?? 100,
         targetHpPct: state.targetHpPct ?? 100,
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,
@@ -293,6 +300,9 @@ export function buildRoundContext(state: {
         ...(state.enemyBuffCount !== undefined ? { enemyBuffCount: state.enemyBuffCount } : {}),
         ...(state.debuffedEnemyCount !== undefined
             ? { debuffedEnemyCount: state.debuffedEnemyCount }
+            : {}),
+        ...(state.enemyDebuffHolderCounts !== undefined
+            ? { enemyDebuffHolderCounts: state.enemyDebuffHolderCounts }
             : {}),
     };
 }

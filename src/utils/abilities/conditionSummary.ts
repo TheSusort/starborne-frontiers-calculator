@@ -22,6 +22,7 @@ export const CONDITION_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>>
     'adjacent-ally': 'per adjacent ally',
     'enemy-adjacent': 'per unit adjacent to the enemy',
     'enemy-destroyed': 'per destroyed enemy',
+    'ally-destroyed': 'per destroyed ally',
     'self-crit': 'on critical hit',
     'enemy-type': 'when enemy matches type',
     // Formerly EXTRA_SUBJECT_LABELS (src/components/skills/ConditionRow.tsx).
@@ -44,6 +45,7 @@ export const CONDITION_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>>
     'stat-vs-target': "when a stat compares favourably to the target's",
     'ally-shield-count': 'per ally with a shield',
     'debuffed-enemy-count': 'per debuffed enemy',
+    'enemy-debuff-holder-count': 'per enemy holding the named debuff',
     'buffs-purged-this-cast': 'per buff this skill purges',
 };
 
@@ -94,6 +96,8 @@ const countThresholdPhrase = (
             return `while ${comparatorWord} ${n} ${plural ? 'units are' : 'unit is'} adjacent to the enemy`;
         case 'enemy-destroyed':
             return `while ${comparatorWord} ${n} ${plural ? 'enemies have' : 'enemy has'} been destroyed`;
+        case 'ally-destroyed':
+            return `while ${comparatorWord} ${n} ${plural ? 'allies have' : 'ally has'} been destroyed`;
         case 'buffs-purged-this-cast':
             return `after this skill purges ${comparatorWord} ${n} ${plural ? 'buffs' : 'buff'}`;
         default:
@@ -178,6 +182,23 @@ export function conditionSummary(condition: Condition): string {
                 const n = condition.countThreshold;
                 const noun = condition.buffName ?? (n === 1 ? 'DoT' : 'DoTs');
                 return `while the enemy has ${comparatorWord} ${n} ${noun}`;
+            }
+            return fallbackLabel(condition.subject);
+        }
+        // 'enemy-debuff-holder-count' counts enemies HOLDING the named debuff, so its buffName and
+        // threshold combine into one phrase; `eq 0` reads as an absence ("while no enemy has X").
+        case 'enemy-debuff-holder-count': {
+            if (
+                condition.buffName &&
+                condition.countComparator &&
+                condition.countThreshold !== undefined
+            ) {
+                const n = condition.countThreshold;
+                if (condition.countComparator === 'eq' && n === 0) {
+                    return `while no enemy has ${condition.buffName}`;
+                }
+                const comparatorWord = COUNT_COMPARATOR_WORDS[condition.countComparator];
+                return `while ${comparatorWord} ${n} ${n === 1 ? 'enemy has' : 'enemies have'} ${condition.buffName}`;
             }
             return fallbackLabel(condition.subject);
         }

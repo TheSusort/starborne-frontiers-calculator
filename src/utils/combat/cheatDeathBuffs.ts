@@ -53,4 +53,10 @@ export const UNREMOVABLE_STATUSES: ReadonlySet<string> = new Set<string>([
     'Pressing Onslaught',
     // Mamma Maglienza's stackable attack grant (#519): "is stackable and unremovable".
     'Enrage Attack III',
+    // General Colosso's stackable outgoing-damage grant (#519): stackable and unremovable.
+    'Enrage Damage III',
+    // General Colosso's encounter debuff (#519): "Marked for attack. Unremovable."
+    // Cleanse, purge and Cheat Death skip it; Colosso's remove-target-status clause removes it;
+    // duration cuts reach it (R173).
+    'Marked',
 ]);

@@ -1,6 +1,6 @@
 import type { Position } from '../../types/encounters';
 import type { TargetSelection } from '../targetingParser';
-import { colOf, rowOf } from '../targeting/board';
+import { colOf, footprintLabelCell, rowOf } from '../targeting/board';
 import { rowScanOrder } from '../targeting/selectTargets';
 
 /** The board-placement slice of an actor: its anchor cell and, for a multi-hex unit (a bounty
@@ -14,6 +14,14 @@ export interface CellOccupant {
 /** Every cell a unit occupies: its footprint, else its anchor, else none. */
 export const cellsOf = (a: CellOccupant): readonly Position[] =>
     a.footprint ?? (a.position !== undefined ? [a.position] : []);
+
+/**
+ * The cell a unit casts FROM: a multi-hex unit aims from its centre (`footprintLabelCell`, the hex
+ * its name sits on), a one-hex unit from its own cell. Every cast's row scan starts from this
+ * cell's row (#519: "Colosso aims from hit center, and targets using normal rules").
+ */
+export const aimCellOf = (a: CellOccupant): Position | undefined =>
+    a.footprint && a.footprint.length > 1 ? footprintLabelCell(a.footprint) : a.position;
 
 /**
  * Cell → unit index over every cell each actor occupies. A multi-hex unit appears under each of

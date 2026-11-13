@@ -122,6 +122,12 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
     },
     {
         file: 'combat/positionalBinding.ts',
+        snippet:
+            '(a) => a.position !== undefined && a.currentHp > 0 && statusOf(a.id)?.marked === true',
+        reason: '`markedTargets` candidates: placed or not; each is struck as a whole unit.',
+    },
+    {
+        file: 'combat/positionalBinding.ts',
         snippet: '?? actor.position!',
         reason: 'Unreachable fallback of `hitCellOf`, which only misses for an unplaced unit.',
     },
@@ -173,16 +179,11 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         reason: 'Mode gate: is the caster placed and is any opposing unit targetable.',
         count: 6,
     },
-    // --- the CASTER's own cell: a multi-hex caster casts from its anchor ---
+    // --- the CASTER's own cell: a multi-hex caster casts from its centre (`aimCellOf`) ---
     {
-        file: 'combat/engine.ts',
-        snippet: 'a.position!,',
-        reason: 'Caster row-scan origin for target selection (`selectTurnTarget`).',
-    },
-    {
-        file: 'combat/engine.ts',
-        snippet: 'actingPosition: actor.position!',
-        reason: 'Caster row-scan origin for the per-hit re-resolution.',
+        file: 'combat/cellIndex.ts',
+        snippet: 'footprintLabelCell(a.footprint) : a.position',
+        reason: '`aimCellOf`: a one-hex caster casts from its own cell.',
     },
     {
         file: 'combat/engine.ts',
@@ -195,6 +196,11 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         reason: 'Caster-cell anchor of a support footprint.',
     },
     // --- turn order: `positionTurnRank` breaks ties on the anchor ---
+    {
+        file: 'combat/positionalBinding.ts',
+        snippet: 'positionTurnRank(x.position) - positionTurnRank(y.position)',
+        reason: '`markedTargets` order: the position tiebreak ranks a unit by its anchor.',
+    },
     {
         file: 'combat/state.ts',
         snippet: 'position: a.position }',

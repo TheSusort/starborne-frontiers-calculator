@@ -608,6 +608,10 @@ export interface CombatActor {
      *     `PositionalActing.ignoresConcentrateFire`.
      *  Absent → false. */
     controlImmune?: boolean;
+    /** Immune to damage over time effects (ShipSkills.dotImmune; #519): no DoT is ever attempted
+     *  against this actor — the gate is `immuneToDot` (dotImmunity.ts). Bombs still land.
+     *  Absent → false. */
+    dotImmune?: boolean;
     /** Every attack of this actor crits at a 100% rate, whatever its affinity matchup or crit
      *  debuffs (ShipSkills.alwaysCrits). Absent → the ordinary capped crit rate. */
     alwaysCrits?: boolean;
@@ -640,6 +644,7 @@ export function createActor(
         affinity?: AffinityName;
         chargeLossImmune?: boolean;
         controlImmune?: boolean;
+        dotImmune?: boolean;
         alwaysCrits?: boolean;
         alwaysLandsDebuffs?: boolean;
         preFight?: PreFightCombatModifiers;

@@ -206,6 +206,7 @@ export const ABILITY_TYPE_TARGET_SIDES: Record<AbilityType, 'self' | 'enemy' | '
     // Inflicted control is enemy-side; Taunt is the self arm (parseControlInflicts, side 'self').
     control: 'both',
     'remove-self-buff': 'self',
+    'remove-target-status': 'enemy',
     'incoming-reduction': 'self',
     'incoming-block': 'self',
     'incoming-shield-grant': 'self',

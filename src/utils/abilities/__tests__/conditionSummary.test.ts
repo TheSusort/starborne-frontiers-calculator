@@ -300,4 +300,43 @@ describe('conditionSummary', () => {
             })
         ).toBe('while the enemy has at least 3 Acidic Decay');
     });
+    it('renders enemy-debuff-holder-count eq 0 as the named debuff being absent', () => {
+        expect(
+            conditionSummary({
+                subject: 'enemy-debuff-holder-count',
+                derivable: true,
+                buffName: 'Marked',
+                countComparator: 'eq',
+                countThreshold: 0,
+            })
+        ).toBe('while no enemy has Marked');
+    });
+
+    it('renders enemy-debuff-holder-count thresholds with the debuff name, singular and plural', () => {
+        const base = {
+            subject: 'enemy-debuff-holder-count',
+            derivable: true,
+            buffName: 'Marked',
+        } as const;
+        expect(conditionSummary({ ...base, countComparator: 'gte', countThreshold: 2 })).toBe(
+            'while at least 2 enemies have Marked'
+        );
+        expect(conditionSummary({ ...base, countComparator: 'lte', countThreshold: 1 })).toBe(
+            'while at most 1 enemy has Marked'
+        );
+        expect(conditionSummary({ ...base, countComparator: 'eq', countThreshold: 3 })).toBe(
+            'while exactly 3 enemies have Marked'
+        );
+    });
+
+    it('falls back to the generic label for enemy-debuff-holder-count without a buffName', () => {
+        expect(
+            conditionSummary({
+                subject: 'enemy-debuff-holder-count',
+                derivable: true,
+                countComparator: 'eq',
+                countThreshold: 0,
+            })
+        ).toBe('per enemy holding the named debuff');
+    });
 });

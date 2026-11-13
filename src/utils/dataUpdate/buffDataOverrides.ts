@@ -59,6 +59,17 @@ export const MANUAL_BUFF_ADDITIONS: Array<{
         description: '+6% Attack, Stackable',
         type: 'buff',
     },
+    {
+        name: 'Enrage Damage III',
+        description: '+6% Outgoing Damage, Stackable',
+        type: 'buff',
+    },
+    // General Colosso's encounter (#519): carries no stat, only Colosso's skill text reads it.
+    {
+        name: 'Marked',
+        description: 'Marked for attack. Unremovable.',
+        type: 'debuff',
+    },
     ...(
         [
             ['I', 15],

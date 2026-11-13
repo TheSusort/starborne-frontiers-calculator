@@ -32,6 +32,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     'buff-steal': 'Buff Steal',
     control: 'Control',
     'remove-self-buff': 'Remove Self Buff',
+    'remove-target-status': 'Remove Target Status',
     'incoming-reduction': 'Incoming Reduction',
     'incoming-block': 'Incoming Block',
     'incoming-shield-grant': 'Incoming Shield Grant',

@@ -16,7 +16,10 @@ export type TargetSelection =
     /** The opposing row holding the most living units (`selectTargets`). */
     | 'row-most'
     /** The opposing row holding the fewest living units, never an empty one (`selectTargets`). */
-    | 'row-least';
+    | 'row-least'
+    /** Every living Marked enemy, each as its own full-damage primary target; `front` when none
+     *  is Marked (`markedTargets`, positionalBinding.ts). */
+    | 'marked';
 
 export interface ParsedTarget {
     raw: string;
@@ -46,7 +49,9 @@ export type PatternShape =
     | 'all'
     /** Every cell of the anchor's row (`Pattern-Row`), all origin: every unit in it is struck as a
      *  primary target at full damage. */
-    | 'row';
+    | 'row'
+    /** A circle missing the neighbour toward the caster (`Pattern-Horseshoe-Range-1`). */
+    | 'horseshoe';
 
 export interface PatternModifiers {
     support?: boolean;
@@ -122,6 +127,7 @@ const TARGET_MAP: Record<string, { side: TargetSide; selection: TargetSelection 
     all: { side: 'enemy', selection: 'all' },
     'row-most': { side: 'enemy', selection: 'row-most' },
     'row-least': { side: 'enemy', selection: 'row-least' },
+    'marked-or-front': { side: 'enemy', selection: 'marked' },
     allies: { side: 'ally', selection: 'team' },
     'all-allies': { side: 'ally', selection: 'all' },
     'other-allies': { side: 'ally', selection: 'others' },
@@ -172,6 +178,7 @@ function detectShape(lower: string): PatternShape {
     if (/cross/.test(lower)) return 'cross';
     if (/curve/.test(lower)) return 'curve';
     if (/circle/.test(lower)) return 'circle';
+    if (/horseshoe/.test(lower)) return 'horseshoe';
     if (/wings/.test(lower)) return 'wings';
     if (/root/.test(lower)) return 'root';
     if (/split/.test(lower)) return 'split';

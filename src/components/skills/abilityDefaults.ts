@@ -62,6 +62,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'control', effect: 'provoke' };
         case 'remove-self-buff':
             return { type: 'remove-self-buff', buffName: '', scope: 'all' };
+        case 'remove-target-status':
+            return { type: 'remove-target-status', buffName: '' };
         case 'incoming-reduction':
             return {
                 type: 'incoming-reduction',
@@ -142,6 +144,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'buff-steal': 'enemy',
     control: 'enemy',
     'remove-self-buff': 'self',
+    'remove-target-status': 'enemy',
     'incoming-reduction': 'self',
     'incoming-block': 'self',
     'incoming-shield-grant': 'self',

@@ -145,7 +145,7 @@ const run = (side: Side, withReduceAll: boolean): After => {
     let wearer: CombatActor | undefined;
     bus.on('turn-started', (e: Extract<CombatEvent, { type: 'turn-started' }>) => {
         if (e.actorId !== w || e.round !== 1 || !engine) return;
-        for (const n of ['Acidic Decay', 'Barrier Recharging', 'Defense Down II'])
+        for (const n of ['Acidic Decay', 'Barrier Recharging', 'Defense Down II', 'Marked'])
             engine.applyTimedAbilityStatus(1, timed(n, 9), w, w);
     });
     runCombat({
@@ -194,7 +194,7 @@ const SIDES: [string, Side][] = [
 
 for (const [tag, side] of SIDES) {
     describe(`${tag}: reduce-all duration cut reaches unremovable debuffs (R173)`, () => {
-        it('an Acidic Decay status and its DoT stacks each lose a turn; Barrier Recharging does not', () => {
+        it('an Acidic Decay status and Marked and its DoT stacks each lose a turn; Barrier Recharging does not', () => {
             const control = run(side, false);
             const cut = run(side, true);
             expect(control.named.get('Acidic Decay')).toBeDefined();
@@ -205,6 +205,8 @@ for (const [tag, side] of SIDES) {
             expect(cut.named.get('Barrier Recharging')).toBe(
                 control.named.get('Barrier Recharging')
             );
+            expect(control.named.get('Marked')).toBeDefined();
+            expect(cut.named.get('Marked')).toBe(control.named.get('Marked')! - 1);
             expect(control.corrosion).toHaveLength(1);
             expect(cut.corrosion).toEqual([
                 {

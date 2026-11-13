@@ -101,9 +101,10 @@ import {
 // Type-only import (erased at runtime) → no circular-import cycle even though playerTurn.ts
 // imports buildActorConditionContext/ReactiveAbility from this module.
 import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx, RateGate } from './playerTurn';
-import type { ActorTargetingStatus } from './positionalBinding';
+import { MARKED_STATUS, type ActorTargetingStatus } from './positionalBinding';
 import { extendsDotFrom } from './dotDurationExtension';
 import { immuneToEnemyStatus } from './controlImmunity';
+import { immuneToDot } from './dotImmunity';
 
 /** The trigger values the engine consumes — defined next to AbilityTrigger in
  *  types/abilities.ts (so UI consumers don't import the engine for one constant)
@@ -3388,14 +3389,13 @@ export function buildActorConditionContext(
         enemiesHitThisCast: shared.enemiesHitThisCast,
         allyTeamNames: shared.allyTeamNames,
         noOpposingVictim: shared.noOpposingVictim,
-        // NOT populated here: `adjacentAllyCount` / `enemyAdjacentCount` / `enemyDestroyedCount`.
-        // Withholding them leaves a reactive-path condition on those subjects on its manual
-        // `manualCount ?? 1` fallback — the CAST path (playerTurn.ts) populates all three, this
-        // one does not. No reactive GATE reads the three today: every corpus reader (Centurion,
-        // Panguan, Judge) is a cast-time damage or modifier ability. A reactive one would need
-        // `shared` to carry the same three readings from engine.ts's buildTurnArgs. (A reactive
-        // proc's DAMAGE does read Judge's destroyed-enemy modifier, through its own live count:
-        // engine.ts's `reactivePassiveOutgoingPct`.)
+        // NOT populated here: the live counts the CAST path (playerTurn.ts `liveCountCtx`)
+        // supplies — adjacency and destroyed-unit counts. Withholding them leaves a reactive-path
+        // condition on those subjects on its manual `manualCount ?? 1` fallback. No reactive GATE
+        // reads them: a reactive one would need `shared` to carry the same readings from
+        // engine.ts's buildTurnArgs. A reactive proc's DAMAGE reads the destroyed-enemy modifier
+        // through its own live count (`reactivePassiveOutgoingPct` in engine.ts), which folds
+        // `enemy-destroyed` only; `ally-destroyed` is not folded on the reactive path.
     });
 }
 
@@ -4482,9 +4482,25 @@ export function buildForcedTargetingStatus(
             stealthed: selfNames.includes('Stealth'),
             taunting: selfNames.includes('Taunt'),
             concentrated: debuffNames.includes('Concentrate Fire'),
+            marked: debuffNames.includes(MARKED_STATUS),
         });
     }
     return map;
+}
+
+/** Per debuff name, how many of `actors` hold it (a unit counts once per name), read from the
+ *  same store as {@link buildForcedTargetingStatus}. Feeds `ConditionContext.enemyDebuffHolderCounts`. */
+export function debuffHolderCounts(
+    statusEngine: StatusEngine,
+    actors: readonly { id: string }[]
+): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const { id } of actors) {
+        for (const name of new Set(ownerDebuffNamesFor(statusEngine, id))) {
+            counts[name] = (counts[name] ?? 0) + 1;
+        }
+    }
+    return counts;
 }
 
 function payloadFromConfig(cfg: {
@@ -6485,6 +6501,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             for (const cid of cleansedEnemyIds) {
                 const victim = ctx.actorById?.(cid);
                 const victimId = victim?.id ?? cid;
+                // A DoT-immune victim is never attempted (`immuneToDot`).
+                if (immuneToDot(victim, cfg.dotType)) continue;
                 // IMMUNITY BEFORE THE DRAW, aligned with BOTH siblings. The sibling `debuff`
                 // branch folds immunity into its landing condition via an `&&` short-circuit, and
                 // the single-victim DoT path below returns before its draw — so the engine's rule
@@ -6564,6 +6582,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // A unit-test ctx without an `actorById` delegate cannot resolve the object but still
             // knows the id — keep using it rather than inventing a target.
             const victimId = victim?.id ?? recipientId;
+            // A DoT-immune victim is never attempted (`immuneToDot`).
+            if (immuneToDot(victim, cfg.dotType)) continue;
             // Block Debuff: an immune target auto-resists this reactive DoT — block
             // it AND emit a resist event. Placed AFTER the inert-DoT guard above so a
             // zero-stack/tier DoT doesn't surface a spurious resist.

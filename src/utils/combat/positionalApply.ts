@@ -2,6 +2,7 @@ import type { Position } from '../../types/encounters';
 import type { ParsedPattern, ParsedTarget } from '../targetingParser';
 import { resolveCells, type CellRole } from '../targeting/resolvePattern';
 import {
+    markedTargets,
     resolvePositionalTargetCell,
     type ActorTargetingStatus,
     type PositionalActing,
@@ -262,6 +263,30 @@ export function isWholeBattlefieldPattern(pattern: ParsedPattern): boolean {
  */
 export function everyVictimIsPrimary(pattern: ParsedPattern): boolean {
     return isWholeBattlefieldPattern(pattern) || pattern.shape === 'row';
+}
+
+/**
+ * The victims ONE attack of a cast strikes, and whether every one of them is a primary target —
+ * the single answer for every site that needs a cast's footprint. A `marked` selection with a
+ * living Marked enemy ({@link markedTargets}) strikes each Marked unit at full damage, all primary,
+ * and nothing else; otherwise the pattern expands around `anchorCell` ({@link footprintVictims})
+ * and {@link everyVictimIsPrimary} decides primary-ness.
+ */
+export function castFootprint(
+    pattern: ParsedPattern,
+    target: ParsedTarget,
+    anchorCell: Position,
+    opposingLiving: CombatActor[],
+    statusOf?: (id: string) => ActorTargetingStatus | undefined
+): { victims: FootprintHit[]; allPrimary: boolean } {
+    const marked = markedTargets(target, opposingLiving, statusOf);
+    if (marked) {
+        return { victims: marked.map((victim) => ({ victim, roleScale: 1 })), allPrimary: true };
+    }
+    return {
+        victims: footprintVictims(pattern, anchorCell, opposingLiving),
+        allPrimary: everyVictimIsPrimary(pattern),
+    };
 }
 
 /** The payload of `applyPositionalDamage`'s sub-attack boundary hooks. */
@@ -558,8 +583,6 @@ export function applyPositionalDamage(args: {
     // lists it once — "deals X to that enemy" is per ENEMY, not per critting (hit, victim) pair.
     const critVictims = new Set<string>();
     const subAttacks: SubAttackOutcome[] = [];
-    // One answer per cast: the firing pattern decides whether every victim is a primary target.
-    const allPrimary = everyVictimIsPrimary(pattern);
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
     // truth that victimHitDamage also reads), avoiding silent under/over-application from a
@@ -568,18 +591,21 @@ export function applyPositionalDamage(args: {
         if (h > 0 && attackerStanding && !attackerStanding()) break;
         // Re-resolve the anchor against the LIVE roster (a victim killed on an earlier hit
         // is already gone from opposingLiving via currentHp === 0 filtering).
-        const lockedAnchor =
-            h === 0 && firstAnchorId !== undefined
-                ? opposingLiving.find(
-                      (a) => a.id === firstAnchorId && a.currentHp > 0 && a.position !== undefined
-                  )
-                : undefined;
+        // A `marked` cast's Marked branch anchors on its first Marked unit (`castFootprint`).
+        const marked = markedTargets(target, opposingLiving, statusOf);
+        const lockedAnchor = marked
+            ? marked[0]
+            : h === 0 && firstAnchorId !== undefined
+              ? opposingLiving.find(
+                    (a) => a.id === firstAnchorId && a.currentHp > 0 && a.position !== undefined
+                )
+              : undefined;
         const lockedCell =
             lockedAnchor === undefined
                 ? undefined
                 : firstAnchorCell !== undefined && cellsOf(lockedAnchor).includes(firstAnchorCell)
                   ? firstAnchorCell
-                  : hitCellOf(lockedAnchor, actorPosition, target.selection);
+                  : hitCellOf(lockedAnchor, actorPosition, marked ? 'front' : target.selection);
         const resolved =
             lockedAnchor !== undefined && lockedCell !== undefined
                 ? { actor: lockedAnchor, cell: lockedCell }
@@ -614,7 +640,13 @@ export function applyPositionalDamage(args: {
         const subCritVictimIds: string[] = [];
 
         const anchorActor = resolved.actor;
-        const footprint = footprintVictims(pattern, resolved.cell, opposingLiving);
+        const { victims: footprint, allPrimary } = castFootprint(
+            pattern,
+            target,
+            resolved.cell,
+            opposingLiving,
+            statusOf
+        );
         const subVictimIdsForHooks = footprint.map((f) => f.victim.id);
         const primaryVictimIds = allPrimary
             ? subVictimIdsForHooks

@@ -56,6 +56,7 @@ import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
 import { composeDotDamageFactor } from '../damageComposition';
 import { ONE_SHOT_PERSISTENT_BUFFS } from '../../constants/oneShotPersistentBuffs';
 import { dotResistLabel, isBlockDebuff, targetCarriesBlockDebuff } from './debuffImmunity';
+import { immuneToDot } from './dotImmunity';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { aliveTargetsOf, type AliveRoster } from './targetableActors';
 import {
@@ -106,13 +107,14 @@ import {
     resolvesPositionalVictim,
     type PositionalActing,
 } from './positionalBinding';
-import type { CellOccupant } from './cellIndex';
+import { aimCellOf, type CellOccupant } from './cellIndex';
 import {
     applyPositionalDamage,
     damagedVictim,
     directlyDamagesVictim,
     hitReachedShield,
     loggedHitFigures,
+    castFootprint,
     footprintVictims,
     isWholeBattlefieldPattern,
     type SubAttackBoundary,
@@ -196,6 +198,7 @@ import {
     reactionChainProbe,
     buildActorConditionContext,
     buildForcedTargetingStatus,
+    debuffHolderCounts,
     countOwnersWithSelfBuff,
     blockDebuffPendingOn,
     dotConversionKey,
@@ -1091,6 +1094,7 @@ export function buildEnemyPlayerActorRuntime(
         alwaysCrits: e.shipSkills?.alwaysCrits,
         alwaysLandsDebuffs: e.shipSkills?.alwaysLandsDebuffs,
         controlImmune: e.shipSkills?.controlImmune,
+        dotImmune: e.shipSkills?.dotImmune,
         affinity: e.affinity,
         preFight: e.preFight,
     });
@@ -2546,6 +2550,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         alwaysCrits: input.shipSkills.alwaysCrits,
         alwaysLandsDebuffs: input.shipSkills.alwaysLandsDebuffs,
         controlImmune: input.shipSkills.controlImmune,
+        dotImmune: input.shipSkills.dotImmune,
         affinity: input.affinity,
         preFight: input.preFight,
     });
@@ -2671,6 +2676,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             alwaysCrits: t.walk?.shipSkills.alwaysCrits,
             alwaysLandsDebuffs: t.walk?.shipSkills.alwaysLandsDebuffs,
             controlImmune: t.walk?.shipSkills.controlImmune,
+            dotImmune: t.walk?.shipSkills.dotImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
@@ -10381,7 +10387,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             const selected =
                 resolvesPositionalVictim(a.position, tb.opposingRoster) && target
                     ? resolvePositionalTargetCell(
-                          a.position!,
+                          aimCellOf(a)!,
                           target,
                           tb.opposingRoster,
                           statusLookupFor(tb.opposingRoster),
@@ -10481,11 +10487,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ? parsedChargedPatternFor(a)
                 : parsedPatternFor(a);
             const aoeTarget = parsedTargetFor(a); // parse-completeness guard only (not a footprint arg)
+            const castTarget = willFireChargedFor(a) ? parsedChargedTargetFor(a) : aoeTarget;
             const aoeVictimIds =
-                aoePattern != null && aoeTarget != null && tgt?.position != null && tgtCell
-                    ? footprintVictims(aoePattern, tgtCell, tb.opposingRoster).map(
-                          (h) => h.victim.id
-                      )
+                aoePattern != null &&
+                aoeTarget != null &&
+                castTarget != null &&
+                tgt?.position != null &&
+                tgtCell
+                    ? castFootprint(
+                          aoePattern,
+                          castTarget,
+                          tgtCell,
+                          tb.opposingRoster,
+                          statusLookupFor(tb.opposingRoster)
+                      ).victims.map((h) => h.victim.id)
                     : undefined;
             const opposingVictimById =
                 tgt?.position != null
@@ -10715,6 +10730,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                           enemyDestroyedCount: tb.opposingRoster.filter(
                               (x) => x.destroyedRound !== undefined
                           ).length,
+                          // General Colosso ("15% for each dead ally ship"): the same tally on
+                          // the acting unit's own side, itself excluded, any cause of death.
+                          allyDestroyedCount: [...allActorsById.values()].filter(
+                              (x) =>
+                                  x.side === a.side &&
+                                  x.id !== a.id &&
+                                  x.destroyedRound !== undefined
+                          ).length,
                       }
                     : {}),
                 // Opt-in NAMES on the resolved target for name-specific
@@ -10736,6 +10759,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 debuffedEnemyCount: aliveOpposing().filter(
                     (v) => enemyDebuffNamesForTarget(v).length > 0
                 ).length,
+                // Per named debuff, the living opposing units holding it — the same store read
+                // (`ownerDebuffNamesFor`) the forced-targeting statuses use, so a `marked`
+                // selection and a "no Marked enemies present" gate cannot disagree.
+                enemyDebuffHolderCounts: debuffHolderCounts(statusEngine, aliveOpposing()),
                 selfDebuffNames: ownerDebuffNames(a.id),
                 selfDebuffCount: actorDebuffCount(statusEngine, a),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
@@ -10963,6 +10990,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             /** This cast's enemy-side per-hit passive clauses for one sub-attack (#655); undefined
              *  for a cast carrying none. */
             applyPerHitEnemyStatusesForSubAttack: PlayerTurnResult['applyPerHitEnemyStatusesForSubAttack'];
+            /** The statuses this cast clears from each sub-attack's primary targets after its hit. */
+            primaryStatusRemovals: PlayerTurnResult['primaryStatusRemovals'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
             /** Whether a Stasis this cast wrote stands on a victim — its covered Stasis marks skip
              *  such a victim (see `resolveStasisBreaks`). */
@@ -11255,7 +11284,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 hitCrits: sel.hitCrits,
                 pattern: sel.pattern,
                 target: sel.target,
-                actingPosition: actor.position!,
+                actingPosition: aimCellOf(actor)!,
                 // Both reads are needed: selectTurnTarget picks the cast's `tgt`, while this loop
                 // re-resolves the anchor for every hit — a bypass read at only one of them would
                 // let the two disagree about which victim the cast is actually pointed at.
@@ -11384,6 +11413,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                 },
                 onSubAttackEnd: (sub) => {
+                    // "removes their <X> status": the caster's own targeted removal, so it clears
+                    // an unremovable status (Marked) that cleanse and purge skip.
+                    for (const buffName of sel.primaryStatusRemovals) {
+                        for (const id of sub.primaryVictimIds) {
+                            if (!ownerDebuffNamesFor(statusEngine, id).includes(buffName)) continue;
+                            statusEngine.removeTimedEnemyStatus(id, buffName);
+                            bus.emit({ type: 'buff-expired', actorId: id, round: r, buffName });
+                        }
+                    }
                     // Every sub-attack's per-hit passive clauses fire here, the first included, once
                     // the funnel has said which victims the hit did damage to: the enemy-side
                     // landings, then the caster's own gains.
@@ -11693,6 +11731,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 action: 'active',
                 roundCrit: false,
                 hitCrits: [],
+                primaryStatusRemovals: [],
                 dotsConfig: [],
                 dotsLanded: true,
                 activeSelfBuffs: [],
@@ -13247,6 +13286,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             turn.applyPerHitSelfStatusesForSubAttack,
                                         applyPerHitEnemyStatusesForSubAttack:
                                             turn.applyPerHitEnemyStatusesForSubAttack,
+                                        primaryStatusRemovals: turn.primaryStatusRemovals,
                                         deferredEnemyApplications: turn.deferredEnemyApplications,
                                         castStasisStandsOn: turn.castStasisStandsOn,
                                         scheduledEnemyEffects: turn.scheduledEnemyEffects,
@@ -13522,6 +13562,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             teamTurn.applyPerHitSelfStatusesForSubAttack,
                                         applyPerHitEnemyStatusesForSubAttack:
                                             teamTurn.applyPerHitEnemyStatusesForSubAttack,
+                                        primaryStatusRemovals: teamTurn.primaryStatusRemovals,
                                         deferredEnemyApplications:
                                             teamTurn.deferredEnemyApplications,
                                         castStasisStandsOn: teamTurn.castStasisStandsOn,
@@ -13974,6 +14015,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             enemyTurn.applyPerHitEnemyStatusesForSubAttack,
                                         // The SAME array the fallback flush below drains (see
                                         // the capture note), never a fresh one.
+                                        primaryStatusRemovals: enemyTurn.primaryStatusRemovals,
                                         deferredEnemyApplications: enemyDeferredApplications,
                                         castStasisStandsOn: enemyTurn.castStasisStandsOn,
                                         // Team symmetry: the enemy's own turn gates its own
@@ -14309,7 +14351,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // applyNewDoTs's corrosion entry shape.
             for (const allyId of adjacentIds) {
                 const ally = allActorsById.get(allyId);
-                if (!ally) continue;
+                // A DoT-immune ally is never attempted (`immuneToDot`).
+                if (!ally || immuneToDot(ally, 'corrosion')) continue;
                 const blocked = targetCarriesBlockDebuff(statusEngine, allyId);
                 const lands =
                     !blocked &&

@@ -246,7 +246,12 @@ export function parseSkillDamage(text: string): number {
         const following = text
             .slice(tagEndIndex, Math.min(text.length, tagEndIndex + 20))
             .toLowerCase();
-        if (following.startsWith(' of its') || following.startsWith(' of this')) continue;
+        if (
+            following.startsWith(' of its') ||
+            following.startsWith(' of this') ||
+            following.startsWith(" of the unit's")
+        )
+            continue;
         // "X% more (direct) damage" is a passive output MODIFIER, not a base skill
         // multiplier — skip it (parseModifier handles it). e.g. Thresh's passive.
         if (/\bmore\b/i.test(match[1])) continue;
@@ -423,6 +428,7 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     // to", not "damage equal to" / the tag open). "their" joins "its"/"this Unit's" as a
     // pronoun ONLY the Shield-basis corpus rows use (FrontLine) — verified no corpus
     // Defense/HP row uses "their", so this is a strict superset with no new false positives.
+    // "the unit's" is the bounty-boss tooltip form; `parseSkillDamage` skips the same lead-in.
     // #361 — the stat MULTIPLE form, checked FIRST because it carries no '%' and so can never
     // collide with the percentage pattern below. "This Unit deals damage equal to 50x its
     // security" is 50 TIMES the stat, not 50% of attack, and is carried as pct = N * 100 so it
@@ -446,7 +452,7 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
         if (!isNaN(times)) return { stat: 'security', pct: times * 100 };
     }
     const pattern =
-        /<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|their|this\s+unit'?s)\s+(?:current\s+)?(defense|(?:max\s+)?hp|shield)/i;
+        /<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|their|this\s+unit'?s|the\s+unit'?s)\s+(?:current\s+)?(defense|(?:max\s+)?hp|shield)/i;
     const match = pattern.exec(text);
     if (!match) return null;
     // Clause guard: a match whose sentence is a heal ("repairs … an additional X% of
@@ -1121,6 +1127,61 @@ function countGateCondition(clause: string): Condition | null {
     return { subject, derivable: true, countComparator: comparator, countThreshold: threshold };
 }
 
+/** One branch of a two-way count gate: the raw-text span of its sentence and the gate. */
+export interface CountGateBranch {
+    start: number;
+    end: number;
+    gate: Condition;
+}
+
+/**
+ * The two branches of an either/or count gate written as two sentences: the first ends in "if
+ * <count gate>", the next opens with "If <the complementary gate>," (Major Grand: "… then inflicts
+ * Marked for 10 turns if it has less than 2 debuffs. If it has 2 or more debuffs, this Unit
+ * cleanses 2 debuffs and grants Security Up II"). Each sentence is a whole branch, so every effect
+ * in it takes its sentence's gate. Empty when the text has no such complementary pair: a lone
+ * gate governs only the effect it is written on. Spans index the raw `text`.
+ */
+export function detectCountGateBranches(text: string): CountGateBranch[] {
+    // Both maskings are length-preserving, so spans found here index the raw `text`.
+    const abbrevMasked = maskAbbrev(text);
+    const masked = abbrevMasked.replace(/<[^>]*>/g, (tag) => ' '.repeat(tag.length));
+    const spans: Array<{ start: number; end: number }> = [];
+    const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
+    let start = 0;
+    let m: RegExpExecArray | null;
+    while ((m = boundary.exec(abbrevMasked)) !== null) {
+        spans.push({ start, end: m.index + m[0].length });
+        start = m.index + m[0].length;
+    }
+    if (start < text.length) spans.push({ start, end: text.length });
+    const out: CountGateBranch[] = [];
+    for (let i = 0; i + 1 < spans.length; i++) {
+        const first = masked.slice(spans[i].start, spans[i].end);
+        const second = masked.slice(spans[i + 1].start, spans[i + 1].end);
+        const lead = /^\s*if\b[^,]*,/i.exec(second);
+        const trail = /\bif\b[^,]*[.;]?\s*$/i.exec(first);
+        if (!lead || !trail) continue;
+        const a = countGateCondition(trail[0]);
+        const b = countGateCondition(lead[0]);
+        if (!a || !b || !complementaryCountGates(a, b)) continue;
+        out.push({ ...spans[i], gate: a }, { ...spans[i + 1], gate: b });
+    }
+    return out;
+}
+
+/** "fewer than N" against "N or more", over the same subject (either order). */
+function complementaryCountGates(a: Condition, b: Condition): boolean {
+    if (a.subject !== b.subject || a.buffName !== b.buffName) return false;
+    const [lte, gte] = a.countComparator === 'lte' ? [a, b] : [b, a];
+    return (
+        lte.countComparator === 'lte' &&
+        gte.countComparator === 'gte' &&
+        lte.countThreshold !== undefined &&
+        gte.countThreshold === lte.countThreshold + 1
+    );
+}
+
 /**
  * Detects the condition(s) gating a granted/inflicted buff or debuff, scoped to the
  * sentence that mentions `buffName` (so an unconditional buff in the same skill isn't
@@ -1382,6 +1443,22 @@ export function detectGrantConditions(
     // (evaluateConditions.ts:132), which would leave the Barrier ungated, i.e. the bug itself.
     if (TARGET_HAS_SHIELD_RE.test(low)) {
         return [{ subject: 'enemy-shield', derivable: true }];
+    }
+
+    // "If there are no <X> enemies present" (General Colosso): no living enemy holds debuff X.
+    const noHolder = NO_STATUS_HOLDER_PRESENT_RE.exec(clause);
+    if (noHolder) {
+        const name = noHolder[1].trim();
+        return [
+            {
+                subject: 'enemy-debuff-holder-count',
+                derivable: true,
+                buffName:
+                    BUFFS.find((b) => b.name.toLowerCase() === name.toLowerCase())?.name ?? name,
+                countComparator: 'eq',
+                countThreshold: 0,
+            },
+        ];
     }
 
     // target-repaired-this-round (Nayra). Live-derived gate; derivable:true (a
@@ -1820,6 +1897,8 @@ const ALLY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+ally\b[^.]*?\bgains?\b[^.]*?\btaunt\
 const ANY_SHIP_DIES_RE = /\bwhenever\s+any\s+ship\s+dies\b/i;
 // Mamma Maglienza: "… and after attacking, gains …" — after each of the owner's attack casts.
 const AFTER_ATTACKING_RE = /\bafter\s+attacking\b/i;
+// General Colosso: "With each ally death, the Boss gains …" — another own-side unit's death.
+const WITH_EACH_ALLY_DEATH_RE = /\bwith\s+each\s+ally\s+death\b/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -1849,8 +1928,9 @@ const AFTER_ATTACKING_RE = /\bafter\s+attacking\b/i;
  *    it to the family with detectInflictedStatusFilter.
  *  - "if this Unit's debuff is resisted" → 'on-own-debuff-resisted' (the inflictor-scoped
  *    mirror of the resister-side on-debuff-resisted).
- *  - "after attacking" → 'on-attack-cast'; "whenever any ship dies" → 'on-ally-destroyed'
- *    (Mamma Maglienza; owner-ruled same-side only). Checked first, after-attacking before the death phrase.
+ *  - "after attacking" → 'on-attack-cast'; "whenever any ship dies" (Mamma Maglienza;
+ *    owner-ruled same-side only) and "with each ally death" (General Colosso) →
+ *    'on-ally-destroyed'. Checked first, after-attacking before the death phrase.
  *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained'. Narrow and
  *    name-specific to Taunt — distinct from the broad, unfiltered on-enemy-buffed
  *    (ENEMY_BUFFED_RE).
@@ -1877,7 +1957,8 @@ export function detectReactiveTrigger(
     // "after attacking" before "whenever any ship dies": a grant after "…, and after attacking,"
     // keeps the sentence-leading death trigger in its clause, and the later trigger governs it.
     if (AFTER_ATTACKING_RE.test(clause)) return 'on-attack-cast';
-    if (ANY_SHIP_DIES_RE.test(clause)) return 'on-ally-destroyed';
+    if (ANY_SHIP_DIES_RE.test(clause) || WITH_EACH_ALLY_DEATH_RE.test(clause))
+        return 'on-ally-destroyed';
     // "when an ally critically hits" → on-ally-crit (Hermes's Everliving Regeneration buff grant).
     // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
@@ -2862,6 +2943,18 @@ export function detectDestroyedTrigger(
     return phrasePosTrigger(text, DESTROYED_ALLY_REPAIR_RE, anchorPos, 'on-destroyed');
 }
 
+// The caster's own death, any cause: "Upon dying, this Unit …" / "When this Unit dies …".
+const SELF_DEATH_RE = /\bupon\s+dying\b|\bwhen\s+this\s+unit\s+dies\b/i;
+
+/** 'on-destroyed' when `anchorPos` falls inside a sentence naming the caster's own death
+ *  ("Upon dying, this Unit cleanses 3 debuffs from all allies"); otherwise undefined. */
+export function detectSelfDeathTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, SELF_DEATH_RE, anchorPos, 'on-destroyed');
+}
+
 // Rikra's per-kill self-heal phrasing: "for each enemy destroyed by this Unit". It does not match
 // KILL_TRIGGER_RE (it is passive voice), so it lives here, scoped to the self-repair path
 // (detectEnemyDestroyedTrigger), not in the shared KILL_TRIGGER_RE that also resolves
@@ -3159,6 +3252,7 @@ export function detectPurgeEnemyTypeCondition(
 // the gated clause's own sentence, whose "if" is the gate, so the phrase alone is enough. No
 // <unit-…> tags intervene in the phrase.
 const REPAIRED_THIS_ROUND_RE = /\brepaired\s+this\s+round\b/i;
+const NO_STATUS_HOLDER_PRESENT_RE = /\bif\s+there\s+are\s+no\s+(.+?)\s+enemies\s+present\b/i;
 
 // "the enemy with the most buffs" — Rhodium most-buffs target axis. Crosses <unit-aid> tags.
 // Verified against RAW CSV: '… buffs from the enemy with the most buffs.'
@@ -3974,6 +4068,14 @@ export function parseChargeLossImmune(text: string | null | undefined): boolean 
 const CONTROL_IMMUNE_RE = /\bimmune to control\b/i;
 export function parseControlImmune(text: string | null | undefined): boolean {
     return !!text && CONTROL_IMMUNE_RE.test(stripUnitTags(text));
+}
+
+/** True iff this skill text declares the unit is immune to damage over time effects ("immune to
+ *  Control, damage over time effects and Charge Loss effects", General Colosso). A reduction of DoT
+ *  damage ("takes 50% less damage from DoTs") is not an immunity. */
+const DOT_IMMUNE_RE = /\bimmune to\b[^.]*?\bdamage over time effects\b/i;
+export function parseDotImmune(text: string | null | undefined): boolean {
+    return !!text && DOT_IMMUNE_RE.test(stripUnitTags(text));
 }
 
 /** True iff this skill text says the unit "has infinite Hacking" (Mamma Maglienza): its debuffs
@@ -6293,8 +6395,18 @@ function findLeadingDuration(segments: SkillTextSegment[], tagIndex: number): nu
 
 // Words that pin a self-grant verb's subject to the caster once encountered while scanning
 // backward from the verb — "this Unit gains X" / "it gains X" / "they gain X" (team subjects).
-// Reaching one of these BEFORE an "enemy"/"enemies" word means the verb is a genuine self-grant.
-const SELF_SUBJECT_STOP_WORDS = new Set(['this', 'unit', 'it', 'itself', 'they', 'their', 'ally']);
+// Reaching one of these BEFORE an "enemy"/"enemies" word means the verb is a genuine self-grant
+// ("If there are no Marked enemies present, all allies are granted X": the subject is "allies").
+const SELF_SUBJECT_STOP_WORDS = new Set([
+    'this',
+    'unit',
+    'it',
+    'itself',
+    'they',
+    'their',
+    'ally',
+    'allies',
+]);
 // Bound the backward subject scan to a short window — the known shape ("an enemy defender
 // gains") is 1-2 words — so an unrelated, distant "enemy" earlier in a long sentence can never
 // mis-flag an unrelated verb (mirrors the ~20-char window used by the analogous Taunt-only guard
@@ -6461,6 +6573,8 @@ const ADJACENT_ALLIES_RE = /\badjacent allies\b/i;
 const SELF_RECEIVER_RE = /\bitself\b/i;
 // The clause deals damage itself ("deals 170% damage and grants …").
 const DEALS_DAMAGE_RE = /\bdeals?\s+\d+(?:\.\d+)?%\s+damage\b/i;
+// A cleanse that names no receiver ("this Unit cleanses 2 debuffs and grants …").
+const BARE_CLEANSE_RE = /\bcleanses?\s+(?:\d+|all)\s+debuffs?\b(?!\s+from\b)/i;
 // A status a ship only ever grants itself: a receiver-less grant of one routes to self, not to
 // all allies. Lower-case canonical names.
 const SELF_ONLY_GRANT_NAMES: ReadonlySet<string> = new Set(['taunt']);
@@ -6585,6 +6699,8 @@ function findNthOccurrencePos(text: string, name: string, occurrenceIndex: numbe
  *      · NO explicit receiver, self-only status ("This Unit grants Taunt")   → 'self'
  *      · NO explicit receiver ("This Unit grants X")                         → 'all-allies'
  *      · NO explicit receiver in a clause that deals damage (Lionheart)        → 'self'
+ *      · NO explicit receiver beside a receiver-less cleanse, in a skill that
+ *        deals damage ("this Unit cleanses 2 debuffs and grants X")         → 'self'
  *
  * Returns a LIST because of that one combined receiver: the caster and its board neighbours are
  * disjoint recipient sets (`adjacentAllyIds` excludes the owner) and no single scope spans them.
@@ -6662,6 +6778,12 @@ function detectGrantScopes(
         // ally's hits taken stay unbuffed). Such a skill's targeting pattern is its OFFENSIVE one,
         // so there is no support pattern for the engine to narrow an all-allies grant with.
         if (DEALS_DAMAGE_RE.test(clause)) return ['self'];
+        // A receiver-less grant joined to a receiver-less cleanse, in a skill that deals damage,
+        // shares the cleanse's receiver: the caster (`flipBareSupportTarget` keeps a bare cleanse
+        // on a damaging skill on the caster).
+        if (BARE_CLEANSE_RE.test(clause) && DEALS_DAMAGE_RE.test(stripUnitTags(skillText))) {
+            return ['self'];
+        }
         // Receiver-less grant → all players (the locked routing rule; the engine narrows it to
         // the skill's support pattern).
         return ['all-allies'];

@@ -97,6 +97,44 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
             },
         },
     },
+    {
+        id: 'colosso',
+        name: 'General Colosso',
+        affinity: 'thermal',
+        type: 'DEFENDER',
+        footprint: ['T3', 'M3', 'M4', 'B3'],
+        activeTarget: 'marked-or-front',
+        activePattern: 'Pattern-Horseshoe-Range-1',
+        chargedTarget: 'marked-or-front',
+        chargedPattern: 'Pattern-Horseshoe-Range-1',
+        activeSkillText:
+            "The Boss deals <unit-damage>damage equal to 175%</unit-damage> of the unit's defense to all <unit-skill>Marked</unit-skill> enemies and removes their <unit-skill>Marked</unit-skill> status. If there are no <unit-skill>Marked</unit-skill> enemies present, all allies are granted <unit-skill>Hacking Up II</unit-skill> for 1 turn, and the Boss deals <unit-damage>damage equal to 175%</unit-damage> of the unit's defense. This ability has <unit-damage>50% defense penetration</unit-damage>.",
+        chargeSkillText:
+            "The Boss deals <unit-damage>damage equal to 200%</unit-damage> of the unit's defense to all <unit-skill>Marked</unit-skill> enemies and removes their <unit-skill>Marked</unit-skill> status. If there are no <unit-skill>Marked</unit-skill> enemies present, all allies are granted <unit-skill>Hacking Up III</unit-skill> for 1 turn, and the Boss deals <unit-damage>damage equal to 200%</unit-damage> of the unit's defense. This ability has <unit-damage>50% defense penetration</unit-damage>.",
+        chargeSkillCharge: 2,
+        passiveSkillText:
+            'The Boss is immune to Control, damage over time effects and Charge Loss effects and has 100% Shield Penetration. Outgoing damage increases by 15% for each dead ally ship. With each ally death, the Boss gains <unit-skill>Defense Up III</unit-skill> and <unit-skill>Taunt</unit-skill> for 2 turns. After attacking, the Boss gains <unit-skill>Enrage Damage III</unit-skill>.',
+        statsByLevel: {
+            32: {
+                hp: 251155,
+                // Defence and crit damage are fitted to measured in-game hits (#519); his damage
+                // scales with defence, so attack never reaches a hit.
+                attack: 26390,
+                defence: 25137,
+                hacking: 270,
+                security: 160,
+                crit: 22,
+                critDamage: 13,
+                speed: 93,
+                hpRegen: 0,
+                shield: 0,
+                // Assimilated Armor: "has 100% Shield Penetration".
+                shieldPenetration: 100,
+                defensePenetration: 0,
+                damageReduction: 0,
+            },
+        },
+    },
 ];
 
 /** A non-boss unit an encounter places beside its boss: one hex, fixed level. */
@@ -156,6 +194,42 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
             damageReduction: 0,
         },
     },
+    {
+        id: 'major-grand',
+        name: 'Major Grand',
+        affinity: 'thermal',
+        type: 'DEBUFFER',
+        imageKey: 'Major_Grand',
+        level: 124,
+        activeTarget: 'front',
+        activePattern: 'Pattern-Line-Range-1',
+        chargedTarget: 'front',
+        chargedPattern: 'Pattern-Line-Range-1',
+        activeSkillText:
+            'This Unit grants <unit-skill>Hacking Up III</unit-skill> for 1 turn and deals <unit-damage>60% damage</unit-damage>, ignoring the <unit-skill>Marked</unit-skill> effect, then inflicts <unit-skill>Marked</unit-skill> for 10 turns if it has less than 2 debuffs. If it has 2 or more debuffs, this Unit <unit-aid>cleanses 2 debuffs</unit-aid> and grants <unit-skill>Security Up II</unit-skill> for 2 turns.',
+        chargeSkillText: '',
+        chargeSkillCharge: 0,
+        passiveSkillText:
+            'Upon dying, this Unit <unit-aid>cleanses 3 debuffs</unit-aid> from all allies.',
+        stats: {
+            hp: 42050,
+            // Attack and crit damage are fitted to measured in-game hits (#519). Defence is fitted
+            // to Asphyxiator's opening crit on a Major Grand under Graphite's Overclock III and his
+            // own Defense Down III (`bountyBossReplay.integration.test.ts`).
+            attack: 10470,
+            defence: 9086,
+            hacking: 270,
+            security: 160,
+            crit: 22,
+            critDamage: 32,
+            speed: 106,
+            hpRegen: 0,
+            shield: 0,
+            shieldPenetration: 0,
+            defensePenetration: 0,
+            damageReduction: 0,
+        },
+    },
 ];
 
 export interface BountyEncounter {
@@ -174,6 +248,15 @@ export const BOUNTY_ENCOUNTERS: readonly BountyEncounter[] = [
             { addId: 'capo', position: 'T2' },
             { addId: 'capo', position: 'M4' },
             { addId: 'capo', position: 'B2' },
+        ],
+    },
+    {
+        bountyId: 'colosso',
+        level: 32,
+        adds: [
+            { addId: 'major-grand', position: 'T1' },
+            { addId: 'major-grand', position: 'M2' },
+            { addId: 'major-grand', position: 'B1' },
         ],
     },
 ];

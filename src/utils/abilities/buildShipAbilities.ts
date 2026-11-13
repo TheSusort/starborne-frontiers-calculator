@@ -88,6 +88,8 @@ import {
     detectEndOfRoundDamageTrigger,
     detectRoundStartContinuationTrigger,
     detectKilledByDirectDamageTrigger,
+    detectSelfDeathTrigger,
+    detectCountGateBranches,
     detectDealDamageToRoleTrigger,
     detectPurgeEnemyTypeCondition,
     detectMostBuffsTarget,
@@ -113,6 +115,7 @@ import {
     parseStasisBreakExemption,
     parseChargeLossImmune,
     parseControlImmune,
+    parseDotImmune,
     parseInfiniteHacking,
     parseAlwaysCrits,
     detectIgnoresForcedTargeting,
@@ -405,6 +408,9 @@ function forEachCondition(sentence: string): Condition | null {
     // the actor, so `self-buff` would count the wrong thing and count it on the wrong unit.
     if (/^all(?:y|ies)\b.*\bshield\b/.test(what.trim()))
         return { subject: 'ally-shield-count', derivable: true };
+    // General Colosso: "for each dead ally ship" — own-side units destroyed so far.
+    if (/^dead\s+all(?:y|ies)\b/.test(what.trim()))
+        return { subject: 'ally-destroyed', derivable: false };
     if (/destroy/.test(what)) return { subject: 'enemy-destroyed', derivable: false };
     // "for each debuffed enemy" counts enemy UNITS, as the heal parser's mapHealCountPhrase does.
     if (/^debuffed\s+enem/.test(what.trim()))
@@ -636,6 +642,30 @@ function parseModifiers(text: string): ParsedModifier[] {
             target: isAllyScoped ? 'all-allies' : 'self',
             conditions,
         });
+    }
+
+    // "Outgoing damage increases by X% for each <thing>" (General Colosso's "for each dead ally
+    // ship") → an additive outgoing-damage modifier scaled by the count, capped only when the
+    // sentence states a cap.
+    const increasesM = plain.match(/outgoing\s+damage\s+increases\s+by\s+(\d+(?:\.\d+)?)%/i);
+    if (increasesM) {
+        const sentence = sentenceContaining(plain, increasesM.index!);
+        const countCond = /for each/i.test(sentence) ? forEachCondition(sentence) : null;
+        if (countCond) {
+            const cap = capFromSentence(sentence);
+            out.push({
+                channel: 'outgoingDamage',
+                value: 0,
+                isMultiplicative: false,
+                target: 'self',
+                conditions: [countCond],
+                scaling: {
+                    conditionIndex: 0,
+                    perUnit: parseFloat(increasesM[1]),
+                    ...(cap !== undefined ? { cap } : {}),
+                },
+            });
+        }
     }
 
     // Sub-project I, PR I4a: "N% additional <DoT> damage … for every M% crit power"
@@ -1094,6 +1124,30 @@ function markBoardWide(positioned: PositionedAbility[], text: string): void {
 }
 
 /**
+ * Gates every on-cast ability of an either/or count-gate sentence pair on its own sentence's
+ * branch (`detectCountGateBranches`), so the two branches are exclusive: an effect the gate is
+ * not written on (the Major Grand's 60% hit, its self cleanse) still belongs to one branch. An
+ * ability already carrying that gate is left as is.
+ */
+function markCountGateBranches(positioned: PositionedAbility[], text: string): void {
+    const branches = detectCountGateBranches(text);
+    if (branches.length === 0) return;
+    for (const p of positioned) {
+        if (p.ability.trigger !== 'on-cast') continue;
+        const branch = branches.find((b) => p.pos >= b.start && p.pos < b.end);
+        if (!branch) continue;
+        const has = p.ability.conditions.some(
+            (c) =>
+                c.subject === branch.gate.subject &&
+                c.buffName === branch.gate.buffName &&
+                c.countComparator === branch.gate.countComparator &&
+                c.countThreshold === branch.gate.countThreshold
+        );
+        if (!has) p.ability.conditions = [...p.ability.conditions, { ...branch.gate }];
+    }
+}
+
+/**
  * Stamps `triggerKillerScope: 'owner'` on every on-kill reaction whose clause makes this Unit the
  * killer — "upon destroying an enemy", "When this Unit destroys an enemy" (owner ruling R18; see
  * `killSentenceScope`). The ability's own sentence decides. An ability anchored outside any kill
@@ -1292,6 +1346,9 @@ function flipBareSupportShieldTarget(
     }
     return target;
 }
+
+const REMOVES_THEIR_STATUS_RE =
+    /\bremoves\s+their\s+(?:<unit-skill>)?([^<.]+?)(?:<\/unit-skill>)?\s+status\b/i;
 
 function abilitiesFromText(
     text: string,
@@ -2729,6 +2786,7 @@ function abilitiesFromText(
         //    after it.
         //  - ally-shield-destroyed ("cleanses all debuffs when an ally has their Shield
         //    destroyed") -> on-ally-shield-destroyed.
+        //  - self-death ("Upon dying, this Unit cleanses ...") -> on-destroyed, any cause.
         //  - a PASSIVE-slot cleanse whose sentence carries a direct-damage reaction phrase ->
         //    on-attacked. An active/charged cleanse is on-cast.
         const reactiveTrigger =
@@ -2736,6 +2794,7 @@ function abilitiesFromText(
             detectAllyCritTrigger(text, cleansePos) ??
             detectEveryTurnTrigger(text, cleansePos) ??
             detectAllyShieldDestroyedTrigger(text, cleansePos) ??
+            detectSelfDeathTrigger(text, cleansePos) ??
             (slot === 'passive' &&
             detectDamageReactionTrigger(text, cleansePos)?.trigger === 'on-attacked'
                 ? ('on-attacked' as const)
@@ -3187,6 +3246,23 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: removePos >= 0 ? removePos : MAX_POS,
+        });
+    }
+
+    // "removes their <X> status" (General Colosso): the cast clears X from the targets it struck.
+    const targetStatusRemoval = REMOVES_THEIR_STATUS_RE.exec(text);
+    if (targetStatusRemoval && (slot === 'active' || slot === 'charged')) {
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'remove-target-status',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'remove-target-status', buffName: targetStatusRemoval[1].trim() },
+                autoFilled: true,
+            },
+            pos: targetStatusRemoval.index,
         });
     }
 
@@ -4370,6 +4446,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         markPatternScoped(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         markKillerScope(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         markBoardWide(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
+        markCountGateBranches(positioned, getSkillRowForSlot(ship, slot)?.text ?? '');
         positioned.sort((a, b) => a.pos - b.pos);
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }
@@ -4391,6 +4468,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
 
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
     const controlImmune = getShipSkillRows(ship).some((row) => parseControlImmune(row.text));
+    const dotImmune = getShipSkillRows(ship).some((row) => parseDotImmune(row.text));
     const alwaysLandsDebuffs = getShipSkillRows(ship).some((row) => parseInfiniteHacking(row.text));
     const alwaysCrits = getShipSkillRows(ship).some((row) => parseAlwaysCrits(row.text));
 
@@ -4409,6 +4487,7 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ...(!doesntBreakStasis && stasisBreakExemptWhen ? { stasisBreakExemptWhen } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
         ...(controlImmune ? { controlImmune: true } : {}),
+        ...(dotImmune ? { dotImmune: true } : {}),
         ...(alwaysLandsDebuffs ? { alwaysLandsDebuffs: true } : {}),
         ...(alwaysCrits ? { alwaysCrits: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),

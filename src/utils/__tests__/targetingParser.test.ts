@@ -316,6 +316,20 @@ describe('row-choice targeting tokens', () => {
             selection: 'row-least',
         });
     });
+    it('parses marked-or-front as the enemy-side marked selection', () => {
+        expect(parseTarget('marked-or-front')).toEqual({
+            raw: 'marked-or-front',
+            side: 'enemy',
+            selection: 'marked',
+        });
+    });
+    it('parses Pattern-Horseshoe-Range-1 as the range-1 horseshoe shape', () => {
+        expect(parsePattern('Pattern-Horseshoe-Range-1')).toMatchObject({
+            shape: 'horseshoe',
+            range: 1,
+            modifiers: {},
+        });
+    });
     it('parses Pattern-Row as the whole-row shape with no modifiers', () => {
         expect(parsePattern('Pattern-Row')).toEqual({
             raw: 'Pattern-Row',

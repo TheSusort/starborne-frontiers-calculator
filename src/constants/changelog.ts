@@ -5,6 +5,7 @@ import { ChangelogEntry } from '../types/changelog';
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Bounty bosses: General Colosso and his Major Grand escorts can now be fought.',
     'Combat simulator: bounty bosses now show portrait and health on every tile they cover.',
     'Combat simulator: bounty boss names now sit on the middle hex.',
     'Combat simulator: Capo now shows its portrait on the boards and in playback.',
