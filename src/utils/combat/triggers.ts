@@ -3392,11 +3392,10 @@ export function buildActorConditionContext(
         // NOT populated here: the live counts the CAST path (playerTurn.ts `liveCountCtx`)
         // supplies — adjacency and destroyed-unit counts. Withholding them leaves a reactive-path
         // condition on those subjects on its manual `manualCount ?? 1` fallback. No reactive GATE
-        // reads them today: every reader (Centurion, Panguan, Judge, General Colosso) is a
-        // cast-time damage or modifier ability. A reactive one would need `shared` to carry the
-        // same readings from engine.ts's buildTurnArgs. (A reactive
-        // proc's DAMAGE does read Judge's destroyed-enemy modifier, through its own live count:
-        // engine.ts's `reactivePassiveOutgoingPct`.)
+        // reads them: a reactive one would need `shared` to carry the same readings from
+        // engine.ts's buildTurnArgs. A reactive proc's DAMAGE reads the destroyed-enemy modifier
+        // through its own live count (`reactivePassiveOutgoingPct` in engine.ts), which folds
+        // `enemy-destroyed` only; `ally-destroyed` is not folded on the reactive path.
     });
 }
 
