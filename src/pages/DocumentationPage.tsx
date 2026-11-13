@@ -4835,12 +4835,19 @@ const DocumentationPage: React.FC = () => {
                                         bosses have none. Killing the boss wins the fight even with
                                         escorts left standing. Mamma and the Capos hit a whole row
                                         of your team: the fullest row for Mamma, the emptiest for
-                                        the Capos. The Major Grands tag your ships with Marked, and
-                                        Colosso hits every Marked ship one by one; if none are
-                                        Marked he hits your front ship with splash on its
-                                        neighbours. Colosso cannot be controlled, takes no damage
-                                        over time and never loses charge. Encounters need the normal
-                                        board; None brings the empty board back
+                                        the Capos. Encounters need the normal board; None brings the
+                                        empty board back
+                                    </li>
+                                    <li>
+                                        General Colosso: the Major Grands tag your ships with
+                                        Marked, and Colosso hits every Marked ship one by one; if
+                                        none are Marked he hits your front ship with splash on its
+                                        neighbours. Marked does no damage by itself, it only tells
+                                        Colosso whom to hit, and he clears it after the hit. A Major
+                                        Grand that already carries two or more debuffs spends its
+                                        turn cleansing itself instead of attacking and Marking.
+                                        Colosso cannot be controlled, takes no damage over time and
+                                        never loses charge
                                     </li>
                                 </ul>
                             </div>
