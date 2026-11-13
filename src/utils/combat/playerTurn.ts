@@ -839,6 +839,12 @@ const VICTIM_CONTEXT_KEYS = (
     Object.keys(CONDITION_CONTEXT_SUBJECT) as (keyof typeof CONDITION_CONTEXT_SUBJECT)[]
 ).filter((k) => CONDITION_CONTEXT_SUBJECT[k] === 'victim');
 
+/** Condition subjects a firing-slot hacking gain's gate may read and still land before the cast's
+ *  landing rolls: the caster's own at-cast state, known before anything in the cast resolves. */
+const PRE_ROLL_GATE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set<ConditionSubject>([
+    'self-debuff',
+]);
+
 /** Condition subjects that ask about the enemy a cast strikes ("If the target has a shield", "If
  *  the primary target has 3 or more damage over time effects"). A self gain gated on one fires
  *  ONCE when ANY enemy the cast strikes qualifies (owner ruling R17) — see `anyStruckVictimMeets`.
@@ -3143,11 +3149,29 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ? ownDebuffsNow.enemyAppliedFamilies
         : args.enemyAppliedFamilies;
 
-    /** Firing-slot self statuses landed ahead of the cast's landing rolls (written order): an
-     *  ungated hacking gain whose clause precedes an infliction (`beforeInflictClause` — Rys's
-     *  "gains Hacking Up III …, and inflicts Speed Down II"). The status loop below skips them. A
-     *  gated one waits for its gate context in that loop; a gain that cannot move the roll keeps
-     *  its place there too. */
+    /** Firing-slot self statuses landed ahead of the cast's landing rolls (written order): a
+     *  hacking gain whose clause precedes an infliction (`beforeInflictClause` — Rys's "gains
+     *  Hacking Up III …, and inflicts Speed Down II"). The status loop below skips them. A gain
+     *  that cannot move the roll keeps its place there.
+     *
+     *  A self-state-only gate is decidable before the rolls: one reading only the caster's own
+     *  debuffs (`PRE_ROLL_GATE_SUBJECTS`) is asked here, through `conditionsMet`, against the
+     *  caster's at-cast readings — the count before this cast's own cleanse, as the cast's
+     *  branch gates read it (the Major Grand's "Hacking Up III … if it has less than 2
+     *  debuffs"). A gate on any other subject waits for its gate context in the loop below. */
+    const preRollGateCtx = buildRoundContext({
+        selfBuffNames: [],
+        landedEnemyDebuffCount: 0,
+        corrosionStacks: 0,
+        infernoStacks: 0,
+        bombStacks: 0,
+        effectiveCritRate: 0,
+        selfDebuffNames: selfDebuffNamesIn,
+        selfDebuffCount: selfDebuffCountIn,
+    });
+    const decidableBeforeRolls = (conditions: TimedStatus['conditions']): boolean =>
+        conditions.every((c) => PRE_ROLL_GATE_SUBJECTS.has(c.subject)) &&
+        conditionsMet(conditions, preRollGateCtx);
     const selfStatusesBeforeRolls = new Set<TimedStatus>();
     if (hasVictim) {
         for (const status of timedSelfBySlot) {
@@ -3155,7 +3179,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 status.sourceSlot === action &&
                 status.beforeInflictClause === true &&
                 status.afterDamageClause !== true &&
-                status.conditions.length === 0 &&
+                decidableBeforeRolls(status.conditions) &&
                 (status.payload.parsedEffects.hacking ?? 0) !== 0
             ) {
                 applyTimedSelfStatus(status);

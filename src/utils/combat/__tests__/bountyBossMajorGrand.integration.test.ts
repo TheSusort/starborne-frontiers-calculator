@@ -11,6 +11,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
+import { buildCombatLog } from '../log/buildCombatLog';
+import { LOG_EVENT_TYPES } from '../../calculators/battleSimulator';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import {
@@ -212,11 +214,7 @@ describe.each(SIDES)('Major Grand with fewer than 2 debuffs, on the %s side', (p
         })),
     });
 
-    // KNOWN GAP (spec: "its self Hacking Up III raises the roll"): the engine lands a firing-slot
-    // hacking gain ahead of the cast's landing rolls only when it is UNGATED (playerTurn.ts,
-    // `selfStatusesBeforeRolls`); this one carries the under-2-debuffs gate, so it lands after the
-    // rolls. `it.fails` flips red once the gap closes — then make it a plain `it`.
-    it.fails('its own Hacking Up III counts toward the Marked roll of the same cast', () => {
+    it('its own Hacking Up III counts toward the Marked roll of the same cast', () => {
         expect(markedRolls(grandKit(), 4)).toEqual({ landed: 8, resisted: 0 });
     });
 
@@ -288,6 +286,32 @@ describe.each(SIDES)('Major Grand with 2 or more debuffs, on the %s side', (plac
             expect(r.buffs.get(id(caster))).not.toContain(ATTACK_PROBE);
         }
     );
+
+    it('its turn logs the cleanse and Security Up II, no attack entry', () => {
+        const opp = [hexer('m3', 'M3', 2), dummy('m2', 'M2')];
+        const caster = grand('M1');
+        const { input, id } = boardInput(placement, caster, [], opp, 1);
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        for (const t of LOG_EVENT_TYPES) bus.on(t, (e) => events.push(e as CombatEvent));
+        runCombat({ ...input, bus });
+        const roster = [caster, ...opp].map((u) => ({
+            actorId: id(u),
+            side:
+                (u === caster) === (placement === 'player')
+                    ? ('player' as const)
+                    : ('enemy' as const),
+            name: u.id,
+        }));
+        const turns = buildCombatLog(events, roster, new Map())
+            .flatMap((r) => r.turns)
+            .filter((t) => t.actorId === id(caster));
+        expect(turns).toHaveLength(1);
+        expect(turns[0].entries.map((e) => [e.kind, e.note])).toEqual([
+            ['cleanse', 'cleansed 2'],
+            ['buff', 'Security Up II'],
+        ]);
+    });
 
     it('the damage-less cast still gains a charge, as any cast does', () => {
         // The Major Grand has no charged skill; a stand-in charged slot makes it bank charges.
