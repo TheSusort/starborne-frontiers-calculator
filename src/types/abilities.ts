@@ -38,6 +38,10 @@ export type AbilityType =
     | 'buff-steal'
     | 'control'
     | 'remove-self-buff'
+    // "removes their <X> status" (General Colosso): removes a named status from the cast's primary
+    // targets after its damage — a targeted removal by the caster's own clause, so it reaches an
+    // unremovable status that cleanse and purge cannot.
+    | 'remove-target-status'
     | 'incoming-reduction'
     | 'incoming-block'
     | 'incoming-shield-grant'
@@ -567,6 +571,11 @@ export type ConditionSubject =
     // without that field it falls back to 1 when `enemyDebuffCount > 0`, else 0. Always
     // derivable:true.
     | 'debuffed-enemy-count'
+    // COUNT subject: the number of LIVING OPPOSING units holding the debuff named in `buffName`
+    // (a unit counts once). General Colosso's "If there are no Marked enemies present" reads it
+    // with `eq 0`. Live-derived by the combat engine on both sides before the cast
+    // (ConditionContext.enemyDebuffHolderCounts); absent reads 0. Always derivable:true.
+    | 'enemy-debuff-holder-count'
     // SCALING-SOURCE subject (sub-project I, PR I4a): the ACTING unit's own live crit
     // power (effective critDamage stat, e.g. 150), as a continuous magnitude — not a
     // count of entities like the other scaling sources above. Used by Wildfire's
@@ -1157,6 +1166,9 @@ export type AbilityConfig =
     // family from ALL of the owner's self stores. target:'self'; trigger carries the reactive
     // moment.
     | { type: 'remove-self-buff'; buffName: string; scope: 'all' }
+    // target:'enemy', trigger:'on-cast'. The engine removes `buffName` from each primary target the
+    // cast struck, after the hit (`PlayerTurnResult.primaryStatusRemovals`).
+    | { type: 'remove-target-status'; buffName: string }
     // D-PR3 victim-side incoming-damage reduction (folded at the crit-aware computation sites).
     | {
           type: 'incoming-reduction';

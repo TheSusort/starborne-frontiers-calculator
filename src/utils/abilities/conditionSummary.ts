@@ -44,6 +44,7 @@ export const CONDITION_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>>
     'stat-vs-target': "when a stat compares favourably to the target's",
     'ally-shield-count': 'per ally with a shield',
     'debuffed-enemy-count': 'per debuffed enemy',
+    'enemy-debuff-holder-count': 'per enemy holding the named debuff',
     'buffs-purged-this-cast': 'per buff this skill purges',
 };
 

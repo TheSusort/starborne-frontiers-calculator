@@ -101,7 +101,7 @@ import {
 // Type-only import (erased at runtime) → no circular-import cycle even though playerTurn.ts
 // imports buildActorConditionContext/ReactiveAbility from this module.
 import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx, RateGate } from './playerTurn';
-import type { ActorTargetingStatus } from './positionalBinding';
+import { MARKED_STATUS, type ActorTargetingStatus } from './positionalBinding';
 import { extendsDotFrom } from './dotDurationExtension';
 import { immuneToEnemyStatus } from './controlImmunity';
 
@@ -4482,9 +4482,25 @@ export function buildForcedTargetingStatus(
             stealthed: selfNames.includes('Stealth'),
             taunting: selfNames.includes('Taunt'),
             concentrated: debuffNames.includes('Concentrate Fire'),
+            marked: debuffNames.includes(MARKED_STATUS),
         });
     }
     return map;
+}
+
+/** Per debuff name, how many of `actors` hold it (a unit counts once per name), read from the
+ *  same store as {@link buildForcedTargetingStatus}. Feeds `ConditionContext.enemyDebuffHolderCounts`. */
+export function debuffHolderCounts(
+    statusEngine: StatusEngine,
+    actors: readonly { id: string }[]
+): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const { id } of actors) {
+        for (const name of ownerDebuffNamesFor(statusEngine, id)) {
+            counts[name] = (counts[name] ?? 0) + 1;
+        }
+    }
+    return counts;
 }
 
 function payloadFromConfig(cfg: {

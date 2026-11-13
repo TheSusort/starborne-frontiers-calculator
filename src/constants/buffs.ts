@@ -930,6 +930,11 @@ export const BUFFS: Buff[] = [
         type: 'buff',
     },
     {
+        name: 'Marked',
+        description: 'Marked for attack. Unremovable.',
+        type: 'debuff',
+    },
+    {
         name: 'White Phosphorus I',
         description:
             "Deals Damage equal to 15% of this units's attack, ignores defense and shield. Cannot be cleansed.",

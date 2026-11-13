@@ -103,10 +103,10 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
         affinity: 'thermal',
         type: 'DEFENDER',
         footprint: ['T3', 'M3', 'M4', 'B3'],
-        activeTarget: 'front',
-        activePattern: 'Pattern-Circle-Range-1',
-        chargedTarget: 'front',
-        chargedPattern: 'Pattern-Circle-Range-1',
+        activeTarget: 'marked-or-front',
+        activePattern: 'Pattern-Horseshoe-Range-1',
+        chargedTarget: 'marked-or-front',
+        chargedPattern: 'Pattern-Horseshoe-Range-1',
         activeSkillText:
             "The Boss deals <unit-damage>damage equal to 175%</unit-damage> of the unit's defense to all <unit-skill>Marked</unit-skill> enemies and removes their <unit-skill>Marked</unit-skill> status. If there are no <unit-skill>Marked</unit-skill> enemies present, all allies are granted <unit-skill>Hacking Up II</unit-skill> for 1 turn, and the Boss deals <unit-damage>damage equal to 175%</unit-damage> of the unit's defense. This ability has <unit-damage>50% defense penetration</unit-damage>.",
         chargeSkillText:

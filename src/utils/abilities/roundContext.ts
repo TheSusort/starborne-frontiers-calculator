@@ -86,6 +86,9 @@ export function buildRoundContext(state: {
     /** Living opposing units carrying a debuff. Passed through with NO default — see
      *  ConditionContext.debuffedEnemyCount. */
     debuffedEnemyCount?: number;
+    /** Living opposing units holding each named debuff. Passed through with NO default — see
+     *  ConditionContext.enemyDebuffHolderCounts. */
+    enemyDebuffHolderCounts?: Readonly<Record<string, number>>;
     /** Sub-project I, PR I1 — NAMES on the opposing (primary) target, for name-specific
      *  `enemy-debuff` gates. SENTINEL: leave `undefined` (do NOT pass `[]`) to keep the legacy
      *  name-agnostic `enemyDebuffCount` path — this is the DPS-parity invariant (the DPS
@@ -293,6 +296,9 @@ export function buildRoundContext(state: {
         ...(state.enemyBuffCount !== undefined ? { enemyBuffCount: state.enemyBuffCount } : {}),
         ...(state.debuffedEnemyCount !== undefined
             ? { debuffedEnemyCount: state.debuffedEnemyCount }
+            : {}),
+        ...(state.enemyDebuffHolderCounts !== undefined
+            ? { enemyDebuffHolderCounts: state.enemyDebuffHolderCounts }
             : {}),
     };
 }

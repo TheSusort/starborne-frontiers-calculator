@@ -3,7 +3,7 @@ import { colOf, rowOf } from '../targeting/board';
 import type { Position } from '../../types/encounters';
 import type { ParsedTarget, TargetSelection } from '../targetingParser';
 import { drawKeyed } from '../calculators/rateAccumulator';
-import type { CombatActor } from './state';
+import { positionTurnRank, type CombatActor } from './state';
 import { buildCellIndex, cellsOf, hitCellOf, representativeCells } from './cellIndex';
 
 /** Per-actor targeting statuses consulted during positional resolution.
@@ -15,7 +15,37 @@ export interface ActorTargetingStatus {
     taunting: boolean;
     /** Enemy-debuff 'Concentrate Fire' on this actor — force-targeted, bypasses stealth. */
     concentrated: boolean;
+    /** Enemy-debuff {@link MARKED_STATUS} on this actor. Read only by a `marked` selection
+     *  ({@link markedTargets}); it steers no other targeting. Optional: absent reads false. */
+    marked?: boolean;
 }
+
+/** The debuff a `marked` target selection strikes (General Colosso's encounter, #519). */
+export const MARKED_STATUS = 'Marked';
+
+/**
+ * The victims of a `marked` selection's MARKED branch: every living opposing unit holding
+ * {@link MARKED_STATUS}, ordered by `positionTurnRank` (the board-position tiebreak). Each is struck
+ * as its own primary target at full damage with no covered cells; Stealth and forced targeting do
+ * not change the set. `null` when the selection is not `marked`, no status lookup is supplied, or
+ * no living unit is Marked — the cast then targets as `front` ({@link resolvePositionalTargetCell}).
+ */
+export function markedTargets(
+    target: ParsedTarget,
+    opposingLiving: CombatActor[],
+    statusOf?: (id: string) => ActorTargetingStatus | undefined
+): CombatActor[] | null {
+    if (target.selection !== 'marked' || target.side !== 'enemy' || !statusOf) return null;
+    const holders = opposingLiving.filter(
+        (a) => a.position !== undefined && a.currentHp > 0 && statusOf(a.id)?.marked === true
+    );
+    if (holders.length === 0) return null;
+    return holders.sort((x, y) => positionTurnRank(x.position) - positionTurnRank(y.position));
+}
+
+/** The selection a `marked` target falls back to when nobody is Marked. */
+const withoutMarked = (target: ParsedTarget): ParsedTarget =>
+    target.selection === 'marked' ? { ...target, selection: 'front' } : target;
 
 const isRowChoice = (selection: TargetSelection): boolean =>
     selection === 'row-most' || selection === 'row-least';
@@ -202,10 +232,15 @@ export function resolvePositionalTargetCell(
         return null;
     }
 
+    // A `marked` selection anchors on its first Marked unit; with nobody Marked it is `front`.
+    const marked = markedTargets(target, living, statusOf);
+    target = withoutMarked(target);
+
     const aimAt = (actor: CombatActor): PositionalTargetHit => ({
         actor,
         cell: hitCellOf(actor, actorPosition, target.selection) ?? actor.position!,
     });
+    if (marked) return aimAt(marked[0]);
     const selectAmong = (units: CombatActor[]): PositionalTargetHit | null => {
         const byCell = buildCellIndex(units);
         const { anchor } = selectTargets(target, {

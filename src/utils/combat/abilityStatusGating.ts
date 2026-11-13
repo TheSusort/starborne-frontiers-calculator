@@ -88,6 +88,10 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     // debuff gated on "destroying an enemy WITH A DEBUFF") — without this, the condition would be
     // neutralized to 'always' and Stasis would land unconditionally on every kill.
     'killed-enemy-had-debuff',
+    // Living enemies holding a named debuff: every cast-time context carries the engine's
+    // `enemyDebuffHolderCounts`. General Colosso's "If there are no Marked enemies present, all
+    // allies are granted Hacking Up II" — neutralized, the grant would fire on every cast.
+    'enemy-debuff-holder-count',
 ]);
 
 /**

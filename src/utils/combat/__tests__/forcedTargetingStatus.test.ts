@@ -47,6 +47,7 @@ describe('buildForcedTargetingStatus', () => {
             stealthed: false,
             taunting: false,
             concentrated: false,
+            marked: false,
         });
     });
 });

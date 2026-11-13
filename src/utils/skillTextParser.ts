@@ -1390,6 +1390,22 @@ export function detectGrantConditions(
         return [{ subject: 'enemy-shield', derivable: true }];
     }
 
+    // "If there are no <X> enemies present" (General Colosso): no living enemy holds debuff X.
+    const noHolder = NO_STATUS_HOLDER_PRESENT_RE.exec(clause);
+    if (noHolder) {
+        const name = noHolder[1].trim();
+        return [
+            {
+                subject: 'enemy-debuff-holder-count',
+                derivable: true,
+                buffName:
+                    BUFFS.find((b) => b.name.toLowerCase() === name.toLowerCase())?.name ?? name,
+                countComparator: 'eq',
+                countThreshold: 0,
+            },
+        ];
+    }
+
     // target-repaired-this-round (Nayra). Live-derived gate; derivable:true (a
     // derivable:false condition would always be met — evaluateConditions.ts:30).
     if (REPAIRED_THIS_ROUND_RE.test(low)) {
@@ -3165,6 +3181,7 @@ export function detectPurgeEnemyTypeCondition(
 // the gated clause's own sentence, whose "if" is the gate, so the phrase alone is enough. No
 // <unit-…> tags intervene in the phrase.
 const REPAIRED_THIS_ROUND_RE = /\brepaired\s+this\s+round\b/i;
+const NO_STATUS_HOLDER_PRESENT_RE = /\bif\s+there\s+are\s+no\s+(.+?)\s+enemies\s+present\b/i;
 
 // "the enemy with the most buffs" — Rhodium most-buffs target axis. Crosses <unit-aid> tags.
 // Verified against RAW CSV: '… buffs from the enemy with the most buffs.'
@@ -6299,8 +6316,18 @@ function findLeadingDuration(segments: SkillTextSegment[], tagIndex: number): nu
 
 // Words that pin a self-grant verb's subject to the caster once encountered while scanning
 // backward from the verb — "this Unit gains X" / "it gains X" / "they gain X" (team subjects).
-// Reaching one of these BEFORE an "enemy"/"enemies" word means the verb is a genuine self-grant.
-const SELF_SUBJECT_STOP_WORDS = new Set(['this', 'unit', 'it', 'itself', 'they', 'their', 'ally']);
+// Reaching one of these BEFORE an "enemy"/"enemies" word means the verb is a genuine self-grant
+// ("If there are no Marked enemies present, all allies are granted X": the subject is "allies").
+const SELF_SUBJECT_STOP_WORDS = new Set([
+    'this',
+    'unit',
+    'it',
+    'itself',
+    'they',
+    'their',
+    'ally',
+    'allies',
+]);
 // Bound the backward subject scan to a short window — the known shape ("an enemy defender
 // gains") is 1-2 words — so an unrelated, distant "enemy" earlier in a long sentence can never
 // mis-flag an unrelated verb (mirrors the ~20-char window used by the analogous Taunt-only guard

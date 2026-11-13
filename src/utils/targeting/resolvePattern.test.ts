@@ -136,6 +136,20 @@ describe('resolveCells — Circle family (Task 5)', () => {
         expect(origins(cells)).toEqual(['M4']);
     });
 
+    // Horseshoe-Range-1 (General Colosso, #519): Circle-Range-1 minus its front neighbour (+1,0),
+    // the hex toward the caster.
+    it('Horseshoe-Range-1 @ M3 → origin M3, covered {M2, T2, T3, B2, B3}; no M4', () => {
+        const cells = resolveCells(parsePattern('Pattern-Horseshoe-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M2', 'T2', 'T3', 'B2', 'B3']));
+        expect(origins(cells)).toEqual(['M3']);
+    });
+
+    it('Horseshoe-Range-1 @ T3 clips the row above and still drops the front neighbour T4', () => {
+        const cells = resolveCells(parsePattern('Pattern-Horseshoe-Range-1'), 'T3');
+        expect(positions(cells)).toEqual(new Set(['T3', 'T2', 'M3', 'M4']));
+        expect(origins(cells)).toEqual(['T3']);
+    });
+
     // ---------------------------------------------------------------------------
     // Circle-Support-Range-1: same geometry as Circle-Range-1, support variant (yellow).
     // Anchor M3.

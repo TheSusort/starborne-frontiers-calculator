@@ -149,6 +149,11 @@ export interface ConditionContext {
      *  reactive DRAIN ctx (triggers.ts) does not supply it, so a reactive proc reading this
      *  subject gets that `enemyDebuffCount` fallback. */
     debuffedEnemyCount?: number;
+    /** Living OPPOSING units holding each named debuff, keyed by name (a unit counts once per
+     *  name), for the `enemy-debuff-holder-count` subject. Live-derived by the combat engine on
+     *  BOTH sides before the cast. ABSENT (a caller with no opposing roster) reads 0 for every
+     *  name: no opposing unit is known to hold anything. */
+    enemyDebuffHolderCounts?: Readonly<Record<string, number>>;
     /** Sub-project I, PR I4a — the ACTING unit's own live crit power (effective critDamage
      *  stat, e.g. 150), a continuous MAGNITUDE scaling source (distinct from every other
      *  scaling source above, which are entity COUNTS). Used by Wildfire's dotDamage-channel
@@ -312,6 +317,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         case 'debuffed-enemy-count':
             if (ctx.debuffedEnemyCount !== undefined) return ctx.debuffedEnemyCount;
             return (ctx.enemyDebuffCount ?? 0) > 0 ? 1 : 0;
+        case 'enemy-debuff-holder-count':
+            return cond.buffName ? (ctx.enemyDebuffHolderCounts?.[cond.buffName] ?? 0) : 0;
         case 'self-crit-power':
             return ctx.selfCritPower ?? 0;
         // SP-4d: was `?? 1` — a cast that resolved no victim booked a footprint of ONE. Absent now

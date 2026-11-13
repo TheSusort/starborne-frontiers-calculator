@@ -1293,6 +1293,9 @@ function flipBareSupportShieldTarget(
     return target;
 }
 
+const REMOVES_THEIR_STATUS_RE =
+    /\bremoves\s+their\s+(?:<unit-skill>)?([^<.]+?)(?:<\/unit-skill>)?\s+status\b/i;
+
 function abilitiesFromText(
     text: string,
     slot: SkillSlot,
@@ -3187,6 +3190,23 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: removePos >= 0 ? removePos : MAX_POS,
+        });
+    }
+
+    // "removes their <X> status" (General Colosso): the cast clears X from the targets it struck.
+    const targetStatusRemoval = REMOVES_THEIR_STATUS_RE.exec(text);
+    if (targetStatusRemoval && (slot === 'active' || slot === 'charged')) {
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'remove-target-status',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'remove-target-status', buffName: targetStatusRemoval[1].trim() },
+                autoFilled: true,
+            },
+            pos: targetStatusRemoval.index,
         });
     }
 

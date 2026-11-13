@@ -167,6 +167,11 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // Verified @ M3(q=1,r=1): origin M3, covered {M2, M4, T2, T3, B2, B3}.
     'circle|1|': [ORIGIN, cov(-1, 0), cov(1, 0), cov(0, -1), cov(1, -1), cov(-1, 1), cov(0, 1)],
 
+    // Pattern-Horseshoe-Range-1 (General Colosso's no-Marked hit, #519): the target and its five
+    // surrounding hexes — circle|1| without the front neighbour (+1,0), the one toward the caster.
+    // @ M3(q=1,r=1): origin M3, covered {M2, T2, T3, B2, B3}.
+    'horseshoe|1|': [ORIGIN, cov(-1, 0), cov(0, -1), cov(1, -1), cov(-1, 1), cov(0, 1)],
+
     // Pattern-Circle-Support-Range-1
     // PNG: 7 hexes — bright-yellow center origin + 6 darker-yellow neighbors (support variant).
     // Same geometry as circle|1|, yellow = support (allies).

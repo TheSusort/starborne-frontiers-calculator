@@ -512,6 +512,12 @@ export interface PlayerTurnResult {
      * #655). The engine calls it at every sub-attack's end, the first included. Present only on a
      * positional cast carrying such a gain, like `applyDebuffsForSubAttack`.
      */
+    /**
+     * The statuses this cast's `remove-target-status` clauses clear from every primary target it
+     * struck, after the hit. The engine removes them at each sub-attack's end. Empty for a cast
+     * with no such clause.
+     */
+    primaryStatusRemovals: string[];
     applyPerHitSelfStatusesForSubAttack?: (sub: {
         index: number;
         anchorId: string;
@@ -813,6 +819,7 @@ const CONDITION_CONTEXT_SUBJECT = {
     stealthedEnemyCount: 'caster',
     shieldedAllyCount: 'caster',
     debuffedEnemyCount: 'caster',
+    enemyDebuffHolderCounts: 'caster',
     selfCritPower: 'caster',
     targetCritPower: 'victim',
     selfSpeed: 'caster',
@@ -1033,6 +1040,9 @@ export interface PlayerTurnArgs {
     /** Living opposing units carrying a debuff, read before the cast. NO default: absent keeps
      *  the `debuffed-enemy-count` fallback. See ConditionContext.debuffedEnemyCount. */
     debuffedEnemyCount?: number;
+    /** Living opposing units holding each named debuff, read before the cast. See
+     *  ConditionContext.enemyDebuffHolderCounts. */
+    enemyDebuffHolderCounts?: Readonly<Record<string, number>>;
     /** Count (not union) of living opposing actors currently holding
      *  the Stealth self-buff, for this actor's `enemy-stealth-count` scaling condition
      *  (Selenite's "10% more direct damage for every enemy with Stealth"). Same per-turn
@@ -2240,6 +2250,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // No default — undefined is the no-target / DPS sentinel (see PlayerTurnArgs doc).
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         shieldedAllyCount: shieldedAllyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -3538,6 +3549,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
@@ -4785,6 +4797,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
@@ -4950,6 +4963,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         enemyDebuffNames: enemyNamesWithCastLandings,
         selfDebuffNames: selfDebuffNamesArg,
         selfDebuffCount: selfDebuffCountArg,
@@ -5325,6 +5339,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: boundTargetBuffNames,
         enemyBuffCount: enemyBuffCountArg,
         debuffedEnemyCount: debuffedEnemyCountArg,
+        enemyDebuffHolderCounts: enemyDebuffHolderCountsArg,
         // With this cast's before-damage landings counted in — see `enemyNamesWithCastLandings`.
         enemyDebuffNames: enemyNamesWithCastLandings,
         selfDebuffNames: selfDebuffNamesArg,
@@ -8037,6 +8052,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             positionalLanding && perSubAttackDebuffRecipes.length > 0
                 ? applyDebuffsForSubAttack
                 : undefined,
+        primaryStatusRemovals: (gatedSkill?.abilities ?? []).flatMap((ab) =>
+            ab.config.type === 'remove-target-status' &&
+            ab.trigger === 'on-cast' &&
+            conditionsMet(ab.conditions, ctx)
+                ? [ab.config.buffName]
+                : []
+        ),
         applyPerHitSelfStatusesForSubAttack: perHitGainsFireFromEngine
             ? applyPerHitSelfStatusesForSubAttack
             : undefined,

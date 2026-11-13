@@ -122,6 +122,12 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
     },
     {
         file: 'combat/positionalBinding.ts',
+        snippet:
+            '(a) => a.position !== undefined && a.currentHp > 0 && statusOf(a.id)?.marked === true',
+        reason: '`markedTargets` candidates: placed or not; each is struck as a whole unit.',
+    },
+    {
+        file: 'combat/positionalBinding.ts',
         snippet: '?? actor.position!',
         reason: 'Unreachable fallback of `hitCellOf`, which only misses for an unplaced unit.',
     },
@@ -195,6 +201,11 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
         reason: 'Caster-cell anchor of a support footprint.',
     },
     // --- turn order: `positionTurnRank` breaks ties on the anchor ---
+    {
+        file: 'combat/positionalBinding.ts',
+        snippet: 'positionTurnRank(x.position) - positionTurnRank(y.position)',
+        reason: '`markedTargets` order: the position tiebreak ranks a unit by its anchor.',
+    },
     {
         file: 'combat/state.ts',
         snippet: 'position: a.position }',
