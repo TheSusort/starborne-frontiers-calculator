@@ -550,3 +550,184 @@ describe.each(SIDES)(
         });
     }
 );
+
+describe.each(SIDES)('the Pestilence cleanse fan-out, Colosso on the %s side', (placement) => {
+    // Pestilence-shaped opponent: its active debuffs Colosso's whole side; when an enemy cleanses
+    // a debuff, it inflicts Corrosion II on every cleansed enemy. Colosso's ally then cleanses
+    // one debuff from its whole side, Colosso included.
+    const pestilence = (): BoardUnit => ({
+        id: 'pestilence',
+        kit: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'attack-down-all',
+                            type: 'debuff',
+                            target: 'all-enemies',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Attack Down',
+                                parsedEffects: { attack: -30 },
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'apply',
+                                duration: 9,
+                            },
+                        },
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        {
+                            id: 'corrosion-on-cleanse',
+                            type: 'dot',
+                            target: 'all-enemies',
+                            trigger: 'on-enemy-cleansed',
+                            conditions: [],
+                            config: {
+                                type: 'dot',
+                                dotType: 'corrosion',
+                                tier: 6,
+                                stacks: 1,
+                                duration: 2,
+                            },
+                        },
+                    ],
+                },
+            ],
+        },
+        position: 'M1',
+        speed: 500,
+        hacking: 1e6,
+        pattern: { raw: 'all', shape: 'all', range: 0, modifiers: {} },
+    });
+    const cleanser = (): BoardUnit => ({
+        id: 'cleanser',
+        kit: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'cleanse-all',
+                            type: 'cleanse',
+                            target: 'all-allies',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'cleanse', count: 1 },
+                        },
+                    ],
+                },
+            ],
+        },
+        position: 'T1',
+        speed: 400,
+    });
+
+    it('lands its Corrosion on the cleansed ally and never attempts it on Colosso', () => {
+        const caster = colosso('M1', colossoKit(), { speed: 1 });
+        const helper = cleanser();
+        const { input, id } = boardInput(placement, caster, [helper], [pestilence()], 1);
+        const log = dotLog(input);
+        expect(log.applied.get(id(helper))).toEqual(['corrosion']);
+        expect(log.applied.get(id(caster))).toBeUndefined();
+        expect(log.resisted.get(id(caster))).toBeUndefined();
+    });
+
+    it('validity: without the immunity the same fan-out reaches Colosso', () => {
+        const caster = colosso('M1', withoutDotImmunity(colossoKit()), { speed: 1 });
+        const helper = cleanser();
+        const { input, id } = boardInput(placement, caster, [helper], [pestilence()], 1);
+        expect(dotLog(input).applied.get(id(caster))).toEqual(['corrosion']);
+    });
+});
+
+describe.each(SIDES)('an ally death by DoT or Bomb, Colosso on the %s side', (placement) => {
+    // The opponent of row T leaves only a DoT (or a Bomb) on the Major at T2; its hit deals
+    // nothing. The Major dies to the tick (or the detonation), not to a direct hit.
+    const dotKiller = (dotType: DoTType, tier: number, duration: number): BoardUnit => ({
+        id: 'dot-killer',
+        kit: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        { ...damageAbility, config: { type: 'damage', multiplier: 0 } },
+                        {
+                            ...dotAbility(dotType, tier),
+                            config: { type: 'dot', dotType, tier, stacks: 1, duration },
+                        },
+                    ],
+                },
+            ],
+        },
+        position: 'T1',
+        speed: 500,
+        attack: 1e6,
+        hacking: 1e6,
+    });
+
+    interface DeathRun {
+        majorDeath?: Extract<CombatEvent, { type: 'ship-destroyed' }>;
+        colossoGrants: string[];
+        hits: Map<number, number>;
+    }
+
+    const run = (opponent: BoardUnit, majorHp: number): DeathRun => {
+        const caster = colosso('M1');
+        const v = dummy('victim', 'M1');
+        const major = dummy('major-t', 'T2', { hp: majorHp });
+        const { input, id } = boardInput(placement, caster, [major], [v, opponent], 3);
+        const bus = createEventBus();
+        const out: DeathRun = { colossoGrants: [], hits: new Map() };
+        bus.on('ship-destroyed', (e: Extract<CombatEvent, { type: 'ship-destroyed' }>) => {
+            if (e.actorId === id(major)) out.majorDeath = e;
+        });
+        bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
+            if (e.actorId === id(caster) && e.granterId === id(caster))
+                out.colossoGrants.push(e.buffName);
+        });
+        bus.on('attacked', (e: Extract<CombatEvent, { type: 'attacked' }>) => {
+            if (e.attackerId === id(caster) && e.targetId === id(v))
+                out.hits.set(e.round, Math.round(e.takenDamage ?? 0));
+        });
+        runCombat({ ...input, bus });
+        return out;
+    };
+
+    /** His hit in the round after the death: Defense Up III, +15% and the Enrage stacks of
+     *  his earlier casts. */
+    const expectBoostedAfterDeath = (r: DeathRun) => {
+        const death = r.majorDeath!;
+        // Not a direct-hit death (`isDirectDeath`, triggers.ts): a tick, or a detonation.
+        expect(death.byDirectDamage === true && death.byDetonation !== true).toBe(false);
+        expect(r.colossoGrants).toEqual(expect.arrayContaining(['Defense Up III', 'Taunt']));
+        const next = death.round + 1;
+        const enrageStacks = next - 1;
+        expect(r.hits.get(next)).toBe(Math.round(FULL * 1.45 * (1 + 0.15 + 0.06 * enrageStacks)));
+    };
+
+    it('an Inferno tick kills the Major: Defense Up III, Taunt and +15%', () => {
+        const r = run(dotKiller('inferno', 45, 3), 1_000);
+        expect(r.majorDeath).toBeDefined();
+        expectBoostedAfterDeath(r);
+    });
+
+    it('a Bomb detonation kills the Major: Defense Up III, Taunt and +15%', () => {
+        const r = run(dotKiller('bomb', 100, 1), 1_000);
+        expect(r.majorDeath?.byDetonation).toBe(true);
+        expectBoostedAfterDeath(r);
+    });
+
+    it('validity: a Major that survives the same Inferno grants nothing', () => {
+        const r = run(dotKiller('inferno', 45, 3), 1e12);
+        expect(r.majorDeath).toBeUndefined();
+        expect(r.colossoGrants).not.toContain('Defense Up III');
+        expect(r.hits.get(2)).toBe(Math.round(FULL * 1.06));
+    });
+});
