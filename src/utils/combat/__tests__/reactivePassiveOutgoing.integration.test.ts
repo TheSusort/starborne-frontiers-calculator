@@ -107,6 +107,57 @@ const engineBase = (
     ...over,
 });
 
+/** Incinerator-shape kit: the active hit inflicts Inferno on the front enemy; a start-of-round
+ *  hit strikes every enemy; "30% more direct damage to enemies afflicted with Inferno" as a
+ *  passive self modifier gated on the victim's Inferno (as the parser emits it). */
+const incineratorKit = (): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [
+                ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                ab({
+                    type: 'dot',
+                    config: { type: 'dot', dotType: 'inferno', tier: 45, stacks: 1, duration: 3 },
+                }),
+            ],
+        },
+        {
+            slot: 'passive',
+            abilities: [
+                ab({
+                    type: 'damage',
+                    target: 'all-enemies',
+                    trigger: 'start-of-round',
+                    config: { type: 'damage', multiplier: 100 },
+                }),
+                ab({
+                    type: 'modifier',
+                    target: 'self',
+                    conditions: [{ subject: 'enemy-debuff', derivable: true, buffName: 'Inferno' }],
+                    config: {
+                        type: 'modifier',
+                        channel: 'outgoingDamage',
+                        value: 30,
+                        isMultiplicative: true,
+                    },
+                }),
+            ],
+        },
+    ],
+});
+
+/** The focus actor's start-of-round proc damage per victim, per round. */
+const startOfRoundHitsByVictim = (input: CombatEngineInput): Map<string, number> => {
+    const bus = createEventBus();
+    const hits = new Map<string, number>();
+    bus.on('reactive-damage-performed', (ev) => {
+        if (ev.sourceId === 'attacker') hits.set(`${ev.round}:${ev.targetId}`, ev.amount);
+    });
+    runCombat({ ...input, bus });
+    return hits;
+};
+
 /** The focus actor's start-of-round proc damage, per round. */
 const startOfRoundHits = (input: CombatEngineInput): Map<number, number> => {
     const bus = createEventBus();
@@ -129,5 +180,21 @@ describe("a reactive proc reads its owner's destroyed-enemy bonus", () => {
         );
         expect(hits.get(1)).toBe(10_000);
         expect(hits.get(2)).toBe(12_000);
+    });
+});
+
+describe("a reactive proc reads its owner's bonus against the victim's own debuffs", () => {
+    it('adds +30% on the enemy with Inferno only', () => {
+        idc = 0;
+        // Round 1's active puts Inferno on the front enemy (M4) only. Round 2's start-of-round
+        // hit strikes both: +30% on the Inferno'd one, base on the other.
+        const hits = startOfRoundHitsByVictim(
+            engineBase(incineratorKit(), [enemyAt('a', 'M4'), enemyAt('b', 'M3')], {
+                numRounds: 2,
+            })
+        );
+        expect(hits.get('1:a')).toBe(10_000);
+        expect(hits.get('2:a')).toBe(13_000);
+        expect(hits.get('2:b')).toBe(10_000);
     });
 });

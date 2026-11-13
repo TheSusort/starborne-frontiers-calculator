@@ -3690,8 +3690,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     /** The Out. Damage % a reactive proc adds from its owner's own passive modifiers
      *  (`reactiveOutgoingModifiersOf`), each subject read live at the hit. The destroyed-enemy
      *  count is the cast path's (`buildTurnArgs`): opposing actors destroyed so far, withheld in
-     *  DPS mode so the condition keeps its manual count. */
-    const reactivePassiveOutgoingPct = (owner: CombatActor): number => {
+     *  DPS mode so the condition keeps its manual count. Debuff names are the victim's own. */
+    const reactivePassiveOutgoingPct = (owner: CombatActor, victim: CombatActor): number => {
         const modifiers = livePassiveEntries(
             owner.id,
             reactiveOutgoingModifiersById.get(owner.id) ?? []
@@ -3704,6 +3704,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             infernoStacks: 0,
             bombStacks: 0,
             effectiveCritRate: 0,
+            enemyDebuffNames: enemyDebuffNamesForTarget(victim),
             ...(liveCountsMeasurable
                 ? {
                       enemyDestroyedCount: [...allActorsById.values()].filter(
@@ -8713,7 +8714,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Plus the owner's own passive damage modifiers
                         // (`reactivePassiveOutgoingPct`).
                         outgoingDamageBuffPct:
-                            ownerOutgoing.outgoingDamageBuffPct + reactivePassiveOutgoingPct(owner),
+                            ownerOutgoing.outgoingDamageBuffPct +
+                            reactivePassiveOutgoingPct(owner, victim),
                         outgoingSeparateFactor: ownerOutgoing.outgoingSeparateFactor,
                         // Unread: the profile below carries the victim's own incoming channel.
                         incomingDamageModifierPct: 0,

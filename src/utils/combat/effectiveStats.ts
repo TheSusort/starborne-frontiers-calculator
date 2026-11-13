@@ -498,18 +498,27 @@ export function effectiveDamageStatsOf(args: {
     };
 }
 
-/** Condition subjects a reactive proc can answer for its owner's passive damage modifiers: the
- *  engine supplies each live at the hit (`applyReactiveDamage`). A modifier gated on any other
- *  subject is left out, never folded against a guessed reading;
- *  `reactiveOutgoingModifierSubjects.test.ts` lists the corpus ships this leaves out. */
-export const REACTIVE_OUTGOING_SUBJECTS: ReadonlySet<string> = new Set(['enemy-destroyed']);
+/** Whether a reactive proc can answer `cond` for its owner's passive damage modifiers: the
+ *  engine supplies each reading live at the hit (`reactivePassiveOutgoingPct`) — the
+ *  destroyed-enemy count, and the VICTIM's debuff names for a name-gated `enemy-debuff`
+ *  ("to enemies afflicted with Inferno"). A modifier gated on anything else is left out, never
+ *  folded against a guessed reading; `reactiveOutgoingModifierSubjects.test.ts` lists the corpus
+ *  ships this leaves out. */
+export function reactiveHitAnswers(cond: Ability['conditions'][number]): boolean {
+    return (
+        cond.subject === 'enemy-destroyed' ||
+        (cond.subject === 'enemy-debuff' && cond.buffName !== undefined)
+    );
+}
 
 /**
  * The ship's OWN passive-slot self modifiers on the `outgoingDamage` channel that a reactive
  * damage proc (a start-of-round or end-of-round hit, an on-crit proc) adds to its Out. Damage
  * term — Judge's "20% more direct damage for each destroyed enemy" reaches his start-of-round hit
- * (owner's Mamma fight, #519: 27,943 in game). Equipment modifiers are not included, and neither
- * are counters and reflected hits: no measurement covers them.
+ * (owner's Mamma fight, #519: 27,943 in game), and Incinerator's "30% more direct damage to
+ * enemies afflicted with Inferno" reaches his end-of-round hit (owner ruling 2026-11-13).
+ * Equipment modifiers are not included, and neither are counters and reflected hits: no
+ * measurement covers them.
  */
 export function reactiveOutgoingModifiersOf(skills: ShipSkills | undefined): Ability[] {
     return (skills?.slots.find((sl) => sl.slot === 'passive')?.abilities ?? []).filter(
@@ -519,6 +528,6 @@ export function reactiveOutgoingModifiersOf(skills: ShipSkills | undefined): Abi
             a.source !== 'equipment' &&
             a.config.type === 'modifier' &&
             a.config.channel === 'outgoingDamage' &&
-            a.conditions.every((c) => REACTIVE_OUTGOING_SUBJECTS.has(c.subject))
+            a.conditions.every(reactiveHitAnswers)
     );
 }
