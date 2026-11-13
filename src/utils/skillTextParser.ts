@@ -246,7 +246,12 @@ export function parseSkillDamage(text: string): number {
         const following = text
             .slice(tagEndIndex, Math.min(text.length, tagEndIndex + 20))
             .toLowerCase();
-        if (following.startsWith(' of its') || following.startsWith(' of this')) continue;
+        if (
+            following.startsWith(' of its') ||
+            following.startsWith(' of this') ||
+            following.startsWith(" of the unit's")
+        )
+            continue;
         // "X% more (direct) damage" is a passive output MODIFIER, not a base skill
         // multiplier — skip it (parseModifier handles it). e.g. Thresh's passive.
         if (/\bmore\b/i.test(match[1])) continue;
@@ -423,6 +428,7 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     // to", not "damage equal to" / the tag open). "their" joins "its"/"this Unit's" as a
     // pronoun ONLY the Shield-basis corpus rows use (FrontLine) — verified no corpus
     // Defense/HP row uses "their", so this is a strict superset with no new false positives.
+    // "the unit's" is the bounty-boss tooltip form; `parseSkillDamage` skips the same lead-in.
     // #361 — the stat MULTIPLE form, checked FIRST because it carries no '%' and so can never
     // collide with the percentage pattern below. "This Unit deals damage equal to 50x its
     // security" is 50 TIMES the stat, not 50% of attack, and is carried as pct = N * 100 so it
@@ -446,7 +452,7 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
         if (!isNaN(times)) return { stat: 'security', pct: times * 100 };
     }
     const pattern =
-        /<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|their|this\s+unit'?s)\s+(?:current\s+)?(defense|(?:max\s+)?hp|shield)/i;
+        /<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|their|this\s+unit'?s|the\s+unit'?s)\s+(?:current\s+)?(defense|(?:max\s+)?hp|shield)/i;
     const match = pattern.exec(text);
     if (!match) return null;
     // Clause guard: a match whose sentence is a heal ("repairs … an additional X% of

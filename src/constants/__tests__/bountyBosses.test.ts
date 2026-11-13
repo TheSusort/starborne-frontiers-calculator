@@ -69,6 +69,54 @@ describe('Mamma Maglienza', () => {
     });
 });
 
+describe('General Colosso', () => {
+    it('builds at level 32 with the fitted stats', () => {
+        const ship = bossShip('colosso', 32)!;
+        expect(ship.id).toBe('boss:colosso:32');
+        expect(ship.name).toBe('General Colosso');
+        expect(ship.affinity).toBe('thermal');
+        expect(ship.type).toBe('DEFENDER');
+        expect(ship.chargeSkillCharge).toBe(2);
+        expect(ship.baseStats).toMatchObject({
+            hp: 251155,
+            defence: 25137,
+            critDamage: 13,
+            speed: 93,
+        });
+        expect(bossFootprint(ship)).toEqual(['T3', 'M3', 'M4', 'B3']);
+    });
+
+    it('has three Major Grands at T1, M2, B1 and the anchor is the first footprint cell', () => {
+        const encounter = BOUNTY_ENCOUNTERS.find(
+            (e) => e.bountyId === 'colosso' && e.level === 32
+        )!;
+        expect(encounter.adds).toEqual([
+            { addId: 'major-grand', position: 'T1' },
+            { addId: 'major-grand', position: 'M2' },
+            { addId: 'major-grand', position: 'B1' },
+        ]);
+        expect(bossFootprint(bossShip('colosso', 32)!)![0]).toBe('T3');
+    });
+});
+
+describe('Major Grand', () => {
+    it('resolves as npc:major-grand:124 with no charged skill', () => {
+        expect(parseNpcShipId('npc:major-grand:124')).toEqual({ id: 'major-grand', level: 124 });
+        const ship = npcShip('major-grand', 124)!;
+        expect(ship.id).toBe('npc:major-grand:124');
+        expect(ship.affinity).toBe('thermal');
+        expect(ship.type).toBe('DEBUFFER');
+        expect(ship.baseStats).toMatchObject({
+            hp: 42050,
+            attack: 10470,
+            defence: 3050,
+            speed: 106,
+        });
+        expect(ship.chargeSkillText).toBe('');
+        expect(ship.chargeSkillCharge).toBe(0);
+    });
+});
+
 describe('npc ids', () => {
     it('round-trips npcShipId', () => {
         expect(npcShipId('capo', 124)).toBe('npc:capo:124');
