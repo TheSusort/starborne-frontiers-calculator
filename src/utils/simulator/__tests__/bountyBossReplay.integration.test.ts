@@ -324,6 +324,18 @@ describe('replay: the owner team against Mamma Maglienza Lv32 and her Capos', ()
         expectMeasured(hit?.amount, 6_799, TIGHT);
     });
 
+    // Graphite's Boosted Overclock is still on Judge at the start of round 5, and his
+    // destroyed-enemy bonus counts the two dead Capos (+40%).
+    it("Judge's start-of-round hit in round 5 crits Mamma for 27,943", () => {
+        const round5 = result.combatLog.find((r) => r.round === 5)!;
+        const hit = round5.startOfRound
+            .filter((e) => e.kind === 'attack' && e.actorId === idOf(result, 'Judge'))
+            .flatMap((e) => e.targets)
+            .find((t) => t.targetId === mamma);
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 27_943, TIGHT);
+    });
+
     // Graphite's Boosted Overclock lasts 3 turns, so Judge still holds it in round 5 and its
     // expiry never slows him: he acts before Mamma and his active kills her.
     it("Judge's round-5 active crits Mamma for 107,114 and wins in round 5", () => {

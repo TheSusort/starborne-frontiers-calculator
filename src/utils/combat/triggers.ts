@@ -3391,9 +3391,11 @@ export function buildActorConditionContext(
         // NOT populated here: `adjacentAllyCount` / `enemyAdjacentCount` / `enemyDestroyedCount`.
         // Withholding them leaves a reactive-path condition on those subjects on its manual
         // `manualCount ?? 1` fallback — the CAST path (playerTurn.ts) populates all three, this
-        // one does not. The gap is inert today: every corpus reader of the three (Centurion,
+        // one does not. No reactive GATE reads the three today: every corpus reader (Centurion,
         // Panguan, Judge) is a cast-time damage or modifier ability. A reactive one would need
-        // `shared` to carry the same three readings from engine.ts's buildTurnArgs.
+        // `shared` to carry the same three readings from engine.ts's buildTurnArgs. (A reactive
+        // proc's DAMAGE does read Judge's destroyed-enemy modifier, through its own live count:
+        // engine.ts's `reactivePassiveOutgoingPct`.)
     });
 }
 

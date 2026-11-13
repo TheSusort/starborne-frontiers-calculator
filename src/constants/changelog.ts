@@ -9,6 +9,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: bounty boss names now sit on the middle hex.',
     'Combat simulator: Capo now shows its portrait on the boards and in playback.',
     'Combat simulator: Overclock no longer slows or weakens its holder when it ends.',
+    "Combat simulator: Judge's start-of-round hit now gains his per-kill damage bonus.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -63,6 +63,7 @@ import {
     effectiveStatsOf,
     effectiveOutgoingStatsOf,
     separateOutgoingModifiersOf,
+    reactiveOutgoingModifiersOf,
     landsDespiteAffinity,
     liveDebuffLandingChance,
     heldReflectPct,
@@ -2847,6 +2848,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             ...(input.enemyAttackers ?? []).map((e) => ({ id: e.id, shipSkills: e.shipSkills })),
         ].map(({ id, shipSkills }) => [id, separateOutgoingModifiersOf(shipSkills)] as const)
     );
+    // Same actor set: each actor's own passive `outgoingDamage` modifiers a reactive proc reads.
+    const reactiveOutgoingModifiersById = new Map<string, Ability[]>(
+        [
+            { id: 'attacker', shipSkills: input.shipSkills },
+            ...teamActors.map((t) => ({ id: t.id, shipSkills: t.walk?.shipSkills })),
+            ...(input.enemyAttackers ?? []).map((e) => ({ id: e.id, shipSkills: e.shipSkills })),
+        ].map(({ id, shipSkills }) => [id, reactiveOutgoingModifiersOf(shipSkills)] as const)
+    );
 
     // Incremental status machine — replaces the precomputed computeBuffTimeline array.
     const statusEngine = createStatusEngine({
@@ -3678,6 +3687,33 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  ship-passive entries dropped while it is turn-blocked (implants keep working). */
     const liveSeparateOutgoingModifiers = (ownerId: string): Ability[] =>
         livePassiveEntries(ownerId, separateOutgoingModifiersById.get(ownerId) ?? []);
+    /** The Out. Damage % a reactive proc adds from its owner's own passive modifiers
+     *  (`reactiveOutgoingModifiersOf`), each subject read live at the hit. The destroyed-enemy
+     *  count is the cast path's (`buildTurnArgs`): opposing actors destroyed so far, withheld in
+     *  DPS mode so the condition keeps its manual count. */
+    const reactivePassiveOutgoingPct = (owner: CombatActor): number => {
+        const modifiers = livePassiveEntries(
+            owner.id,
+            reactiveOutgoingModifiersById.get(owner.id) ?? []
+        );
+        if (modifiers.length === 0) return 0;
+        const ctx = buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionStacks: 0,
+            infernoStacks: 0,
+            bombStacks: 0,
+            effectiveCritRate: 0,
+            ...(liveCountsMeasurable
+                ? {
+                      enemyDestroyedCount: [...allActorsById.values()].filter(
+                          (a) => a.side !== owner.side && a.destroyedRound !== undefined
+                      ).length,
+                  }
+                : {}),
+        });
+        return modifierTotalsFromAbilities(modifiers, ctx).outgoingDamage;
+    };
 
     /**
      * An actor's max HP: its post-prefight `stats.hp`, the same read for every actor on both
@@ -8674,7 +8710,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // from — only the `flatBasis` arm above is exempt, and by construction
                         // (it never reaches `victimHitDamageParts`, being a copy of an
                         // already-resolved number rather than a new attack).
-                        outgoingDamageBuffPct: ownerOutgoing.outgoingDamageBuffPct,
+                        // Plus the owner's own passive damage modifiers
+                        // (`reactivePassiveOutgoingPct`).
+                        outgoingDamageBuffPct:
+                            ownerOutgoing.outgoingDamageBuffPct + reactivePassiveOutgoingPct(owner),
                         outgoingSeparateFactor: ownerOutgoing.outgoingSeparateFactor,
                         // Unread: the profile below carries the victim's own incoming channel.
                         incomingDamageModifierPct: 0,
