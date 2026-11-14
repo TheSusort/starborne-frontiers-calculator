@@ -542,10 +542,16 @@ export interface CombatActor {
     chargeCount: number;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
-    /** Generic (absolute per-tick) DoT entries — Voron/Orel transform, Acidic Decay family. */
+    /** Generic (absolute per-tick) DoT entries — the Voron/Orel transform. Acidic Decay is a
+     *  `corrosionEntries` entry tagged with its `family`. */
     genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     pendingAccumulators: PendingAccumulator[];
+    /** An own-side unit has died since this actor's last ACTIVE cast resolved (any cause of
+     *  death). Set by the engine's `ship-destroyed` listener and cleared when this actor's active
+     *  cast resolves; a charged cast neither reads nor clears it. Read by the
+     *  `ally-died-since-own-active` condition subject. */
+    allyDiedSinceActive?: boolean;
     /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
     destroyedRound?: number;
     /** The reaction chain (`setHitRoot` in triggers.ts) in scope when this actor was destroyed, if

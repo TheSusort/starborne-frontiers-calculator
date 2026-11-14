@@ -26,6 +26,40 @@ describe('Eelun Naphula kit (bounty boss)', () => {
             config: { type: 'shield', pct, basis: 'hp' },
         });
     });
+
+    const acidicDecayIII = (duration: number) => ({
+        type: 'dot',
+        dotType: 'corrosion',
+        tier: 9,
+        stacks: 1,
+        duration,
+        family: 'Acidic Decay',
+        unremovable: true,
+    });
+
+    it('charged inflicts one Acidic Decay III for 3 turns on all enemies', () => {
+        const dots = abilitiesOf(skills, 'charged').filter((a) => a.type === 'dot');
+        expect(dots).toHaveLength(1);
+        expect(dots[0]).toMatchObject({ trigger: 'on-cast', conditions: [] });
+        expect(dots[0].config).toEqual(acidicDecayIII(3));
+    });
+
+    it('active inflicts Acidic Decay III for 3 turns, plus a 1-turn copy primed by an ally death', () => {
+        const dots = abilitiesOf(skills, 'active').filter((a) => a.type === 'dot');
+        expect(dots).toHaveLength(2);
+        const [always, primed] = dots;
+        expect(always).toMatchObject({ trigger: 'on-cast', conditions: [] });
+        expect(always.config).toEqual(acidicDecayIII(3));
+        expect(primed).toMatchObject({
+            trigger: 'on-cast',
+            conditions: [{ subject: 'ally-died-since-own-active', derivable: true }],
+        });
+        expect(primed.config).toEqual(acidicDecayIII(1));
+    });
+
+    it('the passive itself carries no Acidic Decay', () => {
+        expect(abilitiesOf(skills, 'passive').filter((a) => a.type === 'dot')).toHaveLength(0);
+    });
 });
 
 describe('Sitri kit (bounty add)', () => {

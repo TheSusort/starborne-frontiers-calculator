@@ -1389,7 +1389,7 @@ type TickableDoTType = Exclude<DoTType, 'bomb'>;
 export function tickDoTs(args: {
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
-    /** Absolute per-tick generic DoT entries (Voron/Orel transform, Acidic Decay family). */
+    /** Absolute per-tick generic DoT entries (the Voron/Orel transform). */
     genericDoTEntries: ActiveDoTStack[];
     enemyHp: number;
     ctxFor: (sourceId: string) => PlayerRoundCtx | undefined;
@@ -1527,8 +1527,7 @@ export function tickDoTs(args: {
         const d = (e.perTickAmount ?? 0) * e.stacks * genericUp;
         // #358 ADDENDUM 3 (C4): a generic entry created by `convertHitToSelfDot` carries the
         // PRE-mitigation slice of the direct hit it deferred. `?? e.perTickAmount` covers every
-        // other generic DoT (Acidic Decay and friends), which folds no defence and so ticks the
-        // same amount on both axes.
+        // other generic DoT, which folds no defence and so ticks the same amount on both axes.
         const pre = (e.perTickPreMitigation ?? e.perTickAmount ?? 0) * e.stacks * genericUp;
         genericCredits.push({
             sourceId: e.sourceId,
@@ -3373,6 +3372,14 @@ export function runCombat(rawInput: CombatEngineInput): {
     bus.on('ship-destroyed', (e) => {
         const dead = allActorsById.get(e.actorId);
         if (dead) dead.destroyedInHitRoot = hitRootInScope();
+    });
+    // Any own-side death, whatever its cause, primes every same-side actor's next active
+    // (`CombatActor.allyDiedSinceActive`).
+    bus.on('ship-destroyed', (e) => {
+        const dead = allActorsById.get(e.actorId);
+        if (!dead) return;
+        for (const a of allActors)
+            if (a.side === dead.side && a.id !== dead.id) a.allyDiedSinceActive = true;
     });
 
     // Squad-leader "+X% attack for each other alive <faction> ally" is LIVE. Each such actor's

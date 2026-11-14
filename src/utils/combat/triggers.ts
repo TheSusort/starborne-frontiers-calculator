@@ -6362,6 +6362,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     remainingRounds: duration,
                     sourceId: intent.ownerId,
                     appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
+                    ...dotFlagsOf(cfg),
                 });
             } else if (cfg.dotType === 'inferno') {
                 const appliedAttack =

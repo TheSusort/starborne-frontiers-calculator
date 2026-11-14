@@ -81,6 +81,9 @@ export interface ConditionContext {
     /** Own-side actors destroyed so far this battle, the owner excluded — the same-side mirror of
      *  `enemyDestroyedCount`, with the same absent-means-manual contract. */
     allyDestroyedCount?: number;
+    /** An own-side unit has died since the owner's last active cast
+     *  (`CombatActor.allyDiedSinceActive`). Absent → false. */
+    allyDiedSinceOwnActive?: boolean;
     selfHpPct: number; // 0..100
     /** SP-4d: OPTIONAL, and absent means "there is no enemy to ask about" — not "an enemy at full
      *  health". Absent on a no-victim turn (an ally-targeted cast resolves nobody) and at drain
@@ -343,6 +346,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.enemyDotCount;
         case 'killed-enemy-had-debuff':
             return ctx.killedEnemyHadDebuff ? 1 : 0;
+        case 'ally-died-since-own-active':
+            return ctx.allyDiedSinceOwnActive ? 1 : 0;
         case 'stat-vs-target': {
             // The OWNER always exists, so an absent self reading is a caller omission (0), not a
             // missing subject. The TARGET is the subject: absent means nobody to compare against,

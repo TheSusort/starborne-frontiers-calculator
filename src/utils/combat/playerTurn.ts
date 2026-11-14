@@ -806,6 +806,7 @@ const CONDITION_CONTEXT_SUBJECT = {
     enemyAdjacentCount: 'victim',
     enemyDestroyedCount: 'caster',
     allyDestroyedCount: 'caster',
+    allyDiedSinceOwnActive: 'caster',
     selfHpPct: 'caster',
     enemyHpPct: 'victim',
     targetHpPct: 'caster',
@@ -1974,6 +1975,7 @@ function applyNewDoTs(args: {
                 remainingRounds: dot.duration + args.durationExtension,
                 sourceId: args.sourceId,
                 appliedSeq,
+                ...dotFlagsOf(dot),
             });
             args.emitDotApplied('corrosion', dot.stacks, dot.tier, appliedSeq, procs);
         } else if (dot.type === 'inferno') {
@@ -2370,6 +2372,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyAdjacentCount?: number;
         enemyDestroyedCount?: number;
         allyDestroyedCount?: number;
+        allyDiedSinceOwnActive?: boolean;
     } = {
         ...(liveCountsMeasurable && adjacentAllyIds
             ? { adjacentAllyCount: adjacentAllyIds.length }
@@ -2383,6 +2386,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...(allyDestroyedCountArg !== undefined
             ? { allyDestroyedCount: allyDestroyedCountArg }
             : {}),
+        ...(actor.allyDiedSinceActive ? { allyDiedSinceOwnActive: true } : {}),
     };
 
     /** The victim-derived STAT slice of a gate context — the owner-vs-target comparison subjects
@@ -2473,6 +2477,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (chargedOverdrivePen > 0) consumeChargedOverdriveII(statusEngine, actor.id);
 
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
+    // An active cast spends the ally-death prime (`CombatActor.allyDiedSinceActive`). This cast's
+    // gates still see it: `liveCountCtx` read it above. A death during this cast primes the next
+    // active.
+    if (action === 'active') actor.allyDiedSinceActive = false;
 
     const firingPattern = action === 'charged' ? (chargedPattern ?? activePattern) : activePattern;
     const footprintAllyIds = supportFootprintAllyIds({

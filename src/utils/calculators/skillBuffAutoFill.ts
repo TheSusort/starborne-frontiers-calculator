@@ -181,6 +181,12 @@ export const DOT_TIER_MAP: Record<
         family: 'White Phosphorus',
         unremovable: true,
     },
+    // Acidic Decay is a Corrosion that cannot be cleansed. Only the tiered names map: Belladonna's
+    // bare "Acidic Decay" names the family in a count gate and a conversion clause, never an
+    // inflict.
+    'Acidic Decay I': { type: 'corrosion', tier: 3, family: 'Acidic Decay', unremovable: true },
+    'Acidic Decay II': { type: 'corrosion', tier: 6, family: 'Acidic Decay', unremovable: true },
+    'Acidic Decay III': { type: 'corrosion', tier: 9, family: 'Acidic Decay', unremovable: true },
 };
 
 export interface DoTAutoFill {

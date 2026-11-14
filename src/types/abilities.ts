@@ -477,6 +477,11 @@ export type ConditionSubject =
     // Own-side units destroyed so far this battle, the owner excluded (General Colosso's "for
     // each dead ally ship"): the same-side mirror of 'enemy-destroyed'.
     | 'ally-destroyed'
+    // Binary: an own-side unit has died since the owner's last ACTIVE cast (Eelun Naphula's "When
+    // an ally dies, the next Active also applies …"). Several deaths still read 1. Live-derived
+    // from `CombatActor.allyDiedSinceActive` (ConditionContext.allyDiedSinceOwnActive); absent
+    // reads 0. Always derivable:true.
+    | 'ally-died-since-own-active'
     | 'hp-threshold'
     // HP-percentage COUNT subjects: the count IS the enemy's current (or missing)
     // HP percentage (0..100), for HP-proportional scaling — Akula ("up to 30% more,
