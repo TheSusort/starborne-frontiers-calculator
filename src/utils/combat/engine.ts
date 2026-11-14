@@ -11773,7 +11773,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
         // per actor per round (key `${actorId}:${abilityId}`); non-chainable insertions are
         // backstopped by the MAX_EXTRA_TURNS_PER_ROUND tripwire, chainable ones capped per granter
-        // by MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND. A grant bumps the granter's PENDING count by 1 — the selection
+        // by MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND. A grant bumps each recipient's PENDING count by 1 (the
+        // granter, or every other living ally for an `'other-allies'` grant) — the selection
         // loop then re-picks it at its LIVE speed-rank among the remaining unacted actors
         // (game-verified: re-added to the turn order; acts immediately only when fastest
         // remaining). The selection comparator (orderByTurnPriority via selectNextBySpeed)

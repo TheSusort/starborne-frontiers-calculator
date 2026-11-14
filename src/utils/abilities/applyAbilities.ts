@@ -348,8 +348,8 @@ export function gateFiringAbilities(
 }
 
 /** An extra-action grant collected from a (pre-gated) skill. The engine re-inserts
- *  the granting actor into the round's remaining turn queue once per descriptor,
- *  enforcing oncePerRound per actor per round. */
+ *  the recipients (the granting actor by default, see `recipients`) into the round's
+ *  remaining turn queue once per descriptor, enforcing oncePerRound per granter per round. */
 export interface ExtraActionGrant {
     abilityId: string;
     oncePerRound: boolean;

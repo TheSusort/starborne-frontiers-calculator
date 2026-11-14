@@ -1058,8 +1058,9 @@ export type AbilityConfig =
      *  refreshes the pending bonus to `pct`; it does not stack. Consumed through
      *  IntentExecContext.armNextCritPower; engine.ts's positional apply is the read site. */
     | { type: 'stat-gain'; stat: 'shieldPenetration' | 'nextCritPower'; pct: number }
-    // A full extra turn: the engine re-inserts the granting actor into the round's
-    // remaining turn queue at its speed position (game-verified 2026-06-06).
+    // A full extra turn: the engine re-inserts the recipient (the granting actor unless
+    // `recipients` says otherwise) into the round's remaining turn queue at its speed position
+    // (game-verified 2026-06-06).
     | {
           type: 'extra-action';
           oncePerRound: boolean;
