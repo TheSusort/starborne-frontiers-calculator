@@ -5636,7 +5636,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Charge manipulation: charges only accumulate on ACTIVE rounds. A charged
     // round fires the charged skill, which consumes all charges (reset to 0 at
-    // the top of the loop) — nothing banks toward the next charge on that round.
+    // the top of the loop) — nothing banks toward the next charge on that round
+    // except the charged skill's own self-refill (the `action === 'charged'` branch).
     // Sourced from the firing skill AND the always-active passive slot (charge
     // auras: Hermes/Hemlock/Oleander/Cobalt) — both pre-gated by
     // gateFiringAbilities with their positional contexts. Self + ally gains are
@@ -5659,6 +5660,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             actor.charges + bonusCharges + (allyChargePerRound ?? 0),
             chargeCount
         );
+        if (actor.charges !== oldChargeManip) {
+            bus.emit({
+                type: 'charge-changed',
+                actorId: actor.id,
+                round: r,
+                oldCharge: oldChargeManip,
+                newCharge: actor.charges,
+                reason: 'manip',
+            });
+        }
+    } else if (hasChargedSkill && action === 'charged') {
+        // A charged skill that adds charges to ITSELF ("adds 2 charges to its Charged Skill",
+        // Beleth) refills the pool its own cast just spent. Only the firing skill's own gains
+        // count here; passive gains stay active-turn only, per the rule above.
+        const refill = chargeGainFromSkill({
+            gatedSkill,
+            ctxFor,
+            fallbackCtx: ctx,
+            targetFilter: 'own',
+        });
+        const oldChargeManip = actor.charges;
+        actor.charges = Math.min(actor.charges + refill, chargeCount);
         if (actor.charges !== oldChargeManip) {
             bus.emit({
                 type: 'charge-changed',

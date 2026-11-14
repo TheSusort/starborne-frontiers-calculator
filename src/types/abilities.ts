@@ -1070,6 +1070,10 @@ export type AbilityConfig =
            *  MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND instead of the MAX_EXTRA_TURNS_PER_ROUND
            *  tripwire. */
           chains?: boolean;
+          /** Who takes the granted turn. Absent or `'self'`: the granting ship.
+           *  `'other-allies'` ("gives one extra end of round action to all other allies", Eelun):
+           *  every living same-side ship except the granter, one turn each. */
+          recipients?: 'self' | 'other-allies';
       }
     | {
           type: 'heal' | 'shield';

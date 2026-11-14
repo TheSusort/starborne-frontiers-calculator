@@ -11808,10 +11808,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // pool, drained after the normal speed pool; default grants stay speed-positioned
                 // in the normal pool. The oncePerRound gate and both caps above apply to BOTH
                 // pools.
-                if (g.endOfRound) {
-                    endOfRoundPending.set(granter.id, endOfRoundPendingOf(granter.id) + 1);
-                } else {
-                    pending.set(granter.id, pendingOf(granter.id) + 1);
+                // An `'other-allies'` grant (Eelun) gives one turn to every living same-side
+                // actor except the granter and counts as ONE insertion above: its fan-out is
+                // bounded by the roster, so it cannot run away.
+                const recipients =
+                    g.recipients === 'other-allies'
+                        ? actorsBySide(granter.side).filter(
+                              (a) => a.id !== granter.id && a.destroyedRound === undefined
+                          )
+                        : [granter];
+                for (const recipient of recipients) {
+                    if (g.endOfRound) {
+                        endOfRoundPending.set(recipient.id, endOfRoundPendingOf(recipient.id) + 1);
+                    } else {
+                        pending.set(recipient.id, pendingOf(recipient.id) + 1);
+                    }
                 }
             }
         };

@@ -943,6 +943,12 @@ export function detectIgnoresStealth(...skillTexts: Array<string | null | undefi
 // parseAllyChargeOnEnemyDeath handles it.
 const CHARGE_DISQUALIFY_RE = /all allies|their charged skill|charged skill of (?:all )?allies/i;
 
+// "adds N charges to its Charged Skill": the gain names the unit's OWN charged skill, so an
+// "all allies" elsewhere in the text (Beleth's "grants all allies Defense Up III … and adds 2
+// charges to its Charged Skill") does not make it an ally grant.
+const OWN_CHARGED_SKILL_ADD_RE =
+    /\badds?\s+(?:\d+|a|an)\s+charges?\s+to\s+its\s+charged\s+skill\b/i;
+
 // "when an enemy repairs / performs a repair[s]" — a player reaction to an ENEMY repair
 // (Zosimos's "gains a charge"). Tolerates the live CSV refit typo "performs a repairs".
 // Routes the charge gain onto the LIVE on-enemy-repaired trigger (per-event, +amount each
@@ -4458,7 +4464,7 @@ export function parseOtherAllyInflictsDebuffVerb(
 export function parseChargeGain(text: string | null | undefined): ChargeGain | null {
     if (!text) return null;
     const plain = stripUnitTags(text);
-    if (CHARGE_DISQUALIFY_RE.test(plain)) return null;
+    if (CHARGE_DISQUALIFY_RE.test(plain) && !OWN_CHARGED_SKILL_ADD_RE.test(plain)) return null;
 
     // Rhodium "equal to the number of buffs" form (amount is per-buff = 1).
     if (PER_BUFF_CHARGE_RE.test(plain)) {
@@ -4733,6 +4739,11 @@ const ENEMY_AFFECTED_BY_STATUS_RE =
 const EXTRA_ACTION_RE =
     /\b(?:gains?|grants?|gives?)\s+(?:itself\s+)?(?:one|1|an?)\s+extra\s+(?:end\s+of\s+round\s+)?action\b/i;
 
+// "… extra end of round action to all other allies" (Eelun): the turn goes to every other ally,
+// not to the granter.
+const EXTRA_ACTION_OTHER_ALLIES_RE =
+    /\bextra\s+(?:end\s+of\s+round\s+)?action\s+to\s+all\s+other\s+allies\b/i;
+
 // Tormenter: "If its HP is below 50%" — the unit's OWN HP (selfHpPct is fixed 100
 // under DPS assumptions, so this correctly never fires until defense modeling lands).
 const EXTRA_ACTION_SELF_HP_RE = /\b(?:its|this unit'?s?)\s+hp\s+is\s+below\s+(\d+)\s*%/i;
@@ -4757,6 +4768,9 @@ export interface ExtraActionParse {
     /** Set for a grant whose own extra turn can satisfy it again with no once-per-round wording
      *  (Tithonus's purge-count gate). See the `chains` field on the `extra-action` config. */
     chains?: boolean;
+    /** Set when the turn goes to every other ally. See the `recipients` field on the
+     *  `extra-action` config. */
+    recipients?: 'other-allies';
 }
 
 /**
@@ -4846,6 +4860,9 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
         endOfRound: /end\s+of\s+round/i.test(clause),
         ...(trigger ? { trigger } : {}),
         ...(purgeCount && !oncePerRound ? { chains: true } : {}),
+        ...(EXTRA_ACTION_OTHER_ALLIES_RE.test(clause)
+            ? { recipients: 'other-allies' as const }
+            : {}),
     };
 }
 

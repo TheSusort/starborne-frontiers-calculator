@@ -357,6 +357,8 @@ export interface ExtraActionGrant {
     endOfRound: boolean;
     /** A chainable grant (see the `extra-action` config's `chains`). */
     chains?: boolean;
+    /** Who takes the turn (see the `extra-action` config's `recipients`). Absent = the granter. */
+    recipients?: 'self' | 'other-allies';
 }
 
 /** `extra-action` abilities on the skill that fire on cast. Conditions are already
@@ -374,6 +376,9 @@ export function extraActionsFromSkill(skill: Skill | undefined): ExtraActionGran
             oncePerRound: ability.config.oncePerRound,
             endOfRound: ability.config.endOfRound ?? false,
             ...(ability.config.chains ? { chains: true } : {}),
+            ...(ability.config.recipients === 'other-allies'
+                ? { recipients: 'other-allies' as const }
+                : {}),
         });
     }
     return out;

@@ -3221,6 +3221,7 @@ function abilitiesFromText(
                     oncePerRound: extra.oncePerRound,
                     endOfRound: extra.endOfRound,
                     ...(extra.chains ? { chains: true } : {}),
+                    ...(extra.recipients ? { recipients: extra.recipients } : {}),
                 },
                 autoFilled: true,
             },

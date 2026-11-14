@@ -62,6 +62,22 @@ describe('Eelun Naphula kit (bounty boss)', () => {
         expect(primed.config).toEqual(acidicDecayIII(1));
     });
 
+    it('charged gives one end-of-round action to every other ally, not to herself', () => {
+        const grants = abilitiesOf(skills, 'charged').filter((a) => a.type === 'extra-action');
+        expect(grants).toHaveLength(1);
+        expect(grants[0]).toMatchObject({ trigger: 'on-cast', conditions: [] });
+        expect(grants[0].config).toEqual({
+            type: 'extra-action',
+            oncePerRound: false,
+            endOfRound: true,
+            recipients: 'other-allies',
+        });
+    });
+
+    it('the active grants no extra action', () => {
+        expect(abilitiesOf(skills, 'active').filter((a) => a.type === 'extra-action')).toEqual([]);
+    });
+
     it('the passive itself carries no Acidic Decay', () => {
         expect(abilitiesOf(skills, 'passive').filter((a) => a.type === 'dot')).toHaveLength(0);
     });
@@ -149,6 +165,21 @@ describe('Beleth kit (bounty add)', () => {
             names.map((buffName) => ({ buffName, duration }))
         );
         for (const buff of buffs) expect(buff.target).toBe('all-allies');
+    });
+
+    it('charged adds 2 charges to her own charged skill', () => {
+        const charges = abilitiesOf(skills, 'charged').filter((a) => a.type === 'charge');
+        expect(charges).toHaveLength(1);
+        expect(charges[0]).toMatchObject({
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [{ subject: 'always', derivable: true }],
+            config: { type: 'charge', amount: 2 },
+        });
+    });
+
+    it('the active adds no charge', () => {
+        expect(abilitiesOf(skills, 'active').filter((a) => a.type === 'charge')).toEqual([]);
     });
 });
 
