@@ -4,7 +4,9 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Bounty bosses: Eelun Naphula and escorts can now be fought in the simulator.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

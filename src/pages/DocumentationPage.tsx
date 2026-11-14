@@ -4826,17 +4826,19 @@ const DocumentationPage: React.FC = () => {
                                         Encounter option to load a bounty boss fight in place of a
                                         team: Fenri Khaliriz (level 32) alone, or Mamma Maglienza
                                         (level 32) with three level 124 Capo escorts, or General
-                                        Colosso (level 32) with three level 124 Major Grand escorts.
-                                        Mamma fills four cells and each Capo one, and Colosso fills
-                                        four cells and each Major Grand one, so the rest of the
-                                        enemy board stays closed and none of them can be moved or
-                                        removed alone. Shift+Click still opens the stat editor on
-                                        each. The enemy squad leader is replaced by a note that
-                                        bosses have none. Killing the boss wins the fight even with
-                                        escorts left standing. Mamma and the Capos hit a whole row
-                                        of your team: the fullest row for Mamma, the emptiest for
-                                        the Capos. Encounters need the normal board; None brings the
-                                        empty board back
+                                        Colosso (level 32) with three level 124 Major Grand escorts,
+                                        or Eelun Naphula (level 32) with two Sitri, Beleth and
+                                        Corson. Mamma fills four cells and each Capo one, Colosso
+                                        fills four cells and each Major Grand one, and Eelun fills
+                                        four cells and each escort one, so the rest of the enemy
+                                        board stays closed and none of them can be moved or removed
+                                        alone. Shift+Click still opens the stat editor on each. The
+                                        enemy squad leader is replaced by a note that bosses have
+                                        none. Killing the boss wins the fight even with escorts left
+                                        standing. Mamma and the Capos hit a whole row of your team:
+                                        the fullest row for Mamma, the emptiest for the Capos.
+                                        Encounters need the normal board; None brings the empty
+                                        board back
                                     </li>
                                     <li>
                                         General Colosso: the Major Grands tag your ships with
@@ -4848,6 +4850,21 @@ const DocumentationPage: React.FC = () => {
                                         turn cleansing itself instead of attacking and Marking.
                                         Colosso cannot be controlled, takes no damage over time and
                                         never loses charge
+                                    </li>
+                                    <li>
+                                        Eelun Naphula: her skills shield her whole team and put
+                                        Acidic Decay on all your ships, and her charged skill gives
+                                        every other ally one more turn at the end of the round. When
+                                        one of her allies dies, the team gains a charge, her next
+                                        active skill adds a second, shorter Acidic Decay, and each
+                                        round she repairs herself for every ally still alive. She
+                                        grows stronger every turn, and cannot be controlled or lose
+                                        charge. Sitri and Corson hit your front ship with splash
+                                        behind it and ignore Defenders, so their attacks go for the
+                                        front ship that is not a Defender while one is left. Beleth
+                                        buffs the team and recharges her own charged skill so she
+                                        casts it every turn once ready. Corson taunts on his charged
+                                        skill
                                     </li>
                                 </ul>
                             </div>
