@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { bossShip, npcShip } from '../../../constants/bountyBosses';
 import type { Ability, ShipSkills } from '../../../types/abilities';
+import { LIVE_TRIGGERS } from '../../../types/abilities';
+import { BUFFS } from '../../../constants/buffs';
+import { MANUAL_BUFF_ADDITIONS } from '../../dataUpdate/buffDataOverrides';
+import { UNREMOVABLE_STATUSES } from '../../combat/cheatDeathBuffs';
+import { parseBuffEffects, isStackable } from '../../calculators/buffParser';
 
 const abilitiesOf = (skills: ShipSkills, name: string): Ability[] =>
     skills.slots.find((s) => s.slot === name)?.abilities ?? [];
@@ -59,6 +64,59 @@ describe('Eelun Naphula kit (bounty boss)', () => {
 
     it('the passive itself carries no Acidic Decay', () => {
         expect(abilitiesOf(skills, 'passive').filter((a) => a.type === 'dot')).toHaveLength(0);
+    });
+
+    describe('passive', () => {
+        const passive = abilitiesOf(skills, 'passive');
+
+        it('emits the charge grant, the round-start repair and the Enrage Hacking gain', () => {
+            expect(passive.map((a) => a.type).sort()).toEqual(['buff', 'charge', 'heal']);
+        });
+
+        it('each ally death adds 1 charge to every ally, herself included', () => {
+            const charge = passive.find((a) => a.type === 'charge')!;
+            expect(charge).toMatchObject({
+                target: 'all-allies',
+                trigger: 'on-ally-destroyed',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            });
+            expect(charge.oncePerRound).toBeUndefined();
+        });
+
+        it('repairs 12% of her max HP per other living ally at the start of each round', () => {
+            const heal = passive.find((a) => a.type === 'heal')!;
+            expect(heal).toMatchObject({
+                target: 'self',
+                trigger: 'start-of-round',
+                conditions: [],
+                config: { type: 'heal', pct: 12, basis: 'hp' },
+                scaling: { perUnit: 12, countSource: 'other-living-ally-count' },
+            });
+        });
+
+        it('gains one durationless stack of Enrage Hacking III at the end of each of her turns', () => {
+            const grants = passive.filter(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Enrage Hacking III'
+            );
+            expect(grants).toHaveLength(1);
+            expect(grants[0]).toMatchObject({ target: 'self', trigger: 'end-of-turn' });
+            expect(grants[0].config).toMatchObject({ isStackable: true, duration: 'recurring' });
+            expect(grants[0].config.type === 'buff' && grants[0].config.maxStacks).toBeUndefined();
+            expect(
+                grants[0].config.type === 'buff' && grants[0].config.stackTrigger
+            ).toBeUndefined();
+            expect(LIVE_TRIGGERS.has('end-of-turn')).toBe(true);
+        });
+
+        it('Enrage Hacking III is +3 flat hacking, stackable without a cap and unremovable', () => {
+            const def = BUFFS.find((b) => b.name === 'Enrage Hacking III')!;
+            expect(def.type).toBe('buff');
+            expect(parseBuffEffects(def.name, def.description)).toEqual({ hacking: 3 });
+            expect(isStackable(def.description)).toEqual({ stackable: true, maxStacks: undefined });
+            expect(UNREMOVABLE_STATUSES.has('Enrage Hacking III')).toBe(true);
+            expect(MANUAL_BUFF_ADDITIONS.find((b) => b.name === def.name)).toEqual(def);
+        });
     });
 });
 

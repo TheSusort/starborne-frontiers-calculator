@@ -795,9 +795,15 @@ export interface OutgoingHitContext {
  *    Reuses the exact same primitive as 'repaired-enemy-count'.
  *  - 'purged-buff-count' → eventCtx.purgedBuffCount (Sefuba's catalogue "repairs 8% of its max HP
  *    for each buff removed") — the number of buffs the TRIGGERING purge removed
- *    (purge-performed.count), stamped by the on-enemy-purged listener. */
+ *    (purge-performed.count), stamped by the on-enemy-purged listener.
+ *  - 'other-living-ally-count' → the owner's living same-side allies, the owner excluded, counted
+ *    when the heal resolves (Eelun Naphula's "repairs 12% of its Max HP for each other living
+ *    ally" at round start). Not an event field: read from the drain context. */
 export type ReactiveScalingCountSource =
-    'repaired-enemy-count' | 'spread-affected-count' | 'purged-buff-count';
+    | 'repaired-enemy-count'
+    | 'spread-affected-count'
+    | 'purged-buff-count'
+    | 'other-living-ally-count';
 
 export interface ScalingRule {
     /** Index into Ability.conditions of the live-state count Condition (additive PR6b / damage

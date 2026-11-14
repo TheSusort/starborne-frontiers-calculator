@@ -2476,11 +2476,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             : 0;
     if (chargedOverdrivePen > 0) consumeChargedOverdriveII(statusEngine, actor.id);
 
-    bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
     // An active cast spends the ally-death prime (`CombatActor.allyDiedSinceActive`). This cast's
-    // gates still see it: `liveCountCtx` read it above. A death during this cast primes the next
-    // active.
+    // gates still see it: `liveCountCtx` read it above. Cleared before `skill-fired` so a death
+    // during this cast, a `skill-fired` listener's included, primes the next active.
     if (action === 'active') actor.allyDiedSinceActive = false;
+    bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
     const firingPattern = action === 'charged' ? (chargedPattern ?? activePattern) : activePattern;
     const footprintAllyIds = supportFootprintAllyIds({

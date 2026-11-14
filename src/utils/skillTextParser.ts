@@ -1647,6 +1647,10 @@ const START_OF_ROUND_RE =
 // the ASCII ' and the curly ’ the CSV uses inconsistently across rows (see maskAbbrev's sibling
 // convention). Reference data: docs/ship-skills.csv (Quixilver's third-passive clause).
 const END_OF_OWN_TURN_RE = /\bat\s+the\s+end\s+of\s+this\s+unit['’]s\s+turn\b/i;
+// Eelun Naphula: "At the end of each turn, this Unit gains <X>" — the end of each of the OWNER's
+// turns (owner ruling 2026-11-14), so the same end-of-turn trigger. Scoped to the self-gain
+// sentence opening.
+const END_OF_EACH_TURN_GAIN_RE = /\bat\s+the\s+end\s+of\s+each\s+turn,\s*this\s+unit\s+gains\b/i;
 // "every turn" / "each turn" — a per-own-turn recurring self-grant: the trailing-phrase form
 // Kinetik's per-turn shield and Cinya's per-turn heal use (docs/ship-skills.csv).
 const EVERY_TURN_RE = /\b(?:each|every)\s+turn\b/i;
@@ -1996,7 +2000,8 @@ export function detectReactiveTrigger(
     // ever seeded once at combat start (engine.ts's seedPassiveTimedStatuses, gated `r === 1`).
     // end-of-turn is a LIVE trigger (triggers.ts), so partitionReactiveAbilities routes it onto
     // the reactive path instead — it re-fires every one of the owner's turns, not just round 1.
-    if (END_OF_OWN_TURN_RE.test(clause)) return 'end-of-turn';
+    if (END_OF_OWN_TURN_RE.test(clause) || END_OF_EACH_TURN_GAIN_RE.test(clause))
+        return 'end-of-turn';
     // DETONATOR-scoped "this Unit detonates a Bomb" (Lingshe) is checked BEFORE the
     // victim-scoped "bomb explodes" family — the two are mutually exclusive by phrasing, but this
     // ordering makes the detonator reading win unambiguously.
@@ -4653,17 +4658,20 @@ const ENEMY_DEATH_PHRASING_RE =
 // bail on the on-enemy-death phrasing to avoid a spurious second (on-cast) charge ability.
 
 /**
- * Parses Hayyan's / Graphite's all-allies charge-bar grant. Returns the per-ally charge
- * amount, the trigger ('on-cast' for Hayyan, 'start-of-round' for Graphite — detected
- * directly via START_OF_ROUND_RE, NOT detectReactiveTrigger which is buff-name-scoped),
+ * Parses Hayyan's / Graphite's / Eelun Naphula's all-allies charge-bar grant. Returns the per-ally
+ * charge amount, the trigger ('on-cast' for Hayyan, 'start-of-round' for Graphite — detected
+ * directly via START_OF_ROUND_RE, NOT detectReactiveTrigger which is buff-name-scoped;
+ * 'on-ally-destroyed' for Eelun's "When an ally dies" grant sentence),
  * and a `conditions` array set when the grant is gated on an enemy having Stealth (Graphite) —
  * a derivable enemy-buff condition the emission site spreads directly (no re-hardcoded buffName).
  * Returns null when no ally-charge phrase matches — self-charge ships fall through to
  * parseChargeGain (whose CHARGE_DISQUALIFY_RE already rejects these ally phrasings).
  */
-export function parseAllyChargeGrant(
-    text: string | null | undefined
-): { amount: number; trigger: 'on-cast' | 'start-of-round'; conditions?: Condition[] } | null {
+export function parseAllyChargeGrant(text: string | null | undefined): {
+    amount: number;
+    trigger: 'on-cast' | 'start-of-round' | 'on-ally-destroyed';
+    conditions?: Condition[];
+} | null {
     if (!text) return null;
     const plain = stripUnitTags(text);
     // Death-triggered grants (Liberator) belong to parseAllyChargeOnEnemyDeath /
@@ -4675,7 +4683,16 @@ export function parseAllyChargeGrant(
     const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
     if (!amount || isNaN(amount)) return null;
 
-    const trigger = START_OF_ROUND_RE.test(plain) ? 'start-of-round' : 'on-cast';
+    // Eelun Naphula: "When an ally dies, …, all allies add 1 charge to their Charged Skill" — one
+    // grant per own-side death. Read from the grant's own sentence, so a later round-start
+    // sentence in the same passive does not claim it.
+    const grantSentenceStart = plain.lastIndexOf('.', m.index) + 1;
+    const grantSentence = plain.slice(grantSentenceStart, m.index + m[0].length);
+    const trigger = WHEN_AN_ALLY_DIES_RE.test(grantSentence)
+        ? 'on-ally-destroyed'
+        : START_OF_ROUND_RE.test(plain)
+          ? 'start-of-round'
+          : 'on-cast';
     const conditions: Condition[] = ALLY_CHARGE_ENEMY_STEALTH_RE.test(plain)
         ? [{ subject: 'enemy-buff', buffName: 'Stealth', derivable: true }]
         : [];
@@ -5262,6 +5279,9 @@ const SPREAD_AFFECTED_COUNT_RE = /\bper enemy affected\b/i;
 // (eventCtx.purgedBuffCount, stamped by the on-enemy-purged listener). Same primitive as Sansi's
 // above; `pct` is KEPT (the per-unit rate) and the executor multiplies it by the count.
 const PURGED_BUFF_COUNT_RE = /\bfor each buffs? removed\b/i;
+// Eelun Naphula: "repairs 12% of its Max HP for each other living ally" — the count is the
+// owner's living same-side allies, the owner excluded, read when the repair resolves.
+const OTHER_LIVING_ALLY_COUNT_RE = /\bfor each other living ally\b/i;
 // ship-kit W3 (Sansi): numeric per-round cap — "limited to 3 times per Round". Generalizes the
 // boolean once-per-round caps. Threaded to Ability.maxPerRound and enforced executor-side.
 const MAX_PER_ROUND_RE = /\blimited to\s+(\d+)\s+times?\s+per\s+round\b/i;
@@ -5280,6 +5300,8 @@ function parseHealEventCountScaling(
         return { perUnit: basePct, countSource: 'spread-affected-count' };
     if (PURGED_BUFF_COUNT_RE.test(sentence))
         return { perUnit: basePct, countSource: 'purged-buff-count' };
+    if (OTHER_LIVING_ALLY_COUNT_RE.test(sentence))
+        return { perUnit: basePct, countSource: 'other-living-ally-count' };
     return null;
 }
 
@@ -6196,6 +6218,9 @@ const TWICE_RE = /^\s*twice\s+for\b/i;
 // A durationless "after attacking, gains <X>" grant (Mamma Maglienza's Enrage Attack III) is
 // kept: each attack banks another stack rather than opening a 1-turn window.
 const AFTER_ATTACKING_GAIN_RE = /\bafter\s+attacking,\s*(?:this\s+unit\s+)?gains\s*$/i;
+// The same banking for Eelun Naphula's durationless "At the end of each turn, this Unit gains <X>".
+const END_OF_EACH_TURN_GAIN_TAIL_RE =
+    /\bat\s+the\s+end\s+of\s+each\s+turn,\s*this\s+unit\s+gains\s*$/i;
 // A sentence that opens "Every turn, this Unit gains" and ends at the tag (Fenri's Pressing
 // Onslaught). Sentence-opening only: "At the start of combat and every turn, …" is not it.
 const LEADING_EVERY_TURN_GAIN_RE =
@@ -7143,7 +7168,11 @@ export function parseSkillEffects(
             if (duration === null) {
                 duration = findLeadingDuration(segments, i);
             }
-            if (duration === null && AFTER_ATTACKING_GAIN_RE.test(prevText)) {
+            if (
+                duration === null &&
+                (AFTER_ATTACKING_GAIN_RE.test(prevText) ||
+                    END_OF_EACH_TURN_GAIN_TAIL_RE.test(prevText))
+            ) {
                 duration = 'recurring';
             }
         }

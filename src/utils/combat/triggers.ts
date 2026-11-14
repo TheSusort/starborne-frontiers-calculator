@@ -6749,6 +6749,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // affected-actor ids), so a positional multi-ally spread heals proportionally.
         // Sefuba: a repair "for each buff removed" — count = the triggering purge's
         // removed count (eventCtx.purgedBuffCount, stamped by the on-enemy-purged listener).
+        // Eelun Naphula: "for each other living ally" — the owner's living same-side allies, the
+        // owner excluded, counted now rather than read off the event.
         const eventCountMultiplier =
             intent.ability.scaling?.countSource === 'repaired-enemy-count'
                 ? (intent.eventCtx?.repairedEnemyIds?.length ?? 0)
@@ -6756,7 +6758,11 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                   ? (intent.eventCtx?.spreadAffectedIds?.length ?? 0)
                   : intent.ability.scaling?.countSource === 'purged-buff-count'
                     ? (intent.eventCtx?.purgedBuffCount ?? 0)
-                    : undefined;
+                    : intent.ability.scaling?.countSource === 'other-living-ally-count'
+                      ? ctx.playerIds.filter(
+                            (id) => id !== intent.ownerId && (ctx.isActorAlive?.(id) ?? true)
+                        ).length
+                      : undefined;
         // The per-unit rate for a count-scaled heal is scaling.perUnit (== the parsed base pct);
         // for a plain heal it is cfg.pct. A zero count grants nothing.
         const effectivePct =

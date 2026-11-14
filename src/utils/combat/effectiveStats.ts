@@ -122,8 +122,9 @@ export function heldReflectPct(
  * foldSpeedBuffPct to the full calculateBuffTotals shape.
  *
  * `includeAuras` adds the third self channel — aura and accumulating statuses at the NEUTRAL ctx
- * (`selfAuraBuffs`). Only `effectiveOutgoingStatsOf` sets it: an attack thrown outside the turn
- * loop has no cast to gate those statuses against, and the turn loop folds them itself.
+ * (`selfAuraBuffs`). `effectiveOutgoingStatsOf` sets it because an attack thrown outside the turn
+ * loop has no cast to gate those statuses against (the turn loop folds them itself for damage);
+ * `liveDebuffLandingChance` sets it because no other fold feeds hacking or security to the roll.
  */
 export function foldActorBuffTotals(
     statusEngine: StatusEngine,
@@ -375,8 +376,14 @@ export function liveDebuffLandingChance(
     affinityModifier: number
 ): number {
     if (attacker.alwaysLandsDebuffs === true) return 1;
-    const atk = foldActorBuffTotals(statusEngine, selfBuffLookup, attacker.id);
-    const def = foldActorBuffTotals(statusEngine, selfBuffLookup, defender.id);
+    // Durationless held statuses count too (`includeAuras`): a banked stack of Enrage Hacking III
+    // (Eelun Naphula) is flat hacking the roll must see.
+    const atk = foldActorBuffTotals(statusEngine, selfBuffLookup, attacker.id, {
+        includeAuras: true,
+    });
+    const def = foldActorBuffTotals(statusEngine, selfBuffLookup, defender.id, {
+        includeAuras: true,
+    });
     /* eslint-disable no-restricted-syntax -- base hacking/security fed into the fold: the live buff totals are added on the next lines */
     const baseHacking = attacker.stats.hacking ?? 200;
     const baseSecurity = defender.stats.security ?? 100;
