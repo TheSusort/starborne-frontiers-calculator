@@ -19,7 +19,10 @@ export type TargetSelection =
     | 'row-least'
     /** Every living Marked enemy, each as its own full-damage primary target; `front` when none
      *  is Marked (`markedTargets`, positionalBinding.ts). */
-    | 'marked';
+    | 'marked'
+    /** `front` over the opposing units outside the defender role family; `front` over every
+     *  unit when only defenders are left (`resolvePositionalTargetCell`, positionalBinding.ts). */
+    | 'front-skip-defenders';
 
 export interface ParsedTarget {
     raw: string;
@@ -128,6 +131,7 @@ const TARGET_MAP: Record<string, { side: TargetSide; selection: TargetSelection 
     'row-most': { side: 'enemy', selection: 'row-most' },
     'row-least': { side: 'enemy', selection: 'row-least' },
     'marked-or-front': { side: 'enemy', selection: 'marked' },
+    'front-skip-defenders': { side: 'enemy', selection: 'front-skip-defenders' },
     allies: { side: 'ally', selection: 'team' },
     'all-allies': { side: 'ally', selection: 'all' },
     'other-allies': { side: 'ally', selection: 'others' },

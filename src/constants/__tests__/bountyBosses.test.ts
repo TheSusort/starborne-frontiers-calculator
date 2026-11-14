@@ -136,6 +136,18 @@ describe('Eelun Naphula', () => {
         expect(ship.firstPassiveSkillText).toBe('');
     });
 
+    it.each(['sitri', 'corson'])(
+        '%s targets front, skipping defenders, with a range-1 cone',
+        (id) => {
+            expect(npcShip(id, 124)).toMatchObject({
+                activeTarget: 'front-skip-defenders',
+                activePattern: 'Pattern-Cone-Range-1',
+                chargedTarget: 'front-skip-defenders',
+                chargedPattern: 'Pattern-Cone-Range-1',
+            });
+        }
+    );
+
     it('fits Sitri attack and Corson defence to the measured hits', () => {
         expect(npcShip('sitri', 124)!.baseStats.attack).toBe(16670);
         expect(npcShip('corson', 124)!.baseStats.defence).toBe(15260);

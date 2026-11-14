@@ -6276,12 +6276,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         actingActorId = undefined;
 
         // Forced-targeting/stealth lookup for a roster. Reads the status engine
-        // for each actor's Concentrate Fire / Taunt / Stealth flags so resolvePositionalTarget
-        // can redirect or stealth-filter.
+        // for each actor's Concentrate Fire / Taunt / Stealth flags, and its role for the
+        // defender flag, so resolvePositionalTarget can redirect, stealth-filter or skip defenders.
         const statusLookupFor = (roster: CombatActor[]) => {
             const m = buildForcedTargetingStatus(
                 statusEngine,
-                roster.map((a) => a.id)
+                roster.map((a) => a.id),
+                (id) => roleByActorId.get(id)
             );
             return (id: string) => m.get(id);
         };

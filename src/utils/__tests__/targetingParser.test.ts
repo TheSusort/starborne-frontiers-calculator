@@ -323,6 +323,13 @@ describe('row-choice targeting tokens', () => {
             selection: 'marked',
         });
     });
+    it('parses front-skip-defenders as its own enemy-side selection', () => {
+        expect(parseTarget('front-skip-defenders')).toEqual({
+            raw: 'front-skip-defenders',
+            side: 'enemy',
+            selection: 'front-skip-defenders',
+        });
+    });
     it('parses Pattern-Horseshoe-Range-1 as the range-1 horseshoe shape', () => {
         expect(parsePattern('Pattern-Horseshoe-Range-1')).toMatchObject({
             shape: 'horseshoe',

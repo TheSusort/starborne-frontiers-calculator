@@ -4469,10 +4469,12 @@ export function provokerOf(statusEngine: StatusEngine, actorId: string): string 
  *  actor ids. Stealth/Taunt are self-buffs (selfBuffNamesForOwners); Concentrate Fire is a
  *  debuff on the focus target (ownerDebuffNamesFor). Read-half only — no applier wiring this
  *  phase. Several taunters are ordered by the attacker's normal targeting
- *  (`resolvePositionalTarget`), not by when each taunt landed. */
+ *  (`resolvePositionalTarget`), not by when each taunt landed. `roleOf` supplies each actor's
+ *  ship role for the `defender` flag; an actor without a role reads as a non-defender. */
 export function buildForcedTargetingStatus(
     statusEngine: StatusEngine,
-    actorIds: string[]
+    actorIds: string[],
+    roleOf?: (id: string) => ShipTypeName | undefined
 ): Map<string, ActorTargetingStatus> {
     const map = new Map<string, ActorTargetingStatus>();
     for (const id of actorIds) {
@@ -4483,6 +4485,7 @@ export function buildForcedTargetingStatus(
             taunting: selfNames.includes('Taunt'),
             concentrated: debuffNames.includes('Concentrate Fire'),
             marked: debuffNames.includes(MARKED_STATUS),
+            defender: matchesRoleCategory(roleOf?.(id), ['DEFENDER']),
         });
     }
     return map;

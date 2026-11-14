@@ -38,6 +38,7 @@ function targetSegment(t: ParsedTarget): string {
     if (t.selection === 'row-most') return `${t.side} row with the most units`;
     if (t.selection === 'row-least') return `${t.side} row with the fewest units`;
     if (t.selection === 'marked') return `every Marked ${t.side}, else ${t.side} front`;
+    if (t.selection === 'front-skip-defenders') return `${t.side} front (ignores Defenders)`;
     return `${t.side} ${t.selection}`;
 }
 

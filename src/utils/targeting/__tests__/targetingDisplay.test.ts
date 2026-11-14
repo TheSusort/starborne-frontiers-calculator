@@ -40,4 +40,10 @@ describe('targetingLabel', () => {
         expect(label).toBe('Reverse Cone · Range 1 · enemy front');
         expect(label.startsWith('Reverse ')).toBe(true);
     });
+
+    it('labels front-skip-defenders as front that ignores Defenders', () => {
+        expect(targetingLabel(active('front-skip-defenders', 'Pattern-Cone-Range-1'))).toBe(
+            'Cone · Range 1 · enemy front (ignores Defenders)'
+        );
+    });
 });

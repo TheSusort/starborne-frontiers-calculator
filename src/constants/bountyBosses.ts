@@ -274,9 +274,9 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
         type: 'ATTACKER',
         imageKey: 'Sitri',
         level: 124,
-        activeTarget: 'front',
+        activeTarget: 'front-skip-defenders',
         activePattern: 'Pattern-Cone-Range-1',
-        chargedTarget: 'front',
+        chargedTarget: 'front-skip-defenders',
         chargedPattern: 'Pattern-Cone-Range-1',
         activeSkillText:
             'This attack ignores Defenders, deals <unit-damage>140% damage</unit-damage>, and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.',
@@ -342,9 +342,9 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
         type: 'DEFENDER',
         imageKey: 'Corson',
         level: 124,
-        activeTarget: 'front',
+        activeTarget: 'front-skip-defenders',
         activePattern: 'Pattern-Cone-Range-1',
-        chargedTarget: 'front',
+        chargedTarget: 'front-skip-defenders',
         chargedPattern: 'Pattern-Cone-Range-1',
         activeSkillText:
             "This attack ignores Defenders, deals <unit-damage>damage equal to 120%</unit-damage> of this Unit's defense, and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.",
