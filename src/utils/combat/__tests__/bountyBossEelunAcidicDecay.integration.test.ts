@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
-import { createEventBus, type CombatEvent } from '../events';
+import { createEventBus, type CombatEvent, type CombatEventBus } from '../events';
 import type { CombatActor } from '../state';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
@@ -38,6 +38,8 @@ const SIDES: Placement[] = ['player', 'enemy'];
 const CLEANSE_TEXT =
     'This Unit deals <unit-damage>100% damage</unit-damage> and <unit-skill>cleanses all debuffs</unit-skill>.';
 const CORROSION_TEXT = 'This Unit inflicts <unit-skill>Corrosion I</unit-skill> for 3 turns.';
+const SHIELD_TEXT =
+    'This Unit grants all allies a <unit-damage>shield equal to 20%</unit-damage> of its max HP.';
 const INFERNO_TEXT = 'This Unit inflicts <unit-skill>Inferno I</unit-skill> for 2 turns.';
 
 /** Eelun with her real kit. A high `chargeCount` keeps her on her active. */
@@ -107,7 +109,8 @@ const eelunCasts = (
     carrier: BoardUnit,
     allies: BoardUnit[],
     opponents: BoardUnit[],
-    rounds: number
+    rounds: number,
+    tap?: (bus: CombatEventBus, actors: () => CombatActor[]) => void
 ): {
     casts: Cast[];
     id: (u: BoardUnit) => string;
@@ -137,6 +140,7 @@ const eelunCasts = (
             unremovable: entry?.unremovable,
         });
     });
+    tap?.(bus, () => actors);
     runCombat({
         ...input,
         bus,
@@ -265,5 +269,46 @@ describe.each(SIDES)('Acidic Decay, Eelun on the %s side', (placement) => {
         );
         const entries = actors.find((x) => x.id === id(cleanser))!.corrosionEntries;
         expect(entries.map((e) => [e.tier, e.family])).toEqual([[9, 'Acidic Decay']]);
+    });
+
+    it("an enemy's death does not prime her active", () => {
+        const a = victim('a', 'B3');
+        const doomed = victim('doomed', 'M1', { hp: 1 });
+        // An ally of Eelun's sweeps the opposing board before she acts.
+        const ally: BoardUnit = { ...sweeper(), id: 'ally', position: 'T4', speed: 400 };
+        const { casts, id } = eelunCasts(placement, eelun(), [ally], [doomed, a], 1);
+        expect(casts[0].landings.some((l) => l.targetId === id(doomed))).toBe(false);
+        expect(durationsOn(casts[0], id(a))).toEqual([3]);
+    });
+
+    it('an Acidic Decay tick leaves the shield untouched and lands on HP', () => {
+        // Two shielded victims: on the enemy placement the first is the focus actor and the
+        // second a walked team actor, so both tick branches run.
+        const shielder = (vid: string, position: BoardUnit['position']) =>
+            victim(vid, position, { kit: textKit('Shielder', { active: SHIELD_TEXT }), hp: 1e6 });
+        const v1 = shielder('v1', 'M1');
+        const v2 = shielder('v2', 'B3');
+        const before = new Map<string, { shield: number; hp: number }>();
+        const after = new Map<string, { shield: number; hp: number }>();
+        const { id } = eelunCasts(placement, eelun(), [], [v1, v2], 2, (bus, actors) => {
+            const read = (actorId: string) => {
+                const x = actors().find((y) => y.id === actorId)!;
+                return { shield: x.shieldPool, hp: x.currentHp };
+            };
+            bus.on('turn-started', (e: Extract<CombatEvent, { type: 'turn-started' }>) => {
+                if (e.round === 2) before.set(e.actorId, read(e.actorId));
+            });
+            bus.on('skill-fired', (e: Extract<CombatEvent, { type: 'skill-fired' }>) => {
+                if (e.round === 2) after.set(e.actorId, read(e.actorId));
+            });
+        });
+        for (const v of [v1, v2]) {
+            const b = before.get(id(v))!;
+            const f = after.get(id(v))!;
+            // The round-1 cast shielded it, so the comparison is not vacuous.
+            expect(b.shield).toBeGreaterThan(0);
+            expect(f.shield).toBe(b.shield);
+            expect(f.hp).toBeLessThan(b.hp);
+        }
     });
 });
