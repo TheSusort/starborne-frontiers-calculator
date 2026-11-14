@@ -4,17 +4,17 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Bounty bosses: General Colosso and his Major Grand escorts can now be fought.',
-    'Combat simulator: bounty bosses now show portrait and health on every tile they cover.',
-    'Combat simulator: bounty boss names now sit on the middle hex.',
-    'Combat simulator: Capo now shows its portrait on the boards and in playback.',
-    'Combat simulator: Overclock no longer slows or weakens its holder when it ends.',
-    "Combat simulator: Judge's start-of-round hit now gains his per-kill damage bonus.",
-    "Combat simulator: Incinerator's end-of-round hit now gains his +30% against Inferno.",
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.89.0',
+        date: '2026-11-14',
+        changes: [
+            'Bounty bosses: General Colosso and his Major Grand escorts can now be fought.',
+            '6 combat simulator fixes and adjustments.',
+        ],
+    },
     {
         version: '1.88.0',
         date: '2026-11-12',
