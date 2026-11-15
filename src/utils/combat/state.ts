@@ -375,28 +375,28 @@ export function dotEntriesOf(holder: DebuffEntryHolder, family?: DoTType): Debuf
 }
 
 /**
- * The named DoT families that are Corrosion-type debuffs. Owner ruling 2026-11-15: "Acidic Decay
- * is a corrosion type debuff, so it counts as corrosion in all those situations" — detonation,
- * Toxic Overflow, "inflicts Corrosion" reactions, and debuff-name checks. An entry of such a
- * family is held in `corrosionEntries`, so a read keyed on that container counts it as Corrosion
- * without consulting this set; a read keyed on a debuff NAME goes through `dotEntryAnswersTo`.
- * White Phosphorus, an Inferno by another name, is not folded into "Inferno": no ruling covers it.
+ * The named DoT families that answer to their container's base name as well as their own, keyed
+ * by family. Owner rulings 2026-11-15: "Acidic Decay is a corrosion type debuff, so it counts as
+ * corrosion in all those situations" — detonation, Toxic Overflow, "inflicts Corrosion" reactions
+ * and debuff-name checks — and a debuff clause naming Inferno reaches White Phosphorus. An entry
+ * of such a family is held in its base's container, so a read keyed on that container already
+ * counts it; a read keyed on a debuff NAME goes through `dotEntryAnswersTo`.
  */
-export const CORROSION_TYPE_FAMILIES: ReadonlySet<string> = new Set(['Acidic Decay']);
+export const DOT_FAMILY_BASE_NAME: ReadonlyMap<string, string> = new Map([
+    ['Acidic Decay', 'Corrosion'],
+    ['White Phosphorus', 'Inferno'],
+]);
 
 /**
  * Whether a DoT entry held in the container whose base name is `base` ("Corrosion", "Inferno" or
  * "Damage over Time") answers to the debuff name `name`. An untagged entry answers to its base
- * name. A tagged entry answers to its `family`, and a Corrosion-type family
- * (`CORROSION_TYPE_FAMILIES`) to "Corrosion" as well. One-way: a plain Corrosion never answers to
- * "Acidic Decay".
+ * name. A tagged entry answers to its `family`, and to `base` when `DOT_FAMILY_BASE_NAME` maps
+ * the family to it. One-way: a plain Corrosion never answers to "Acidic Decay".
  */
 export function dotEntryAnswersTo(entry: ActiveDoTStack, base: string, name: string): boolean {
     if (entry.family === undefined) return base === name;
     if (entry.family === name) return true;
-    return (
-        base === 'Corrosion' && name === 'Corrosion' && CORROSION_TYPE_FAMILIES.has(entry.family)
-    );
+    return name === base && DOT_FAMILY_BASE_NAME.get(entry.family) === base;
 }
 
 /**
