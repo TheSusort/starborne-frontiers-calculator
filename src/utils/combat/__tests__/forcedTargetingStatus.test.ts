@@ -3,6 +3,7 @@ import { createStatusEngine } from '../statusEngine';
 import { buildForcedTargetingStatus, provokerOf } from '../triggers';
 import type { SelectedGameBuff } from '../../../types/calculator';
 import type { RegisteredAbilityStatus } from '../statusEngine';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 
 // Always-active seed (skillDuration null → appears every round for owner 'attacker';
 // enemyDebuffs with no enemyTargetId resolve to the default '__enemy__' target).
@@ -48,6 +49,26 @@ describe('buildForcedTargetingStatus', () => {
             taunting: false,
             concentrated: false,
             marked: false,
+            defender: false,
+        });
+    });
+    it('flags every defender-family role as a defender, and no other role', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        const roles: Record<string, ShipTypeName | undefined> = {
+            d: 'DEFENDER',
+            ds: 'DEFENDER_SECURITY',
+            a: 'ATTACKER',
+            s: 'SUPPORTER',
+            unknown: undefined,
+        };
+        const map = buildForcedTargetingStatus(se, Object.keys(roles), (id) => roles[id]);
+        expect(Object.fromEntries([...map].map(([id, st]) => [id, st.defender]))).toEqual({
+            d: true,
+            ds: true,
+            a: false,
+            s: false,
+            unknown: false,
         });
     });
 });

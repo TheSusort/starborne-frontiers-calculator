@@ -53,9 +53,8 @@ export interface AttackerDamageScalars {
      *  or Giant Slayer proc adds into this same sum (R198), through `outgoingDamageDeltaPct`. */
     outgoingDamageBuffPct: number;
     /**
-     * Product of the attacker's outgoing factors that multiply OUTSIDE the buff sum: the
-     * squad-leader outgoing bonus (R199) and Arcane Siege (R201), each `(1 + x/100)`.
-     * Absent → 1: a counter or reactive proc carries neither.
+     * The attacker's outgoing factor that multiplies OUTSIDE the buff sum: the squad-leader
+     * outgoing bonus (R199), `(1 + x/100)`. Absent → 1.
      */
     outgoingSeparateFactor?: number;
     /** Extra outgoing factor on a SECONDARY target only — a covered cell, `roleScale < 1` — from
@@ -270,7 +269,7 @@ export function victimHitDamageParts(
 
     // The per-victim delta (enemy-status-gated modifiers, a Menace/Giant Slayer proc) and the
     // attacker-fixed outgoing buff are additive contributions to the SAME `(1 + x/100)`
-    // multiplier; the squad-leader and Arcane Siege factors multiply outside it.
+    // multiplier; the squad-leader factor multiplies outside it.
     const outgoingPct = s.outgoingDamageBuffPct + (v.outgoingDamageDeltaPct ?? 0);
     const outgoingFactor =
         (1 + outgoingPct / 100) *

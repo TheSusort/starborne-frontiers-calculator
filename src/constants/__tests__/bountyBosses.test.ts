@@ -99,6 +99,61 @@ describe('General Colosso', () => {
     });
 });
 
+describe('Eelun Naphula', () => {
+    it('builds at level 32 on a four-cell footprint anchored at T1', () => {
+        const ship = bossShip('eelun', 32)!;
+        expect(ship.id).toBe('boss:eelun:32');
+        expect(ship.affinity).toBe('chemical');
+        expect(ship.type).toBe('SUPPORTER');
+        expect(ship.chargeSkillCharge).toBe(3);
+        expect(ship.activeTarget).toBe('all');
+        expect(ship.chargedPattern).toBe('Pattern-All');
+        expect(ship.baseStats).toMatchObject({ hp: 219150, speed: 130 });
+        expect(bossFootprint(ship)).toEqual(['T1', 'M1', 'M2', 'B1']);
+    });
+
+    it('places Sitri T3, Beleth M3, Corson M4, Sitri B3', () => {
+        const encounter = BOUNTY_ENCOUNTERS.find((e) => e.bountyId === 'eelun' && e.level === 32)!;
+        expect(encounter.adds).toEqual([
+            { addId: 'sitri', position: 'T3' },
+            { addId: 'beleth', position: 'M3' },
+            { addId: 'corson', position: 'M4' },
+            { addId: 'sitri', position: 'B3' },
+        ]);
+    });
+
+    it.each([
+        ['sitri', 'ATTACKER', 31920, 109, 3],
+        ['beleth', 'SUPPORTER', 63030, 119, 2],
+        ['corson', 'DEFENDER', 73940, 83, 2],
+    ])('resolves npc:%s:124', (id, type, hp, speed, charges) => {
+        expect(parseNpcShipId(`npc:${id}:124`)).toEqual({ id, level: 124 });
+        const ship = npcShip(id, 124)!;
+        expect(ship.affinity).toBe('chemical');
+        expect(ship.type).toBe(type);
+        expect(ship.baseStats).toMatchObject({ hp, speed });
+        expect(ship.chargeSkillCharge).toBe(charges);
+        expect(ship.firstPassiveSkillText).toBe('');
+    });
+
+    it.each(['sitri', 'corson'])(
+        '%s targets front, skipping defenders, with a range-1 cone',
+        (id) => {
+            expect(npcShip(id, 124)).toMatchObject({
+                activeTarget: 'front-skip-defenders',
+                activePattern: 'Pattern-Cone-Range-1',
+                chargedTarget: 'front-skip-defenders',
+                chargedPattern: 'Pattern-Cone-Range-1',
+            });
+        }
+    );
+
+    it('fits Sitri attack and Corson defence to the measured hits', () => {
+        expect(npcShip('sitri', 124)!.baseStats.attack).toBe(16670);
+        expect(npcShip('corson', 124)!.baseStats.defence).toBe(15260);
+    });
+});
+
 describe('Major Grand', () => {
     it('resolves as npc:major-grand:124 with no charged skill', () => {
         expect(parseNpcShipId('npc:major-grand:124')).toEqual({ id: 'major-grand', level: 124 });

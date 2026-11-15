@@ -49,6 +49,12 @@ export const TARGETING_RULES: Record<TargetSelection, TargetingRule> = {
         label: 'Marked',
         description: 'Strikes every Marked enemy; with none Marked, strikes the front.',
     },
+    'front-skip-defenders': {
+        id: 'front-skip-defenders',
+        label: 'Front (ignores Defenders)',
+        description:
+            'Strikes the front-most enemy that is not a Defender; Defenders only when none other is left.',
+    },
     team: {
         id: 'team',
         label: 'Allies',
@@ -97,7 +103,12 @@ export const PATTERN_SHAPES: Record<PatternShape, PatternShapeInfo> = {
 };
 
 /** Selections only bounty bosses use; no player ship has them, so ship filters omit them. */
-const BOSS_ONLY_SELECTIONS: readonly TargetSelection[] = ['row-most', 'row-least', 'marked'];
+const BOSS_ONLY_SELECTIONS: readonly TargetSelection[] = [
+    'row-most',
+    'row-least',
+    'marked',
+    'front-skip-defenders',
+];
 
 /** The rules a ship's own target can be filtered by. */
 export const SHIP_FILTER_TARGETING_RULES: TargetingRule[] = Object.values(TARGETING_RULES).filter(

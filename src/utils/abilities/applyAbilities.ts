@@ -15,9 +15,9 @@ export interface ModifierTotals {
     crit: number;
     critDamage: number;
     outgoingDamage: number;
-    /** Product of every `outgoingDamageSeparate` modifier's `(1 + amount/100)` — a multiplier,
-     *  not percentage points; 1 when none applies (R201). */
-    outgoingDamageSeparateFactor: number;
+    /** Sum of every `outgoingDamageSeparate` modifier, percentage points. It joins the Out. Damage
+     *  sum; read the channel's doc (`ModifierChannel`) for why it is kept apart until then. */
+    outgoingDamageSeparate: number;
     dotDamage: number;
     detonationDamage: number;
     bombSplashDamage: number;
@@ -41,7 +41,7 @@ export function modifierTotalsFromAbilities(
         crit: 0,
         critDamage: 0,
         outgoingDamage: 0,
-        outgoingDamageSeparateFactor: 1,
+        outgoingDamageSeparate: 0,
         dotDamage: 0,
         detonationDamage: 0,
         bombSplashDamage: 0,
@@ -57,8 +57,7 @@ export function modifierTotalsFromAbilities(
         // where the flat part applies unconditionally.
         if (!conditionsMet(gateConditions(ability), ctx)) continue;
         // `isMultiplicative` is intentionally ignored: these deltas are summed into the
-        // same additive-percentage buff totals as the buff path (calculateBuffTotals). A
-        // modifier that multiplies on its own says so by its CHANNEL (`outgoingDamageSeparate`).
+        // same additive-percentage buff totals as the buff path (calculateBuffTotals).
         // Additive: flat config value + per-condition scaled bonus (capped). A pure
         // scaling modifier (e.g. "7.5% defPen per buff, up to 45%") has value 0 and a
         // scaling rule; a flat modifier has no scaling.
@@ -78,7 +77,7 @@ export function modifierTotalsFromAbilities(
                 totals.outgoingDamage += amount;
                 break;
             case 'outgoingDamageSeparate':
-                totals.outgoingDamageSeparateFactor *= 1 + amount / 100;
+                totals.outgoingDamageSeparate += amount;
                 break;
             case 'dotDamage':
                 totals.dotDamage += amount;
@@ -348,8 +347,8 @@ export function gateFiringAbilities(
 }
 
 /** An extra-action grant collected from a (pre-gated) skill. The engine re-inserts
- *  the granting actor into the round's remaining turn queue once per descriptor,
- *  enforcing oncePerRound per actor per round. */
+ *  the recipients (the granting actor by default, see `recipients`) into the round's
+ *  remaining turn queue once per descriptor, enforcing oncePerRound per granter per round. */
 export interface ExtraActionGrant {
     abilityId: string;
     oncePerRound: boolean;
@@ -357,6 +356,8 @@ export interface ExtraActionGrant {
     endOfRound: boolean;
     /** A chainable grant (see the `extra-action` config's `chains`). */
     chains?: boolean;
+    /** Who takes the turn (see the `extra-action` config's `recipients`). Absent = the granter. */
+    recipients?: 'self' | 'other-allies';
 }
 
 /** `extra-action` abilities on the skill that fire on cast. Conditions are already
@@ -374,6 +375,9 @@ export function extraActionsFromSkill(skill: Skill | undefined): ExtraActionGran
             oncePerRound: ability.config.oncePerRound,
             endOfRound: ability.config.endOfRound ?? false,
             ...(ability.config.chains ? { chains: true } : {}),
+            ...(ability.config.recipients === 'other-allies'
+                ? { recipients: 'other-allies' as const }
+                : {}),
         });
     }
     return out;

@@ -111,4 +111,40 @@ describe('encounterBoard', () => {
         expect(result.enemyBoard.M2?.overrides).toEqual({ speed: 5 });
         expect(result.enemyBoard.B1?.ship.id).toBe('npc:major-grand:124');
     });
+
+    it('places Eelun on her anchor and each escort on its add cell', () => {
+        const board = encounterBoard('eelun', 32)!;
+        expect(Object.keys(board).sort()).toEqual(['B3', 'M3', 'M4', 'T1', 'T3']);
+        expect(board.T1?.ship.id).toBe('boss:eelun:32');
+        expect(board.M3?.ship.id).toBe('npc:beleth:124');
+        expect(board.M4?.ship.id).toBe('npc:corson:124');
+        expect(loadedBossShipId(board)).toBe('boss:eelun:32');
+        expect(withoutStrayBossCells(board)).toBe(board);
+    });
+
+    it('round-trips Eelun and her escorts through a saved setup', () => {
+        const board = encounterBoard('eelun', 32)!;
+        board.M3 = { ...board.M3!, overrides: { speed: 5 } };
+        const setup = serializeSetup({
+            name: 'x',
+            playerBoard: {},
+            enemyBoard: board,
+            seed: 1,
+            runCount: 1,
+            gridMode: 'normal',
+            savedAt: 0,
+        });
+        const result = deserializeSetup(setup, (id) =>
+            resolveShipId(id, {
+                getShipById: () => undefined,
+                units: [],
+                getAscensionStats: () => null,
+            })
+        );
+        expect(result.dropped).toEqual([]);
+        expect(Object.keys(result.enemyBoard).sort()).toEqual(['B3', 'M3', 'M4', 'T1', 'T3']);
+        expect(result.enemyBoard.T1?.ship.id).toBe('boss:eelun:32');
+        expect(result.enemyBoard.M3?.overrides).toEqual({ speed: 5 });
+        expect(result.enemyBoard.M4?.ship.id).toBe('npc:corson:124');
+    });
 });

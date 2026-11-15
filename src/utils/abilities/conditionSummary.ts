@@ -23,6 +23,7 @@ export const CONDITION_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>>
     'enemy-adjacent': 'per unit adjacent to the enemy',
     'enemy-destroyed': 'per destroyed enemy',
     'ally-destroyed': 'per destroyed ally',
+    'ally-died-since-own-active': 'when an ally has died since the last active',
     'self-crit': 'on critical hit',
     'enemy-type': 'when enemy matches type',
     // Formerly EXTRA_SUBJECT_LABELS (src/components/skills/ConditionRow.tsx).

@@ -39,10 +39,10 @@ export function reflectedDamageForHit(args: {
     reflectAmplificationPct?: number;
     /** The hit as thrown: `victimHitDamageParts(...).reflectBase`. */
     reflectBase: number;
-    /** The REFLECTOR's outgoing damage buff (Out. Damage Up), signed %. Default 0. */
+    /** The REFLECTOR's Out. Damage sum (buffs and Arcane Siege), signed %. Default 0. */
     reflectorOutgoingPct?: number;
-    /** The REFLECTOR's separate outgoing factor (squad-leader outgoing bonus × Arcane Siege,
-     *  `EffectiveOutgoingStats.outgoingSeparateFactor`). Default 1. */
+    /** The REFLECTOR's squad-leader outgoing factor
+     *  (`EffectiveOutgoingStats.outgoingSeparateFactor`). Default 1. */
     reflectorOutgoingSeparateFactor?: number;
     /** From computeAffinityModifiers(wearer, attacker).damageModifier — one of -25 | 0 | 25 */
     affinityDamageModifier: number;
@@ -93,10 +93,10 @@ export function reflectedDamageParts(args: {
     reflectPct: number;
     /** The hit as thrown: `victimHitDamageParts(...).reflectBase`. */
     reflectBase: number;
-    /** The REFLECTOR's outgoing damage buff (Out. Damage Up), signed %. Default 0. */
+    /** The REFLECTOR's Out. Damage sum (buffs and Arcane Siege), signed %. Default 0. */
     reflectorOutgoingPct?: number;
-    /** The REFLECTOR's separate outgoing factor (squad-leader outgoing bonus × Arcane Siege,
-     *  `EffectiveOutgoingStats.outgoingSeparateFactor`). Default 1. */
+    /** The REFLECTOR's squad-leader outgoing factor
+     *  (`EffectiveOutgoingStats.outgoingSeparateFactor`). Default 1. */
     reflectorOutgoingSeparateFactor?: number;
     affinityDamageModifier: number;
     /** The attacker's defence reduction against the bounce. See the overload above. */

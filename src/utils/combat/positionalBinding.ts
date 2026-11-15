@@ -18,6 +18,10 @@ export interface ActorTargetingStatus {
     /** Enemy-debuff {@link MARKED_STATUS} on this actor. Read only by a `marked` selection
      *  ({@link markedTargets}); it steers no other targeting. Optional: absent reads false. */
     marked?: boolean;
+    /** This actor's ship role is in the defender family (`matchesRoleCategory(role, ['DEFENDER'])`).
+     *  Read only by a `front-skip-defenders` selection. Optional: absent (an unknown role) reads
+     *  false, so the unit is never skipped. */
+    defender?: boolean;
 }
 
 /** The debuff a `marked` target selection strikes (General Colosso's encounter, #519). */
@@ -43,9 +47,12 @@ export function markedTargets(
     return holders.sort((x, y) => positionTurnRank(x.position) - positionTurnRank(y.position));
 }
 
-/** The selection a `marked` target falls back to when nobody is Marked. */
-const withoutMarked = (target: ParsedTarget): ParsedTarget =>
-    target.selection === 'marked' ? { ...target, selection: 'front' } : target;
+/** The `front` rule under a `marked` selection with nobody Marked, and under a
+ *  `front-skip-defenders` selection once its candidates are narrowed. */
+const asFront = (target: ParsedTarget): ParsedTarget =>
+    target.selection === 'marked' || target.selection === 'front-skip-defenders'
+        ? { ...target, selection: 'front' }
+        : target;
 
 const isRowChoice = (selection: TargetSelection): boolean =>
     selection === 'row-most' || selection === 'row-least';
@@ -181,6 +188,9 @@ export interface PositionalActing {
  *      entirely when the acting attacker (ship-level `acting.ignoresStealth`) or this cast's
  *      target (per-ability `target.ignoresStealth`) ignores Stealth. A `row-most` / `row-least`
  *      cast counts stealthed ships toward each row's size and only aims at a visible one.
+ *   5. Skip defenders — a `front-skip-defenders` cast drops the defender-family candidates
+ *      (`ActorTargetingStatus.defender`) when at least one other remains, then targets as
+ *      `front`. Forced targeting above still wins.
  * `statusOf(id)` returning `undefined` is treated as all-false (never throws/skips).
  *
  * @param acting - Optional context for the acting attacker. `provokedBy` is the id of the
@@ -233,8 +243,10 @@ export function resolvePositionalTargetCell(
     }
 
     // A `marked` selection anchors on its first Marked unit; with nobody Marked it is `front`.
+    // A `front-skip-defenders` selection is `front` over its non-defender candidates (step 5).
     const marked = markedTargets(target, living, statusOf);
-    target = withoutMarked(target);
+    const skipDefenders = target.selection === 'front-skip-defenders';
+    target = asFront(target);
 
     const aimAt = (actor: CombatActor): PositionalTargetHit => ({
         actor,
@@ -307,6 +319,14 @@ export function resolvePositionalTargetCell(
             }
             if (visible.length) {
                 candidates = visible;
+            }
+        }
+
+        // 5. Skip defenders — drop defender-family units unless only defenders are left.
+        if (skipDefenders) {
+            const nonDefenders = candidates.filter((a) => !statusOf(a.id)?.defender);
+            if (nonDefenders.length) {
+                candidates = nonDefenders;
             }
         }
     }

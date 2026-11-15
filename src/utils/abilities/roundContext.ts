@@ -4,8 +4,8 @@ import { ConditionContext } from './evaluateConditions';
 
 /**
  * SP-E — sums live DoT stacks by their entry's `family` tag (Belladonna's named "Acidic Decay"
- * gate), each stack counting one (`dotStackCount`). Untagged entries — every DoT outside
- * Belladonna's Corrosion→Acidic-Decay conversion — contribute to no named family.
+ * gate), each stack counting one (`dotStackCount`). Untagged entries (a plain Corrosion,
+ * Inferno or generic DoT) contribute to no named family.
  */
 export function dotFamilyCounts(
     corrosion: readonly ActiveDoTStack[],
@@ -194,6 +194,8 @@ export function buildRoundContext(state: {
     /** Own-side actors destroyed so far this battle, the owner excluded — cumulative, like
      *  `enemyDestroyedCount`. */
     allyDestroyedCount?: number;
+    /** See ConditionContext.allyDiedSinceOwnActive. */
+    allyDiedSinceOwnActive?: boolean;
     /** SP-4d — true when this round/reaction has NO opposing victim to ask a per-victim question
      *  about (e.g. an ally-targeted cast that resolves nobody). Default `false`/omitted preserves
      *  every existing caller's behaviour unchanged (a real victim, or the DPS-assumption default).
@@ -242,6 +244,7 @@ export function buildRoundContext(state: {
         enemyAdjacentCount: state.enemyAdjacentCount,
         enemyDestroyedCount: state.enemyDestroyedCount,
         allyDestroyedCount: state.allyDestroyedCount,
+        ...(state.allyDiedSinceOwnActive ? { allyDiedSinceOwnActive: true } : {}),
         selfHpPct: state.selfHpPct ?? 100,
         targetHpPct: state.targetHpPct ?? 100,
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,

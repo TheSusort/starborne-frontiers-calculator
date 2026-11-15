@@ -122,8 +122,9 @@ export function heldReflectPct(
  * foldSpeedBuffPct to the full calculateBuffTotals shape.
  *
  * `includeAuras` adds the third self channel — aura and accumulating statuses at the NEUTRAL ctx
- * (`selfAuraBuffs`). Only `effectiveOutgoingStatsOf` sets it: an attack thrown outside the turn
- * loop has no cast to gate those statuses against, and the turn loop folds them itself.
+ * (`selfAuraBuffs`). `effectiveOutgoingStatsOf` sets it because an attack thrown outside the turn
+ * loop has no cast to gate those statuses against (the turn loop folds them itself for damage);
+ * `liveDebuffLandingChance` sets it because no other fold feeds hacking or security to the roll.
  */
 export function foldActorBuffTotals(
     statusEngine: StatusEngine,
@@ -213,10 +214,9 @@ export interface EffectiveOutgoingStats {
     /** base defence penetration + every self-sourced penetration buff (Core Charge's +1% per
      *  stack), i.e. the effective penetration a hit carries. */
     defensePenetration: number;
-    /** The direct-hit factors that multiply OUTSIDE the Out. Damage buff sum, as the cast path's
-     *  `outgoingSeparateFactor` (playerTurn.ts): the squad-leader outgoing bonus (R199) times the
-     *  owner's `outgoingDamageSeparate` modifiers (Arcane Siege, R201), gated on the owner's LIVE
-     *  shield pool. 1 when neither applies. */
+    /** The squad-leader outgoing bonus (R199), the one direct-hit factor that multiplies OUTSIDE
+     *  the Out. Damage buff sum, as the cast path's `outgoingSeparateFactor` (playerTurn.ts). 1
+     *  when it does not apply. */
     outgoingSeparateFactor: number;
 }
 
@@ -288,14 +288,16 @@ export function effectiveOutgoingStatsOf(
         attack:
             s.attack * (1 + (t.attackBuff + attackPct + (actor.preFight?.attackPct ?? 0)) / 100) +
             t.attackFlatBuff,
-        outgoingDamageBuffPct: t.outgoingDamageBuff + outgoingDamagePct,
+        // Arcane Siege joins the sum, gated on the owner's LIVE shield pool (`ModifierChannel`).
+        outgoingDamageBuffPct:
+            t.outgoingDamageBuff +
+            outgoingDamagePct +
+            separateOutgoingPct(separateModifiers, actor),
         crit: s.crit + t.critBuff,
         critDamage: s.critDamage + t.critDamageBuff,
         defensePenetration:
             s.defensePenetration + toDotAndPenModifiers(selfLists).defensePenetrationBuff,
-        outgoingSeparateFactor:
-            (1 + (actor.preFight?.outgoingDamage ?? 0) / 100) *
-            separateOutgoingFactor(separateModifiers, actor),
+        outgoingSeparateFactor: 1 + (actor.preFight?.outgoingDamage ?? 0) / 100,
     };
 }
 
@@ -313,12 +315,12 @@ export function separateOutgoingModifiersOf(skills: ShipSkills | undefined): Abi
     );
 }
 
-/** The product of `separateModifiers` gated at a ctx that is NEUTRAL apart from the owner's live
- *  shield state — a hit thrown outside the turn loop has no cast to gate against, and Arcane
+/** The sum of `separateModifiers`, percentage points, gated at a ctx that is NEUTRAL apart from
+ *  the owner's live shield state — a hit thrown outside the turn loop has no cast to gate against, and Arcane
  *  Siege's only condition is `self-shield`. `reactiveSeparateOutgoingSubjects.test.ts` fails over
  *  the corpus the day an `outgoingDamageSeparate` modifier gates on another subject. */
-function separateOutgoingFactor(separateModifiers: readonly Ability[], actor: CombatActor): number {
-    if (separateModifiers.length === 0) return 1;
+function separateOutgoingPct(separateModifiers: readonly Ability[], actor: CombatActor): number {
+    if (separateModifiers.length === 0) return 0;
     return modifierTotalsFromAbilities(
         [...separateModifiers],
         buildRoundContext({
@@ -332,7 +334,7 @@ function separateOutgoingFactor(separateModifiers: readonly Ability[], actor: Co
             selfShielded: actor.shieldPool > 0,
             selfShieldFull: actor.stats.hp > 0 && actor.shieldPool >= actor.stats.hp,
         })
-    ).outgoingDamageSeparateFactor;
+    ).outgoingDamageSeparate;
 }
 
 /** True for an actor whose debuffs land whatever the affinity matchup (`alwaysLandsDebuffs`,
@@ -375,8 +377,14 @@ export function liveDebuffLandingChance(
     affinityModifier: number
 ): number {
     if (attacker.alwaysLandsDebuffs === true) return 1;
-    const atk = foldActorBuffTotals(statusEngine, selfBuffLookup, attacker.id);
-    const def = foldActorBuffTotals(statusEngine, selfBuffLookup, defender.id);
+    // Durationless held statuses count too (`includeAuras`): a banked stack of Enrage Hacking III
+    // (Eelun Naphula) is flat hacking the roll must see.
+    const atk = foldActorBuffTotals(statusEngine, selfBuffLookup, attacker.id, {
+        includeAuras: true,
+    });
+    const def = foldActorBuffTotals(statusEngine, selfBuffLookup, defender.id, {
+        includeAuras: true,
+    });
     /* eslint-disable no-restricted-syntax -- base hacking/security fed into the fold: the live buff totals are added on the next lines */
     const baseHacking = attacker.stats.hacking ?? 200;
     const baseSecurity = defender.stats.security ?? 100;
@@ -409,10 +417,6 @@ export interface EffectiveDamageStats {
     detonationDamageModifier: number;
     /** mod.bombSplashDamage — outgoing bomb-splash multiplier delta (percentage points). */
     bombSplashModifier: number;
-    /** `mod.outgoingDamageSeparateFactor`: the direct-hit multiplier from `outgoingDamageSeparate`
-     *  modifiers (Arcane Siege, R201), outside the buff sum `totals.outgoingDamageBuff`. 1 when
-     *  none applies. */
-    outgoingSeparateFactor: number;
     /** Full summed buff totals (named layers, extras and layer 4) — exposes outgoingDamage/heal channels for the turn loop. */
     totals: ReturnType<typeof calculateBuffTotals>;
 }
@@ -464,7 +468,11 @@ export function effectiveDamageStatsOf(args: {
         attackBuff: own.attackBuff + extras.attackBuff + mod.attack,
         critBuff: own.critBuff + extras.critBuff + mod.crit,
         critDamageBuff: own.critDamageBuff + extras.critDamageBuff + mod.critDamage,
-        outgoingDamageBuff: own.outgoingDamageBuff + extras.outgoingDamageBuff + mod.outgoingDamage,
+        outgoingDamageBuff:
+            own.outgoingDamageBuff +
+            extras.outgoingDamageBuff +
+            mod.outgoingDamage +
+            mod.outgoingDamageSeparate,
         defenceBuff: own.defenceBuff + extras.defenceBuff + mod.defence,
         hpBuff: own.hpBuff + extras.hpBuff + mod.hp,
         outgoingHealBuff: own.outgoingHealBuff + extras.outgoingHealBuff,
@@ -493,7 +501,6 @@ export function effectiveDamageStatsOf(args: {
         selfDotDamageModifier: dotPen.dotDamageModifier + mod.dotDamage,
         detonationDamageModifier: mod.detonationDamage + dotPen.detonationDamageModifier,
         bombSplashModifier: mod.bombSplashDamage,
-        outgoingSeparateFactor: mod.outgoingDamageSeparateFactor,
         totals,
     };
 }

@@ -2,11 +2,13 @@
  * Owner rulings on two gear sets, end to end through the real placement path:
  *  - Reflect also reflects splash hits (the wearer need not be the aimed-at ship).
  *  - Boost extends only buffs the wearer casts itself, never a buff another ship gives the wearer.
+ *  - Boost does not extend a buff from the wearer's implant proc (Resonating Fury).
  */
 import { describe, expect, it } from 'vitest';
 import {
     entriesOf,
     hitAmounts,
+    mirrorBoard,
     runForcedBattle,
     type BoardRun,
     type BoardSpec,
@@ -20,6 +22,13 @@ const unit = (name: string, position: UnitSpec['position'], ...parts: Partial<Un
 
 const IDLE: Partial<UnitSpec> = {
     active: 'This Unit gains <unit-skill>Attack Up I</unit-skill> for 1 turn.',
+    target: 'self',
+    pattern: 'Pattern-Base-Support',
+};
+
+/** A ship that only shields itself, so it adds no buff of its own to a buff count. */
+const IDLE_NO_BUFF: Partial<UnitSpec> = {
+    active: 'This Unit grants a <unit-damage>shield equal to 1%</unit-damage> of its attack.',
     target: 'self',
     pattern: 'Pattern-Base-Support',
 };
@@ -87,5 +96,44 @@ describe('Boost set: only the wearer own buffs are extended', () => {
         const without = runForcedBattle(casts, false);
         expect(expiries(without, 'A')).toBeGreaterThan(0);
         expect(expiries(withSet, 'A')).toBeLessThan(expiries(without, 'A'));
+    });
+});
+
+describe("Boost set: an implant proc's buff is not extended", () => {
+    /** W shields itself and A and grants both Attack Up I; the shield procs W's Resonating Fury
+     *  (Crit Power Up III, 1 turn) on each recipient. One round: A's 1-turn buffs tick at A's own
+     *  Post-Turn unless Boost lengthened them. */
+    const board: BoardSpec = {
+        player: [
+            unit(
+                'W',
+                'M3',
+                { set: { name: 'BOOST', pieces: 4 } },
+                { implant: { name: 'RESONATING_FURY', rarity: 'legendary' } },
+                {
+                    stats: { speed: 200 },
+                    active: 'This Unit grants <unit-skill>Attack Up I</unit-skill> for 1 turn and a <unit-damage>shield equal to 10%</unit-damage> of its attack.',
+                    target: 'allies',
+                    pattern: 'Pattern-Circle-Support-Range-1',
+                }
+            ),
+            unit('A', 'M4', IDLE_NO_BUFF),
+        ],
+        enemy: [unit('O', 'M4', IDLE_NO_BUFF)],
+        rounds: 1,
+    };
+    const expired = (r: BoardRun, who: string, buff: string) =>
+        entriesOf(r, 'buff-expired', { actor: who, note: `${buff} expired` }).length;
+
+    it.each([
+        ['player side', board],
+        ['enemy side', mirrorBoard(board)],
+    ])('%s: Crit Power Up III ends after one turn; the skill buff gets the extra turn', (_, b) => {
+        const run = runForcedBattle(b, true);
+        expect(
+            entriesOf(run, 'buff', { actor: 'W', target: 'A', note: 'Crit Power Up III' })
+        ).not.toHaveLength(0);
+        expect(expired(run, 'A', 'Crit Power Up III')).toBe(1);
+        expect(expired(run, 'A', 'Attack Up I')).toBe(0);
     });
 });

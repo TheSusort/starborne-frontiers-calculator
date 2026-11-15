@@ -751,6 +751,20 @@ describe('liveDebuffLandingChance — reproduces the static landing formula with
         );
         expect(live).toBe(0);
     });
+
+    it("a durationless self status carrying security on the DEFENDER's side lowers the landing chance", () => {
+        const { eng, attacker, defender } = buildBaselessPair();
+        const securityAura: RegisteredAbilityStatus = {
+            payload: { buffName: 'Security Up III', stacks: 1, parsedEffects: { security: 50 } },
+            side: 'self',
+            sourceSlot: 'passive',
+            conditions: [],
+            kind: 'aura',
+        };
+        eng.registerAbilityStatuses([securityAura], defender.id);
+        // Defaults: hacking 200 vs security 100 + 50 held → (200 - 150) / 100.
+        expect(liveDebuffLandingChance(eng, new Map(), attacker, defender, 0)).toBe(0.5);
+    });
 });
 
 // ---------------------------------------------------------------------------

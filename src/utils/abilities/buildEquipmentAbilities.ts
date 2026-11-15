@@ -36,6 +36,7 @@ import {
     OutgoingCondition,
 } from '../../types/abilities';
 import { Ship } from '../../types/ship';
+import { implantEffectId } from '../combat/buffDurationExtension';
 
 // ---------------------------------------------------------------------------
 // Gear-set ability registry (D-PR1: Leech; D-PR3: Hardened)
@@ -161,7 +162,9 @@ const GEAR_SET_ABILITIES: Partial<
         config: { type: 'shield', pct: 4 * sets, basis: 'hp' },
         autoFilled: true,
     }),
-    // Boost (4pc set): every buff the wearer APPLIES lasts +1 turn (caster-side). Modeled NOT
+    // Boost (4pc set): every buff the wearer APPLIES lasts +1 turn (caster-side), except a buff
+    // an implant of the wearer's procs: Resonating Fury's 1-turn Crit Power Up III stays 1 turn on
+    // a Boost wearer (owner ruling 2026-11-15; `boostExtendsBuffFrom`). Modeled NOT
     // as a damage/heal fold but as a marker the engine collects into a per-owner extension map,
     // applied at the status-engine buff-duration write seams. Top-level type:'modifier' is a
     // placeholder (engine keys on config.type:'buff-duration-extension', like REFLECT). The
@@ -703,8 +706,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         };
     },
     // Arcane Siege: +X% outgoing direct damage while shielded, gated on the self-shield
-    // condition. Its own multiplier, outside the Out. Damage buff sum and the squad-leader
-    // outgoing factor (R201) — hence the `outgoingDamageSeparate` channel.
+    // condition. Adds into the Out. Damage sum; read the `outgoingDamageSeparate` channel's doc.
     ARCANE_SIEGE: (rarity) => {
         const value = ARCANE_SIEGE_PCT[rarity];
         if (value === undefined) return undefined;
@@ -1282,7 +1284,7 @@ export function buildEquipmentAbilities(
                 partials.forEach((partial, i) => {
                     abilities.push({
                         ...partial,
-                        equipmentEffectId: `implant-${implantName}-${gearId}`,
+                        equipmentEffectId: implantEffectId(implantName, gearId),
                         // For single-ability implants, preserve the original id byte-exactly
                         // (suffix the unique gear-piece id so two copies of the same implant
                         // get distinct ability ids — the proc-rate gate keys on

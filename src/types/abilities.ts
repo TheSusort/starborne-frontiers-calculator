@@ -477,6 +477,11 @@ export type ConditionSubject =
     // Own-side units destroyed so far this battle, the owner excluded (General Colosso's "for
     // each dead ally ship"): the same-side mirror of 'enemy-destroyed'.
     | 'ally-destroyed'
+    // Binary: an own-side unit has died since the owner's last ACTIVE cast (Eelun Naphula's "When
+    // an ally dies, the next Active also applies …"). Several deaths still read 1. Live-derived
+    // from `CombatActor.allyDiedSinceActive` (ConditionContext.allyDiedSinceOwnActive); absent
+    // reads 0. Always derivable:true.
+    | 'ally-died-since-own-active'
     | 'hp-threshold'
     // HP-percentage COUNT subjects: the count IS the enemy's current (or missing)
     // HP percentage (0..100), for HP-proportional scaling — Akula ("up to 30% more,
@@ -790,9 +795,15 @@ export interface OutgoingHitContext {
  *    Reuses the exact same primitive as 'repaired-enemy-count'.
  *  - 'purged-buff-count' → eventCtx.purgedBuffCount (Sefuba's catalogue "repairs 8% of its max HP
  *    for each buff removed") — the number of buffs the TRIGGERING purge removed
- *    (purge-performed.count), stamped by the on-enemy-purged listener. */
+ *    (purge-performed.count), stamped by the on-enemy-purged listener.
+ *  - 'other-living-ally-count' → the owner's living same-side allies, the owner excluded, counted
+ *    when the heal resolves (Eelun Naphula's "repairs 12% of its Max HP for each other living
+ *    ally" at round start). Not an event field: read from the drain context. */
 export type ReactiveScalingCountSource =
-    'repaired-enemy-count' | 'spread-affected-count' | 'purged-buff-count';
+    | 'repaired-enemy-count'
+    | 'spread-affected-count'
+    | 'purged-buff-count'
+    | 'other-living-ally-count';
 
 export interface ScalingRule {
     /** Index into Ability.conditions of the live-state count Condition (additive PR6b / damage
@@ -821,8 +832,13 @@ export type ModifierChannel =
     | 'crit'
     | 'critDamage'
     | 'outgoingDamage'
-    // Outgoing direct damage that multiplies as its OWN `(1 + x/100)` factor instead of joining
-    // the Out. Damage buff sum (R201, Arcane Siege).
+    // Outgoing direct damage from an implant whose condition is re-read live when a hit is thrown
+    // outside the turn loop (R203, Arcane Siege's shield gate). It ADDS into the same Out. Damage
+    // sum as every outgoing-damage buff, Menace and Giant Slayer; only the squad-leader outgoing
+    // bonus multiplies on its own. Evidence: owner ruling 2026-11-15, from the Eelun Naphula
+    // replay, where Liberator's (epic) and Los's (rare) hits under Out. Damage Up III fit only
+    // the additive sum (`bountyBossReplay.integration.test.ts`). The channel name predates the
+    // ruling and is kept because saved ability configs carry it.
     | 'outgoingDamageSeparate'
     | 'dotDamage'
     | 'detonationDamage'
@@ -1047,8 +1063,9 @@ export type AbilityConfig =
      *  refreshes the pending bonus to `pct`; it does not stack. Consumed through
      *  IntentExecContext.armNextCritPower; engine.ts's positional apply is the read site. */
     | { type: 'stat-gain'; stat: 'shieldPenetration' | 'nextCritPower'; pct: number }
-    // A full extra turn: the engine re-inserts the granting actor into the round's
-    // remaining turn queue at its speed position (game-verified 2026-06-06).
+    // A full extra turn: the engine re-inserts the recipient (the granting actor unless
+    // `recipients` says otherwise) into the round's remaining turn queue at its speed position
+    // (game-verified 2026-06-06).
     | {
           type: 'extra-action';
           oncePerRound: boolean;
@@ -1059,6 +1076,10 @@ export type AbilityConfig =
            *  MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND instead of the MAX_EXTRA_TURNS_PER_ROUND
            *  tripwire. */
           chains?: boolean;
+          /** Who takes the granted turn. Absent or `'self'`: the granting ship.
+           *  `'other-allies'` ("gives one extra end of round action to all other allies", Eelun):
+           *  every living same-side ship except the granter, one turn each. */
+          recipients?: 'self' | 'other-allies';
       }
     | {
           type: 'heal' | 'shield';

@@ -335,7 +335,8 @@ export interface Intent {
         inflictionReaction?: { firingId?: number; duringTurnOf?: string };
         /** The actor whose application landed (or, for `on-enemy-debuff-resisted`, was resisted
          *  as) the triggering debuff/DoT — the event's `sourceId`. Stamped by the
-         *  `on-enemy-debuff-inflicted` and `on-enemy-debuff-resisted` listeners. When
+         *  `on-enemy-debuff-inflicted` and `on-enemy-debuff-resisted` listeners; also by
+         *  `on-enemy-destroyed`, with the killer (the victim itself for a death with no killer). When
          *  no `inflictionReaction` is stamped the infliction is that actor's own cast, so
          *  `rootCastKey` keys the cast on it. */
         inflictorId?: string;
@@ -2423,8 +2424,10 @@ export function registerReactiveListeners(args: {
                         // (b) the drain-time `killed-enemy-had-debuff` condition can read the
                         // slain unit's OWN debuff store (recordDestroyed runs before this event
                         // fires and never clears it) rather than the fight-wide enemy-debuff
-                        // count. Inert for every OTHER on-enemy-destroyed ability (Sokol/
-                        // Liberator's extra-action/charge branches never read eventCtx).
+                        // count. An ability with `oncePerRootCast` also reads `inflictorId` and
+                        // the infliction-reaction stamp, through `passesOncePerRootCastGate`;
+                        // every other on-enemy-destroyed ability ignores the stamped fields it
+                        // has no use for.
                         //
                         // An owner-worded kill clause ("upon destroying an enemy" — Meiying,
                         // Valiant, Gallant …; `triggerKillerScope`) fires only on a death the
@@ -2443,6 +2446,11 @@ export function registerReactiveListeners(args: {
                             eventCtx: {
                                 ...intent.eventCtx,
                                 victimId: e.actorId,
+                                // The action that destroyed it, for `oncePerRootCast`: the
+                                // killer's cast, or the reaction the death landed in. A death
+                                // with no killer (a DoT tick) is keyed on the victim's own turn.
+                                inflictorId: e.killerId ?? e.actorId,
+                                ...inflictionReactionCtx(e),
                                 ...(killedDebuffs !== undefined
                                     ? { killedEnemyDebuffCount: killedDebuffs }
                                     : {}),
@@ -2856,7 +2864,8 @@ export interface IntentExecContext {
         granterId: string,
         abilityId: string,
         oncePerRound: boolean,
-        endOfRound: boolean
+        endOfRound: boolean,
+        recipients?: 'self' | 'other-allies'
     ) => void;
     /** Same-side ally/recipient id order for the current drain side: player team ids when
      *  draining the player side; enemy attacker ids when draining the enemy side. Sourced from
@@ -4469,10 +4478,12 @@ export function provokerOf(statusEngine: StatusEngine, actorId: string): string 
  *  actor ids. Stealth/Taunt are self-buffs (selfBuffNamesForOwners); Concentrate Fire is a
  *  debuff on the focus target (ownerDebuffNamesFor). Read-half only — no applier wiring this
  *  phase. Several taunters are ordered by the attacker's normal targeting
- *  (`resolvePositionalTarget`), not by when each taunt landed. */
+ *  (`resolvePositionalTarget`), not by when each taunt landed. `roleOf` supplies each actor's
+ *  ship role for the `defender` flag; an actor without a role reads as a non-defender. */
 export function buildForcedTargetingStatus(
     statusEngine: StatusEngine,
-    actorIds: string[]
+    actorIds: string[],
+    roleOf?: (id: string) => ShipTypeName | undefined
 ): Map<string, ActorTargetingStatus> {
     const map = new Map<string, ActorTargetingStatus>();
     for (const id of actorIds) {
@@ -4483,6 +4494,7 @@ export function buildForcedTargetingStatus(
             taunting: selfNames.includes('Taunt'),
             concentrated: debuffNames.includes('Concentrate Fire'),
             marked: debuffNames.includes(MARKED_STATUS),
+            defender: matchesRoleCategory(roleOf?.(id), ['DEFENDER']),
         });
     }
     return map;
@@ -5915,6 +5927,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             kind: 'timed',
             duration,
             ...(cfg.hits !== undefined ? { hits: cfg.hits } : {}),
+            ...(intent.ability.equipmentEffectId !== undefined
+                ? { equipmentEffectId: intent.ability.equipmentEffectId }
+                : {}),
         };
         const grantKey = reactiveGrantKey(intent, ctx);
         for (const rid of recipients) {
@@ -6011,6 +6026,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 recipients,
                 kind: 'timed',
                 duration: extra.duration,
+                ...(intent.ability.equipmentEffectId !== undefined
+                    ? { equipmentEffectId: intent.ability.equipmentEffectId }
+                    : {}),
             };
             for (const rid of recipients) {
                 if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip
@@ -6359,6 +6377,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     remainingRounds: duration,
                     sourceId: intent.ownerId,
                     appliedSeq: (appliedSeq = ctx.statusEngine.nextAppliedSeq()),
+                    ...dotFlagsOf(cfg),
                 });
             } else if (cfg.dotType === 'inferno') {
                 const appliedAttack =
@@ -6745,6 +6764,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // affected-actor ids), so a positional multi-ally spread heals proportionally.
         // Sefuba: a repair "for each buff removed" — count = the triggering purge's
         // removed count (eventCtx.purgedBuffCount, stamped by the on-enemy-purged listener).
+        // Eelun Naphula: "for each other living ally" — the owner's living same-side allies, the
+        // owner excluded, counted now rather than read off the event.
         const eventCountMultiplier =
             intent.ability.scaling?.countSource === 'repaired-enemy-count'
                 ? (intent.eventCtx?.repairedEnemyIds?.length ?? 0)
@@ -6752,7 +6773,11 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                   ? (intent.eventCtx?.spreadAffectedIds?.length ?? 0)
                   : intent.ability.scaling?.countSource === 'purged-buff-count'
                     ? (intent.eventCtx?.purgedBuffCount ?? 0)
-                    : undefined;
+                    : intent.ability.scaling?.countSource === 'other-living-ally-count'
+                      ? ctx.playerIds.filter(
+                            (id) => id !== intent.ownerId && (ctx.isActorAlive?.(id) ?? true)
+                        ).length
+                      : undefined;
         // The per-unit rate for a count-scaled heal is scaling.perUnit (== the parsed base pct);
         // for a plain heal it is cfg.pct. A zero count grants nothing.
         const effectivePct =
@@ -7581,7 +7606,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             intent.ownerId,
             intent.ability.id,
             cfg.oncePerRound,
-            cfg.endOfRound ?? false
+            cfg.endOfRound ?? false,
+            cfg.recipients
         );
         return;
     }

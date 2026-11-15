@@ -53,4 +53,18 @@ describe('BossEncounterPicker', () => {
         expect(board.M2?.ship.id).toBe('npc:major-grand:124');
         expect(board.B1?.ship.id).toBe('npc:major-grand:124');
     });
+
+    it('selecting Eelun loads her anchored at T1 with Sitri, Beleth and Corson', () => {
+        const onChange = vi.fn();
+        render(<BossEncounterPicker board={{}} onChange={onChange} />);
+        fireEvent.click(trigger());
+        fireEvent.click(screen.getByRole('option', { name: 'Eelun Naphula — Lv 32' }));
+        const board = onChange.mock.calls[0][0] as BoardState;
+        expect(Object.keys(board).sort()).toEqual(['B3', 'M3', 'M4', 'T1', 'T3']);
+        expect(board.T1?.ship.id).toBe('boss:eelun:32');
+        expect(board.T3?.ship.id).toBe('npc:sitri:124');
+        expect(board.B3?.ship.id).toBe('npc:sitri:124');
+        expect(board.M3?.ship.id).toBe('npc:beleth:124');
+        expect(board.M4?.ship.id).toBe('npc:corson:124');
+    });
 });

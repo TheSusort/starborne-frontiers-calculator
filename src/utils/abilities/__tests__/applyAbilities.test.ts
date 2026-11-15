@@ -87,7 +87,7 @@ describe('modifierTotalsFromAbilities', () => {
         crit: 0,
         critDamage: 0,
         outgoingDamage: 0,
-        outgoingDamageSeparateFactor: 1,
+        outgoingDamageSeparate: 0,
         dotDamage: 0,
         detonationDamage: 0,
         bombSplashDamage: 0,
@@ -96,7 +96,7 @@ describe('modifierTotalsFromAbilities', () => {
         hp: 0,
     };
 
-    it('an outgoingDamageSeparate modifier multiplies its own factor, outside outgoingDamage (R201)', () => {
+    it('outgoingDamageSeparate modifiers sum in percentage points, kept apart from outgoingDamage', () => {
         const result = modifierTotalsFromAbilities(
             [
                 modifier('a', 'outgoingDamageSeparate', 20),
@@ -106,7 +106,7 @@ describe('modifierTotalsFromAbilities', () => {
             makeConditionContext()
         );
         expect(result.outgoingDamage).toBe(45);
-        expect(result.outgoingDamageSeparateFactor).toBeCloseTo(1.2 * 1.1, 12);
+        expect(result.outgoingDamageSeparate).toBe(30);
     });
 
     it('sums a single outgoingDamage modifier', () => {

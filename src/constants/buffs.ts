@@ -935,6 +935,11 @@ export const BUFFS: Buff[] = [
         type: 'buff',
     },
     {
+        name: 'Enrage Hacking III',
+        description: '+3 Hacking, Stackable',
+        type: 'buff',
+    },
+    {
         name: 'Marked',
         description: 'Marked for attack. Unremovable.',
         type: 'debuff',

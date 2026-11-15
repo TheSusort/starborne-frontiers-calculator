@@ -1389,7 +1389,7 @@ type TickableDoTType = Exclude<DoTType, 'bomb'>;
 export function tickDoTs(args: {
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
-    /** Absolute per-tick generic DoT entries (Voron/Orel transform, Acidic Decay family). */
+    /** Absolute per-tick generic DoT entries (the Voron/Orel transform). */
     genericDoTEntries: ActiveDoTStack[];
     enemyHp: number;
     ctxFor: (sourceId: string) => PlayerRoundCtx | undefined;
@@ -1527,8 +1527,7 @@ export function tickDoTs(args: {
         const d = (e.perTickAmount ?? 0) * e.stacks * genericUp;
         // #358 ADDENDUM 3 (C4): a generic entry created by `convertHitToSelfDot` carries the
         // PRE-mitigation slice of the direct hit it deferred. `?? e.perTickAmount` covers every
-        // other generic DoT (Acidic Decay and friends), which folds no defence and so ticks the
-        // same amount on both axes.
+        // other generic DoT, which folds no defence and so ticks the same amount on both axes.
         const pre = (e.perTickPreMitigation ?? e.perTickAmount ?? 0) * e.stacks * genericUp;
         genericCredits.push({
             sourceId: e.sourceId,
@@ -3374,6 +3373,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         const dead = allActorsById.get(e.actorId);
         if (dead) dead.destroyedInHitRoot = hitRootInScope();
     });
+    // Any own-side death, whatever its cause, primes every same-side actor's next active
+    // (`CombatActor.allyDiedSinceActive`).
+    bus.on('ship-destroyed', (e) => {
+        const dead = allActorsById.get(e.actorId);
+        if (!dead) return;
+        for (const a of allActors)
+            if (a.side === dead.side && a.id !== dead.id) a.allyDiedSinceActive = true;
+    });
 
     // Squad-leader "+X% attack for each other alive <faction> ally" is LIVE. Each such actor's
     // `preFight` becomes an engine-owned copy whose `attackPct` includes the per-ally term for the
@@ -4182,6 +4189,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         abilityId: string;
         oncePerRound: boolean;
         endOfRound: boolean;
+        recipients?: 'self' | 'other-allies';
     }[] = [];
 
     // Per-round set of actor ids that received a positive HP repair this round (C2b-3).
@@ -6276,12 +6284,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         actingActorId = undefined;
 
         // Forced-targeting/stealth lookup for a roster. Reads the status engine
-        // for each actor's Concentrate Fire / Taunt / Stealth flags so resolvePositionalTarget
-        // can redirect or stealth-filter.
+        // for each actor's Concentrate Fire / Taunt / Stealth flags, and its role for the
+        // defender flag, so resolvePositionalTarget can redirect, stealth-filter or skip defenders.
         const statusLookupFor = (roster: CombatActor[]) => {
             const m = buildForcedTargetingStatus(
                 statusEngine,
-                roster.map((a) => a.id)
+                roster.map((a) => a.id),
+                (id) => roleByActorId.get(id)
             );
             return (id: string) => m.get(id);
         };
@@ -7842,8 +7851,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         attacker.id !== victim.id &&
                         attacker.destroyedRound === undefined
                     ) {
-                        // The REFLECTOR's Out. Damage Up and its separate outgoing factor
-                        // (squad-leader bonus, Arcane Siege) scale every share (#678).
+                        // The REFLECTOR's Out. Damage sum and its squad-leader outgoing factor
+                        // scale every share (#678).
                         const reflectorOutgoing = effectiveOutgoingStatsOf(
                             statusEngine,
                             selfBuffLookup,
@@ -11765,7 +11774,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
         // per actor per round (key `${actorId}:${abilityId}`); non-chainable insertions are
         // backstopped by the MAX_EXTRA_TURNS_PER_ROUND tripwire, chainable ones capped per granter
-        // by MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND. A grant bumps the granter's PENDING count by 1 — the selection
+        // by MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND. A grant bumps each recipient's PENDING count by 1 (the
+        // granter, or every other living ally for an `'other-allies'` grant) — the selection
         // loop then re-picks it at its LIVE speed-rank among the remaining unacted actors
         // (game-verified: re-added to the turn order; acts immediately only when fastest
         // remaining). The selection comparator (orderByTurnPriority via selectNextBySpeed)
@@ -11800,10 +11810,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // pool, drained after the normal speed pool; default grants stay speed-positioned
                 // in the normal pool. The oncePerRound gate and both caps above apply to BOTH
                 // pools.
-                if (g.endOfRound) {
-                    endOfRoundPending.set(granter.id, endOfRoundPendingOf(granter.id) + 1);
-                } else {
-                    pending.set(granter.id, pendingOf(granter.id) + 1);
+                // An `'other-allies'` grant (Eelun) gives one turn to every living same-side
+                // actor except the granter and counts as ONE insertion above: its fan-out is
+                // bounded by the roster, so it cannot run away.
+                const recipients =
+                    g.recipients === 'other-allies'
+                        ? actorsBySide(granter.side).filter(
+                              (a) => a.id !== granter.id && a.destroyedRound === undefined
+                          )
+                        : [granter];
+                for (const recipient of recipients) {
+                    if (g.endOfRound) {
+                        endOfRoundPending.set(recipient.id, endOfRoundPendingOf(recipient.id) + 1);
+                    } else {
+                        pending.set(recipient.id, pendingOf(recipient.id) + 1);
+                    }
                 }
             }
         };
@@ -11826,14 +11847,23 @@ export function runCombat(rawInput: CombatEngineInput): {
             granterId: string,
             abilityId: string,
             oncePerRound: boolean,
-            endOfRound: boolean
+            endOfRound: boolean,
+            recipients?: 'self' | 'other-allies'
         ): void => {
             const granter = allActorsById.get(granterId);
             if (!granter) return;
             if (inTurnLoop) {
-                processExtraActionGrants(granter, [{ abilityId, oncePerRound, endOfRound }]);
+                processExtraActionGrants(granter, [
+                    { abilityId, oncePerRound, endOfRound, recipients },
+                ]);
             } else {
-                pendingExtraActions.push({ granterId, abilityId, oncePerRound, endOfRound });
+                pendingExtraActions.push({
+                    granterId,
+                    abilityId,
+                    oncePerRound,
+                    endOfRound,
+                    recipients,
+                });
             }
         };
 
@@ -12501,6 +12531,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         abilityId: g.abilityId,
                         oncePerRound: g.oncePerRound,
                         endOfRound: g.endOfRound,
+                        recipients: g.recipients,
                     },
                 ]);
             }

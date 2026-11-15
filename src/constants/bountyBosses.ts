@@ -135,6 +135,45 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
             },
         },
     },
+    {
+        id: 'eelun',
+        name: 'Eelun Naphula',
+        affinity: 'chemical',
+        type: 'SUPPORTER',
+        footprint: ['T1', 'M1', 'M2', 'B1'],
+        activeTarget: 'all',
+        activePattern: 'Pattern-All',
+        chargedTarget: 'all',
+        chargedPattern: 'Pattern-All',
+        activeSkillText:
+            'The Boss grants all allies a <unit-damage>shield equal to 10.5%</unit-damage> of its max HP and inflicts <unit-skill>Acidic Decay III</unit-skill> on all enemies for 3 turns.',
+        chargeSkillText:
+            'The Boss grants a <unit-damage>Shield equal to 10%</unit-damage> of its Max HP to all allies and gives one extra end of round action to all other allies. Additionally, it inflicts <unit-skill>Acidic Decay III</unit-skill> on all enemies for 3 turns.',
+        chargeSkillCharge: 3,
+        passiveSkillText:
+            'When an ally dies, the next Active also applies a second <unit-skill>Acidic Decay III</unit-skill> for 1 turn, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skill. At the start of each round, the Boss <unit-damage>repairs 12% of its Max HP</unit-damage> for each other living ally. At the end of each turn, the Boss gains <unit-skill>Enrage Hacking III</unit-skill>. The Boss is immune to Control debuffs and Charge Loss effects.',
+        statsByLevel: {
+            32: {
+                hp: 219150,
+                // She deals no damage, so attack is a placeholder, as are hacking, security and
+                // crit. Defence is fitted to three attackers' hits in the owner's replay
+                // (Liberator, Los and Thresh at 7%, 0% and 44.5% penetration), which agree on it
+                // (`bountyBossReplay.integration.test.ts`).
+                attack: 26390,
+                defence: 17006,
+                hacking: 270,
+                security: 160,
+                crit: 22,
+                critDamage: 32,
+                speed: 130,
+                hpRegen: 0,
+                shield: 0,
+                shieldPenetration: 0,
+                defensePenetration: 0,
+                damageReduction: 0,
+            },
+        },
+    },
 ];
 
 /** A non-boss unit an encounter places beside its boss: one hex, fixed level. */
@@ -230,6 +269,113 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
             damageReduction: 0,
         },
     },
+    {
+        id: 'sitri',
+        name: 'Sitri',
+        affinity: 'chemical',
+        type: 'ATTACKER',
+        imageKey: 'Sitri',
+        level: 124,
+        activeTarget: 'front-skip-defenders',
+        activePattern: 'Pattern-Cone-Range-1',
+        chargedTarget: 'front-skip-defenders',
+        chargedPattern: 'Pattern-Cone-Range-1',
+        activeSkillText:
+            'This attack ignores Defenders, deals <unit-damage>140% damage</unit-damage>, and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.',
+        chargeSkillText:
+            'This attack ignores Defenders, deals <unit-damage>200% damage</unit-damage>, and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.',
+        chargeSkillCharge: 3,
+        passiveSkillText: '',
+        stats: {
+            hp: 31920,
+            // Attack is fitted to a measured hit on Graphite. Defence is a single-attacker fit:
+            // only Liberator's splash in the owner's replay reaches a Sitri, so it matches by
+            // construction (`bountyBossReplay.integration.test.ts`).
+            attack: 16670,
+            defence: 7102,
+            hacking: 270,
+            security: 160,
+            crit: 22,
+            critDamage: 32,
+            speed: 109,
+            hpRegen: 0,
+            shield: 0,
+            shieldPenetration: 0,
+            defensePenetration: 0,
+            damageReduction: 0,
+        },
+    },
+    {
+        id: 'beleth',
+        name: 'Beleth',
+        affinity: 'chemical',
+        type: 'SUPPORTER',
+        imageKey: 'Beleth',
+        level: 124,
+        activeTarget: 'all-allies',
+        activePattern: 'Pattern-Support-All',
+        chargedTarget: 'all-allies',
+        chargedPattern: 'Pattern-Support-All',
+        activeSkillText:
+            'This Unit grants <unit-skill>Defense Up II</unit-skill> and <unit-skill>Attack Up II</unit-skill> to all allies for 1 turn.',
+        chargeSkillText:
+            'This Unit grants all allies <unit-skill>Defense Up III</unit-skill> and <unit-skill>Attack Up III</unit-skill> for 2 turns and <unit-aid>adds 2 charges</unit-aid> to its Charged Skill.',
+        chargeSkillCharge: 2,
+        passiveSkillText: '',
+        stats: {
+            hp: 63030,
+            // Deals no damage. Defence is a single-attacker fit: Liberator's splash and main hits
+            // in the owner's replay (they agree with each other) are the only hits on her
+            // (`bountyBossReplay.integration.test.ts`).
+            attack: 26390,
+            defence: 10890,
+            hacking: 270,
+            security: 160,
+            crit: 22,
+            critDamage: 32,
+            speed: 119,
+            hpRegen: 0,
+            shield: 0,
+            shieldPenetration: 0,
+            defensePenetration: 0,
+            damageReduction: 0,
+        },
+    },
+    {
+        id: 'corson',
+        name: 'Corson',
+        affinity: 'chemical',
+        type: 'DEFENDER',
+        imageKey: 'Corson',
+        level: 124,
+        activeTarget: 'front-skip-defenders',
+        activePattern: 'Pattern-Cone-Range-1',
+        chargedTarget: 'front-skip-defenders',
+        chargedPattern: 'Pattern-Cone-Range-1',
+        activeSkillText:
+            "This attack ignores Defenders, deals <unit-damage>damage equal to 120%</unit-damage> of this Unit's defense, and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.",
+        chargeSkillText:
+            'This Unit gains <unit-skill>Taunt</unit-skill> for 2 turns, and this attack ignores Defenders, deals <unit-damage>damage equal to 120%</unit-damage> of its defense, and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.',
+        chargeSkillCharge: 2,
+        passiveSkillText: '',
+        stats: {
+            hp: 73940,
+            // Defence is fitted to a measured hit; his damage scales with it, so attack never
+            // reaches a hit.
+            attack: 10000,
+            defence: 15260,
+            hacking: 270,
+            security: 160,
+            crit: 22,
+            critDamage: 32,
+            speed: 83,
+            hpRegen: 0,
+            shield: 0,
+            shieldPenetration: 0,
+            defensePenetration: 0,
+            damageReduction: 0,
+        },
+    },
 ];
 
 export interface BountyEncounter {
@@ -257,6 +403,16 @@ export const BOUNTY_ENCOUNTERS: readonly BountyEncounter[] = [
             { addId: 'major-grand', position: 'T1' },
             { addId: 'major-grand', position: 'M2' },
             { addId: 'major-grand', position: 'B1' },
+        ],
+    },
+    {
+        bountyId: 'eelun',
+        level: 32,
+        adds: [
+            { addId: 'sitri', position: 'T3' },
+            { addId: 'beleth', position: 'M3' },
+            { addId: 'corson', position: 'M4' },
+            { addId: 'sitri', position: 'B3' },
         ],
     },
 ];

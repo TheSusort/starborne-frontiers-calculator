@@ -1,8 +1,10 @@
 /**
  * Replays of the owner's in-game bounty fights (#519): Judge (T4), Graphite (M3), Grif (B1) and
  * Thresh (B4) at their planner final stats, against Fenri Lv32, against Mamma Maglienza Lv32
- * with her three Capos, and against General Colosso Lv32 with his three Major Grands (that team,
- * Los alone, and Graphite with Asphyxiator). Each pin is a hit read off the in-game combat log.
+ * with her three Capos, against General Colosso Lv32 with his three Major Grands (that team,
+ * Los alone, and Graphite with Asphyxiator), and against Eelun Naphula Lv32 with her four
+ * escorts (Graphite alone, and Grif, Liberator, Graphite, Los and Thresh). Each pin is a hit read
+ * off the in-game combat log.
  * The Fenri block checks the harness itself (Fenri's stats were fitted in an earlier fight); the
  * other blocks check the encounter's fitted stats and targeting.
  */
@@ -122,6 +124,24 @@ const FLEET: Record<string, FleetShip> = {
             defensePenetration: 0,
         },
     },
+    Liberator: {
+        position: 'M2',
+        affinity: 'thermal',
+        type: 'ATTACKER',
+        refits: 6,
+        stats: {
+            hp: 24714,
+            attack: 23051,
+            defence: 4382,
+            hacking: 118,
+            security: 16,
+            crit: 104,
+            critDamage: 185,
+            speed: 159.96,
+            defensePenetration: 7,
+            shieldPenetration: 40,
+        },
+    },
     Asphyxiator: {
         position: 'M3',
         affinity: 'thermal',
@@ -142,30 +162,41 @@ const FLEET: Record<string, FleetShip> = {
 
 const OWNER_TEAM = ['Judge', 'Graphite', 'Grif', 'Thresh'] as const;
 
-// Thresh carries an epic Intrusion implant; Graphite wears the Boost set (her Overclock lasts 3
-// turns in game) and, in one Colosso fight, a legendary Resonating Fury implant. The pieces carry
-// no stats: each ship's planner stats are its overrides.
+// Thresh carries an epic Intrusion implant, Liberator an epic and Los a rare Arcane Siege (both
+// dormant unless shielded); Graphite wears the Boost set (her Overclock lasts 3 turns in game)
+// and, in some fights, a legendary Resonating Fury implant. The pieces carry no stats: each
+// ship's planner stats are its overrides.
 const INTRUSION_ID = 'replay-intrusion';
 const BOOST_SLOTS = ['weapon', 'hull', 'generator', 'sensor'] as const;
 const boostId = (slot: string) => `replay-boost-${slot}`;
 const RESONATING_FURY_ID = 'replay-resonating-fury';
+const ARCANE_SIEGE_IDS: Partial<Record<string, string>> = {
+    Liberator: 'replay-arcane-siege-epic',
+    Los: 'replay-arcane-siege-rare',
+};
 const getGearPiece = (id: string) =>
-    id === INTRUSION_ID
-        ? ({ id, setBonus: 'INTRUSION', rarity: 'epic' } as unknown as GearPiece)
-        : id === RESONATING_FURY_ID
-          ? ({ id, setBonus: 'RESONATING_FURY', rarity: 'legendary' } as unknown as GearPiece)
-          : id.startsWith('replay-boost-')
-            ? ({
-                  id,
-                  slot: id.slice('replay-boost-'.length),
-                  level: 16,
-                  stars: 6,
-                  rarity: 'legendary',
-                  mainStat: null,
-                  subStats: [],
-                  setBonus: 'BOOST',
-              } as GearPiece)
-            : undefined;
+    id.startsWith('replay-arcane-siege-')
+        ? ({
+              id,
+              setBonus: 'ARCANE_SIEGE',
+              rarity: id.slice('replay-arcane-siege-'.length),
+          } as unknown as GearPiece)
+        : id === INTRUSION_ID
+          ? ({ id, setBonus: 'INTRUSION', rarity: 'epic' } as unknown as GearPiece)
+          : id === RESONATING_FURY_ID
+            ? ({ id, setBonus: 'RESONATING_FURY', rarity: 'legendary' } as unknown as GearPiece)
+            : id.startsWith('replay-boost-')
+              ? ({
+                    id,
+                    slot: id.slice('replay-boost-'.length),
+                    level: 16,
+                    stars: 6,
+                    rarity: 'legendary',
+                    mainStat: null,
+                    subStats: [],
+                    setBonus: 'BOOST',
+                } as GearPiece)
+              : undefined;
 
 const fleetShip = (name: string): Ship => {
     const entry = FLEET[name];
@@ -176,7 +207,12 @@ const fleetShip = (name: string): Ship => {
         ...ship,
         id: `replay:${name}`,
         refits: Array.from({ length: entry.refits }, (_, i) => ({ id: `refit-${i}`, stats: [] })),
-        implants: name === 'Thresh' ? ({ ultimate: INTRUSION_ID } as Ship['implants']) : {},
+        implants:
+            name === 'Thresh'
+                ? ({ ultimate: INTRUSION_ID } as Ship['implants'])
+                : ARCANE_SIEGE_IDS[name]
+                  ? ({ ultimate: ARCANE_SIEGE_IDS[name] } as Ship['implants'])
+                  : {},
         equipment:
             name === 'Graphite'
                 ? Object.fromEntries(BOOST_SLOTS.map((slot) => [slot, boostId(slot)]))
@@ -659,5 +695,154 @@ describe('a full Colosso fight with the owner team', () => {
         expect(result.outcome.lastRound).toBe(result.rounds.length);
         if (result.outcome.winner === 'player') expect(colossoDead || cap).toBe(true);
         else expect(playerWiped || cap).toBe(true);
+    });
+});
+
+const eelunFight = (playerTeam: BattlePlacement[], rounds: number) =>
+    simulateBattle(
+        { playerTeam, enemyTeam: buildTeam(encounterBoard('eelun', 32)!, deps), rounds },
+        getGearPiece
+    );
+
+/** `team` with Graphite wearing her legendary Resonating Fury. */
+const withResonatingFury = (team: BattlePlacement[]) =>
+    team.map((p) =>
+        p.ship.name === 'Graphite'
+            ? { ...p, ship: { ...p.ship, implants: { implant_major: RESONATING_FURY_ID } } }
+            : p
+    );
+
+// Graphite alone at the front: each escort's first active strikes her after Beleth's Attack Up II
+// and Defense Up II (+30%) and her own Overclock III. These are the hits Sitri's attack and
+// Corson's defence were fitted to.
+describe('replay: Graphite alone against Eelun Naphula Lv32 and her escorts', () => {
+    setupKeyedRng(1);
+    const result = eelunFight(teamOf({ Graphite: 'M4' }), 1);
+    const graphite = idOf(result, 'Graphite');
+
+    it("Sitri's first active hits Graphite for 10,542 without a crit", () => {
+        const hit = hitsBy(result, 'Sitri', 1).find((t) => t.targetId === graphite);
+        expect(hit?.didCrit).not.toBe(true);
+        expectMeasured(hit?.amount, 10_542, TIGHT);
+    });
+
+    it("Corson's first active hits Graphite for 8,274 without a crit", () => {
+        const hit = hitsBy(result, 'Corson', 1).find((t) => t.targetId === graphite);
+        expect(hit?.didCrit).not.toBe(true);
+        expectMeasured(hit?.amount, 8_274, TIGHT);
+    });
+});
+
+// Combat 35c6ba24: Grif T1, Liberator M2, Graphite M3, Los M4, Thresh B4. Graphite's shield
+// procs Resonating Fury (Crit Power Up III, 1 turn) on every ally and turns on Liberator's and
+// Los's Arcane Siege. Liberator's active on Corson kills Corson and both Sitris; that action gives
+// every ally +1 charge, his extra action fires his charged (no Crit Power Up III by then) and kills
+// Beleth with splash on Eelun, giving +1 more; Los's charged and Thresh's charged then kill Eelun
+// before she acts. Liberator's log shows each hit as two numbers; the pins are their sum.
+describe('replay: the owner attack team against Eelun Naphula Lv32', () => {
+    // Seed 6 is chosen so Resonating Fury procs on Graphite's round-1 shield (the opener). A
+    // change to the RNG stream can move these pins without any engine change.
+    setupKeyedRng(6);
+    const result = eelunFight(
+        withResonatingFury(
+            teamOf({ Grif: 'T1', Liberator: 'M2', Graphite: 'M3', Los: 'M4', Thresh: 'B4' })
+        ),
+        3
+    );
+    const entries = entriesOf(result);
+    const attacks = (name: string) =>
+        entries.filter(
+            ({ entry }) => entry.kind === 'attack' && nameOf(result, entry.actorId) === name
+        );
+    const hitOn = (attack: LoggedEntry, target: string) =>
+        attack.entry.targets.filter((t) => nameOf(result, t.targetId) === target);
+    const killedBy = (name: string) =>
+        entries
+            .filter(
+                ({ entry }) =>
+                    entry.kind === 'death' &&
+                    entry.targets.some((t) => nameOf(result, t.targetId) === name)
+            )
+            .map(({ entry }) => nameOf(result, entry.actorId));
+
+    it("Liberator's opening active hits Corson 74,688, each Sitri 65,393 and Beleth 48,485", () => {
+        const opener = attacks('Liberator')[0];
+        expect(opener.entry.slot).toBe('active');
+        expectMeasured(hitOn(opener, 'Corson')[0]?.amount, 74_688, TIGHT);
+        const sitris = hitOn(opener, 'Sitri');
+        expect(sitris).toHaveLength(2);
+        for (const s of sitris) expectMeasured(s.amount, 65_393, TIGHT);
+        expectMeasured(hitOn(opener, 'Beleth')[0]?.amount, 48_485, TIGHT);
+    });
+
+    it("Liberator's extra action is his charged: Beleth 138,883, Eelun 48,994", () => {
+        const extra = attacks('Liberator')[1];
+        expect(extra.round).toBe(1);
+        // The charged's first clause (Legion Discipline III) opens the turn and carries the slot.
+        const opener = entries.indexOf(attacks('Liberator')[0]);
+        const charged = entries.findIndex(
+            ({ entry }, i) =>
+                i > opener &&
+                entry.kind === 'buff' &&
+                entry.slot === 'charged' &&
+                nameOf(result, entry.actorId) === 'Liberator'
+        );
+        expect(charged).toBeGreaterThan(opener);
+        expect(charged).toBeLessThan(entries.indexOf(extra));
+        expectMeasured(hitOn(extra, 'Beleth')[0]?.amount, 138_883, TIGHT);
+        expectMeasured(hitOn(extra, 'Eelun Naphula')[0]?.amount, 48_994, TIGHT);
+    });
+
+    it('Crit Power Up III ends after Liberator’s first action', () => {
+        const liberator = idOf(result, 'Liberator');
+        const expiry = entries.findIndex(
+            ({ entry }) =>
+                entry.kind === 'buff-expired' &&
+                entry.actorId === liberator &&
+                entry.note === 'Crit Power Up III expired'
+        );
+        const extra = entries.indexOf(attacks('Liberator')[1]);
+        expect(expiry).toBeGreaterThan(entries.indexOf(attacks('Liberator')[0]));
+        expect(expiry).toBeLessThan(extra);
+    });
+
+    it("Los's charged hits Eelun for 79,270", () => {
+        const hit = hitOn(attacks('Los')[0], 'Eelun Naphula')[0];
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 79_270, TIGHT);
+    });
+
+    it("Thresh's charged hits Eelun for 207,868 and kills her", () => {
+        const strike = attacks('Thresh')[0];
+        expect(strike.entry.slot).toBe('charged');
+        expectMeasured(hitOn(strike, 'Eelun Naphula')[0]?.amount, 207_868, TIGHT);
+        expect(killedBy('Thresh')).toEqual(['Eelun Naphula']);
+        expect(result.outcome).toMatchObject({ winner: 'player', lastRound: 1 });
+    });
+
+    it('Liberator kills Corson and both Sitris with his first action and Beleth with his second', () => {
+        expect(killedBy('Liberator').sort()).toEqual(['Beleth', 'Corson', 'Sitri', 'Sitri']);
+        const deathsBeforeExtra = entries
+            .slice(0, entries.indexOf(attacks('Liberator')[1]))
+            .filter(({ entry }) => entry.kind === 'death')
+            .map(({ entry }) => nameOf(result, entry.actorId))
+            .sort();
+        expect(deathsBeforeExtra).toEqual(['Corson', 'Sitri', 'Sitri']);
+    });
+
+    it('the enemies deal no damage and every player ship ends at full HP', () => {
+        const enemyIds = new Set(
+            result.roster.filter((r) => r.side === 'enemy').map((r) => r.actorId)
+        );
+        const enemyHits = entries.filter(
+            ({ entry }) =>
+                (entry.kind === 'attack' || entry.kind === 'dot-ticked') &&
+                enemyIds.has(entry.actorId) &&
+                entry.targets.some((t) => (t.amount ?? 0) > 0)
+        );
+        expect(enemyHits).toEqual([]);
+        const last = result.rounds[result.rounds.length - 1];
+        for (const ship of last.ships.filter((s) => !enemyIds.has(s.actorId)))
+            expect(ship.hpPct).toBe(100);
     });
 });

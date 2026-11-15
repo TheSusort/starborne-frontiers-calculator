@@ -38,6 +38,7 @@ import {
     parseConditionalStasisApplied,
     parseChargeGain,
     parseAllyChargeOnEnemyDeath,
+    parseAllyDeathPrimedActiveDot,
     parseAllyChargeGrant,
     parseExtraAction,
     detectGrantConditions,
@@ -3170,8 +3171,10 @@ function abilitiesFromText(
                 trigger: 'on-enemy-destroyed',
                 conditions: [],
                 config: { type: 'charge', amount: allyCharge.amount },
-                // Once per round even when multiple enemies die in the same round (Liberator).
-                oncePerRound: true,
+                // Once per action that kills, however many enemies that action destroys; the
+                // text's "once per round" belongs to the extra action alone (owner ruling
+                // 2026-11-15).
+                oncePerRootCast: 'cast',
                 autoFilled: true,
             },
             pos: allyChargePos >= 0 ? allyChargePos : MAX_POS,
@@ -3220,6 +3223,7 @@ function abilitiesFromText(
                     oncePerRound: extra.oncePerRound,
                     endOfRound: extra.endOfRound,
                     ...(extra.chains ? { chains: true } : {}),
+                    ...(extra.recipients ? { recipients: extra.recipients } : {}),
                 },
                 autoFilled: true,
             },
@@ -3758,6 +3762,32 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         });
         if (!dots.length) continue;
         pushToSlot(bySlot, slot, dots);
+    }
+
+    // A passive "When an ally dies, the next Active also applies a second <DoT>" is an extra DoT
+    // on the ACTIVE slot, gated on the live ally-death prime. Built here because the DoT auto-fill
+    // skips passive text and dedupes one entry per DoT per slot.
+    for (const row of getShipSkillRows(ship)) {
+        if (slotFor(row.label) !== 'passive') continue;
+        const primed = parseAllyDeathPrimedActiveDot(row.text);
+        const info = primed ? DOT_TIER_MAP[primed.buffName] : undefined;
+        if (!primed || !info) continue;
+        pushToSlot(bySlot, 'active', [
+            {
+                ability: {
+                    ...dotAbility({
+                        id: '',
+                        type: info.type,
+                        tier: info.tier,
+                        stacks: 1,
+                        duration: primed.turns,
+                        ...dotFlagsOf(info),
+                    }),
+                    conditions: [{ subject: 'ally-died-since-own-active', derivable: true }],
+                },
+                pos: MAX_POS,
+            },
+        ]);
     }
 
     // Merge ship-level buffs/debuffs into their slots (DoTs are already excluded

@@ -10,6 +10,7 @@ import {
 } from './cheatDeathBuffs';
 import { isBuffProtection } from './buffProtectionBuffs';
 import { EXPOSED } from './exposedStatus';
+import { boostExtendsBuffFrom } from './buffDurationExtension';
 import type { CombatEventBus } from './events';
 
 export interface ActiveBuff {
@@ -2598,10 +2599,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const map =
             status.side === 'self' ? getSelfMap(selfEffectiveId) : getEnemyMap(enemyEffectiveId);
         const { familyKey, tier } = deriveFamilyKey(status.payload.buffName);
-        // Boost: +N turns on a buff the caster APPLIES, self-side only (debuffs land enemy-side).
+        // Boost: +N turns on a buff the caster APPLIES, self-side only (debuffs land enemy-side),
+        // never on an implant proc's buff (`boostExtendsBuffFrom`).
         // Caster fail-safe: fixtures may omit casterId → default to 'attacker'.
         const extension =
-            status.side === 'self' ? buffDurationExtensionFor(status.casterId ?? 'attacker') : 0;
+            status.side === 'self' && boostExtendsBuffFrom(status.equipmentEffectId)
+                ? buffDurationExtensionFor(status.casterId ?? 'attacker')
+                : 0;
         const duration = status.duration + extension;
         if (status.side === 'enemy') {
             beforeTimedEnemyApplication(enemyEffectiveId, status.payload.buffName);

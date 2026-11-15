@@ -34,3 +34,15 @@ export function buildBuffDurationExtensionByOwner(
     }
     return map;
 }
+
+const IMPLANT_EFFECT_PREFIX = 'implant-';
+
+/** The `equipmentEffectId` of one implant piece's effect (`buildEquipmentAbilities`). */
+export const implantEffectId = (implantName: string, gearId: string): string =>
+    `${IMPLANT_EFFECT_PREFIX}${implantName}-${gearId}`;
+
+/** Whether the Boost extension applies to a buff from the source with this `equipmentEffectId`:
+ *  yes for the wearer's own skills (no id) and gear-set bonuses, no for an implant proc. The rule
+ *  is stated at `GEAR_SET_ABILITIES.BOOST`. */
+export const boostExtendsBuffFrom = (equipmentEffectId: string | undefined): boolean =>
+    !equipmentEffectId?.startsWith(IMPLANT_EFFECT_PREFIX);

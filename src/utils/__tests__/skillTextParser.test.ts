@@ -21,6 +21,7 @@ import {
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
     detectReactiveTrigger,
+    parseAllyDeathPrimedActiveDot,
     detectDamageReactionTrigger,
     detectHpCrossingTrigger,
     detectTargetHpGate,
@@ -2045,6 +2046,12 @@ describe('detectReactiveTrigger', () => {
         const text =
             'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.';
         expect(detectReactiveTrigger(text, 'Stealth')).toBe('on-crit');
+    });
+
+    it('classifies a "when an ally dies" grant as on-ally-destroyed — Eelun Naphula', () => {
+        const text =
+            'When an ally dies, this Unit gains <unit-skill>Attack Up II</unit-skill> for 1 turn.';
+        expect(detectReactiveTrigger(text, 'Attack Up II')).toBe('on-ally-destroyed');
     });
 
     it('classifies a start-of-round self-buff as start-of-round — Valkyrie', () => {
@@ -5523,5 +5530,24 @@ describe('parseDamageReflection', () => {
                 'This Unit reflects 40% of the damage taken back to the enemy when directly damaged as a primary target.'
             )
         ).toEqual({ pct: 40, requirePrimaryTarget: true });
+    });
+});
+
+describe('parseAllyDeathPrimedActiveDot', () => {
+    it("reads Eelun Naphula's primed second Acidic Decay III", () => {
+        const text =
+            'When an ally dies, the next Active also applies a second <unit-skill>Acidic Decay III</unit-skill> for 1 turn, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skill.';
+        expect(parseAllyDeathPrimedActiveDot(text)).toEqual({
+            buffName: 'Acidic Decay III',
+            turns: 1,
+        });
+    });
+
+    it('ignores text without the ally-death prime', () => {
+        expect(
+            parseAllyDeathPrimedActiveDot(
+                'This Unit inflicts <unit-skill>Acidic Decay III</unit-skill> on all enemies for 3 turns.'
+            )
+        ).toBeNull();
     });
 });

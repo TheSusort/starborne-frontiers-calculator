@@ -806,6 +806,7 @@ const CONDITION_CONTEXT_SUBJECT = {
     enemyAdjacentCount: 'victim',
     enemyDestroyedCount: 'caster',
     allyDestroyedCount: 'caster',
+    allyDiedSinceOwnActive: 'caster',
     selfHpPct: 'caster',
     enemyHpPct: 'victim',
     targetHpPct: 'caster',
@@ -1974,6 +1975,7 @@ function applyNewDoTs(args: {
                 remainingRounds: dot.duration + args.durationExtension,
                 sourceId: args.sourceId,
                 appliedSeq,
+                ...dotFlagsOf(dot),
             });
             args.emitDotApplied('corrosion', dot.stacks, dot.tier, appliedSeq, procs);
         } else if (dot.type === 'inferno') {
@@ -2370,6 +2372,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyAdjacentCount?: number;
         enemyDestroyedCount?: number;
         allyDestroyedCount?: number;
+        allyDiedSinceOwnActive?: boolean;
     } = {
         ...(liveCountsMeasurable && adjacentAllyIds
             ? { adjacentAllyCount: adjacentAllyIds.length }
@@ -2383,6 +2386,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...(allyDestroyedCountArg !== undefined
             ? { allyDestroyedCount: allyDestroyedCountArg }
             : {}),
+        ...(actor.allyDiedSinceActive ? { allyDiedSinceOwnActive: true } : {}),
     };
 
     /** The victim-derived STAT slice of a gate context — the owner-vs-target comparison subjects
@@ -2472,6 +2476,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             : 0;
     if (chargedOverdrivePen > 0) consumeChargedOverdriveII(statusEngine, actor.id);
 
+    // An active cast spends the ally-death prime (`CombatActor.allyDiedSinceActive`). This cast's
+    // gates still see it: `liveCountCtx` read it above. Cleared before `skill-fired` so a death
+    // during this cast, a `skill-fired` listener's included, primes the next active.
+    if (action === 'active') actor.allyDiedSinceActive = false;
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
     const firingPattern = action === 'charged' ? (chargedPattern ?? activePattern) : activePattern;
@@ -5166,10 +5174,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         modifierCtx,
     });
     const effectiveAttack = dmgStats.attack;
-    // The direct-hit outgoing factors that multiply OUTSIDE the Out. Damage buff sum: the
-    // squad-leader outgoing bonus (R199) and Arcane Siege (R201).
-    const outgoingSeparateFactor =
-        (1 + (args.preFight?.outgoingDamage ?? 0) / 100) * dmgStats.outgoingSeparateFactor;
+    // The one direct-hit outgoing factor that multiplies OUTSIDE the Out. Damage buff sum: the
+    // squad-leader outgoing bonus (R199).
+    const outgoingSeparateFactor = 1 + (args.preFight?.outgoingDamage ?? 0) / 100;
     // The squad-leader secondary-target bonus rides the positional scalars; only covered
     // footprint cells read it (`victimHitDamageParts`).
     const secondaryTargetPct = args.preFight?.outgoingDamageSecondaryTargets ?? 0;
@@ -5628,7 +5635,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Charge manipulation: charges only accumulate on ACTIVE rounds. A charged
     // round fires the charged skill, which consumes all charges (reset to 0 at
-    // the top of the loop) — nothing banks toward the next charge on that round.
+    // the top of the loop) — nothing banks toward the next charge on that round
+    // except the charged skill's own self-refill (the `action === 'charged'` branch).
     // Sourced from the firing skill AND the always-active passive slot (charge
     // auras: Hermes/Hemlock/Oleander/Cobalt) — both pre-gated by
     // gateFiringAbilities with their positional contexts. Self + ally gains are
@@ -5651,6 +5659,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             actor.charges + bonusCharges + (allyChargePerRound ?? 0),
             chargeCount
         );
+        if (actor.charges !== oldChargeManip) {
+            bus.emit({
+                type: 'charge-changed',
+                actorId: actor.id,
+                round: r,
+                oldCharge: oldChargeManip,
+                newCharge: actor.charges,
+                reason: 'manip',
+            });
+        }
+    } else if (hasChargedSkill && action === 'charged') {
+        // A charged skill that adds charges to ITSELF ("adds 2 charges to its Charged Skill",
+        // Beleth) refills the pool its own cast just spent. Only the firing skill's own gains
+        // count here; passive gains stay active-turn only, per the rule above.
+        const refill = chargeGainFromSkill({
+            gatedSkill,
+            ctxFor,
+            fallbackCtx: ctx,
+            targetFilter: 'own',
+        });
+        const oldChargeManip = actor.charges;
+        actor.charges = Math.min(actor.charges + refill, chargeCount);
         if (actor.charges !== oldChargeManip) {
             bus.emit({
                 type: 'charge-changed',

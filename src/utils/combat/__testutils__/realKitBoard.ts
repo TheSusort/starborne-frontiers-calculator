@@ -16,6 +16,7 @@ import type { PreFightCombatModifiers } from '../preFight';
 import type { ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
 import type { AffinityName } from '../../../types/ship';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 import {
     parsePattern,
     parseTarget,
@@ -48,6 +49,8 @@ export interface BoardUnit {
     target?: ParsedTarget;
     /** Squad-leader / pre-fight modifiers carried onto the unit's engine actor. */
     preFight?: PreFightCombatModifiers;
+    /** Ship role (`Ship.type`). Omitted → unknown role. */
+    role?: ShipTypeName;
 }
 
 export const NO_KIT: ShipSkills = { slots: [{ slot: 'active', abilities: [] }] };
@@ -124,6 +127,7 @@ export function boardInput(
         mode: 'battle',
         ...(focus.preFight ? { preFight: focus.preFight } : {}),
         affinity: focus.affinity,
+        ...(focus.role ? { role: focus.role } : {}),
         position: focus.position,
         target: target(focus),
         pattern: pattern(focus),
@@ -138,6 +142,7 @@ export function boardInput(
             enemyDebuffs: [],
             position: u.position,
             affinity: u.affinity,
+            ...(u.role ? { role: u.role } : {}),
             target: target(u),
             pattern: pattern(u),
             walk: {
@@ -176,6 +181,7 @@ export function boardInput(
             startCharged: u.startCharged ?? false,
             position: u.position,
             affinity: u.affinity,
+            ...(u.role ? { role: u.role } : {}),
             target: target(u),
             pattern: pattern(u),
             shipSkills: u.kit,

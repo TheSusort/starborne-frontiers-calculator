@@ -1,9 +1,11 @@
 /**
- * The direct-hit factors outside the Out. Damage buff sum — the squad-leader outgoing bonus (R199)
- * and Arcane Siege (R201) — reach every hit thrown outside the turn loop, as they reach a cast:
- * a counter-attack, a reactive proc, and both reflect shares (a ship's bounce and the Reflect gear
- * set's). The owner side is read in ONE place, `effectiveOutgoingStatsOf`'s
- * `outgoingSeparateFactor`; each arm here reverts red when its own site drops the field.
+ * The squad-leader outgoing bonus (R199, its own multiplier) and Arcane Siege (which adds into the
+ * Out. Damage sum — the `outgoingDamageSeparate` channel's doc) reach every hit thrown outside the
+ * turn loop, as they reach a cast: a counter-attack, a reactive proc, and both reflect shares (a
+ * ship's bounce and the Reflect gear set's). The owner side is read in ONE place,
+ * `effectiveOutgoingStatsOf` (`outgoingSeparateFactor` and `outgoingDamageBuffPct`); each arm here
+ * reverts red when its own site drops the term. With no Out. Damage buff in these arms, Arcane
+ * Siege's +20 and a ×1.20 factor give the same hit.
  *
  * Arcane Siege gates on the owner's LIVE shield pool at the moment the reactive hit is thrown.
  *
