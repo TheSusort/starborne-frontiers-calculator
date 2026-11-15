@@ -279,14 +279,14 @@ describe("R109: Lev's crit debuff extension reaches every DoT, Bomb and accumula
 
 /**
  * A named debuff extension grows only the debuffs carrying that name: a timed status by its name,
- * a DoT entry by its family ("Corrosion", "Inferno", "Acidic Decay"), every Bomb by "Bomb" and
- * every Echoing Burst accumulator by "Echoing Burst". A name the victim does not carry moves
- * nothing.
+ * a DoT entry by its names (`dotEntryAnswersTo`: Acidic Decay, a Corrosion-type debuff, answers
+ * to "Corrosion" as well as "Acidic Decay"), every Bomb by "Bomb" and every Echoing Burst
+ * accumulator by "Echoing Burst". A name the victim does not carry moves nothing.
  */
 describe('a named debuff extension grows only the debuffs of that name', () => {
     const cases: [string, Partial<typeof UNMOVED>][] = [
         ['Defense Down II', { defenseDown: 2 }],
-        ['Corrosion', { corrosion: 2 }],
+        ['Corrosion', { corrosion: 2, acidicDecay: 3 }],
         ['Acidic Decay', { acidicDecay: 3 }],
         ['Inferno', { inferno: 2 }],
         ['Bomb', { bomb: 2 }],
