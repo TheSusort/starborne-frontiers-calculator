@@ -7850,8 +7850,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         attacker.id !== victim.id &&
                         attacker.destroyedRound === undefined
                     ) {
-                        // The REFLECTOR's Out. Damage Up and its separate outgoing factor
-                        // (squad-leader bonus, Arcane Siege) scale every share (#678).
+                        // The REFLECTOR's Out. Damage sum and its squad-leader outgoing factor
+                        // scale every share (#678).
                         const reflectorOutgoing = effectiveOutgoingStatsOf(
                             statusEngine,
                             selfBuffLookup,

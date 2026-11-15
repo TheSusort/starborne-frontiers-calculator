@@ -707,8 +707,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         };
     },
     // Arcane Siege: +X% outgoing direct damage while shielded, gated on the self-shield
-    // condition. Its own multiplier, outside the Out. Damage buff sum and the squad-leader
-    // outgoing factor (R201) — hence the `outgoingDamageSeparate` channel.
+    // condition. Adds into the Out. Damage sum; read the `outgoingDamageSeparate` channel's doc.
     ARCANE_SIEGE: (rarity) => {
         const value = ARCANE_SIEGE_PCT[rarity];
         if (value === undefined) return undefined;

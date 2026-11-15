@@ -5174,10 +5174,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         modifierCtx,
     });
     const effectiveAttack = dmgStats.attack;
-    // The direct-hit outgoing factors that multiply OUTSIDE the Out. Damage buff sum: the
-    // squad-leader outgoing bonus (R199) and Arcane Siege (R201).
-    const outgoingSeparateFactor =
-        (1 + (args.preFight?.outgoingDamage ?? 0) / 100) * dmgStats.outgoingSeparateFactor;
+    // The one direct-hit outgoing factor that multiplies OUTSIDE the Out. Damage buff sum: the
+    // squad-leader outgoing bonus (R199).
+    const outgoingSeparateFactor = 1 + (args.preFight?.outgoingDamage ?? 0) / 100;
     // The squad-leader secondary-target bonus rides the positional scalars; only covered
     // footprint cells read it (`victimHitDamageParts`).
     const secondaryTargetPct = args.preFight?.outgoingDamageSecondaryTargets ?? 0;

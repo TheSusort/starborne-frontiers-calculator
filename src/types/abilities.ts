@@ -832,8 +832,13 @@ export type ModifierChannel =
     | 'crit'
     | 'critDamage'
     | 'outgoingDamage'
-    // Outgoing direct damage that multiplies as its OWN `(1 + x/100)` factor instead of joining
-    // the Out. Damage buff sum (R201, Arcane Siege).
+    // Outgoing direct damage from an implant whose condition is re-read live when a hit is thrown
+    // outside the turn loop (R203, Arcane Siege's shield gate). It ADDS into the same Out. Damage
+    // sum as every outgoing-damage buff, Menace and Giant Slayer; only the squad-leader outgoing
+    // bonus multiplies on its own. Evidence: owner ruling 2026-11-15, from the Eelun Naphula
+    // replay, where Liberator's (epic) and Los's (rare) hits under Out. Damage Up III fit only
+    // the additive sum (`bountyBossReplay.integration.test.ts`). The channel name predates the
+    // ruling and is kept because saved ability configs carry it.
     | 'outgoingDamageSeparate'
     | 'dotDamage'
     | 'detonationDamage'

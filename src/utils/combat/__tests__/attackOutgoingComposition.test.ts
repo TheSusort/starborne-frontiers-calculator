@@ -1,11 +1,11 @@
 /**
  * How attack and outgoing-damage terms compose on a direct hit — owner in-game measurements
- * R198–R201 (2026-10-16):
+ * R198–R200 (2026-10-16), and Arcane Siege per the 2026-11-15 ruling (see the
+ * `outgoingDamageSeparate` channel's doc):
  *
  *   attack   = base × (1 + leader attack% + Σ attack buffs)                       (R200)
- *   outgoing = (1 + Σ Out. Damage buffs + Menace/Giant Slayer proc%)                (R198)
+ *   outgoing = (1 + Σ Out. Damage buffs + Menace/Giant Slayer proc% + Arcane Siege%) (R198)
  *            × (1 + leader outgoing%)                                              (R199)
- *            × (1 + Arcane Siege%)                                                 (R201)
  *
  * Every case compares two one-round runs that differ ONLY in the term under test, so the ratio
  * of damage dealt is exactly the composition factor (no defence, no affinity, no crit variance).
@@ -155,7 +155,7 @@ describe('R200 — the squad-leader attack bonus adds with attack buffs', () => 
     });
 });
 
-describe('R201 — Arcane Siege is its own multiplier', () => {
+describe('Arcane Siege adds into the Out. Damage sum', () => {
     const arcaneSiege = (): Ability => {
         const ship: Ship = {
             id: 'siege-ship',
@@ -184,7 +184,7 @@ describe('R201 — Arcane Siege is its own multiplier', () => {
         return ability;
     };
 
-    it('shielded, with Out. Damage Up III and a +10% leader: 1.45 × 1.10 × 1.20', () => {
+    it('shielded, with Out. Damage Up III and a +10% leader: (1 + 0.45 + 0.20) × 1.10', () => {
         const shielded = preFight({ startingShieldPctOfHp: 50 });
         const plain = dealt(BASE({ preFight: shielded }));
         const all = dealt(
@@ -200,7 +200,7 @@ describe('R201 — Arcane Siege is its own multiplier', () => {
             })
         );
         expect(plain).toBeCloseTo(10_000, 6);
-        expect(all / plain).toBeCloseTo(1.45 * 1.1 * 1.2, 9);
+        expect(all / plain).toBeCloseTo((1 + 0.45 + 0.2) * 1.1, 9);
     });
 
     it('unshielded, the implant stays dormant', () => {
