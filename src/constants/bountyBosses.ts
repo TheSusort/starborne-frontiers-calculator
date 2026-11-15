@@ -155,10 +155,12 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
         statsByLevel: {
             32: {
                 hp: 219150,
-                // She deals no damage. Defence is fitted in the replay test; hacking, security
-                // and crit are unmeasured placeholders.
+                // She deals no damage, so attack is a placeholder, as are hacking, security and
+                // crit. Defence is fitted to three attackers' hits in the owner's replay
+                // (Liberator, Los and Thresh at 7%, 0% and 44.5% penetration), which agree on it
+                // (`bountyBossReplay.integration.test.ts`).
                 attack: 26390,
-                defence: 14675,
+                defence: 17006,
                 hacking: 270,
                 security: 160,
                 crit: 22,
@@ -286,9 +288,11 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
         passiveSkillText: '',
         stats: {
             hp: 31920,
-            // Attack is fitted to a measured hit; defence is fitted in the replay test.
+            // Attack is fitted to a measured hit on Graphite. Defence is a single-attacker fit:
+            // only Liberator's splash in the owner's replay reaches a Sitri, so it matches by
+            // construction (`bountyBossReplay.integration.test.ts`).
             attack: 16670,
-            defence: 9086,
+            defence: 7102,
             hacking: 270,
             security: 160,
             crit: 22,
@@ -320,9 +324,11 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
         passiveSkillText: '',
         stats: {
             hp: 63030,
-            // Deals no damage; defence is fitted in the replay test.
+            // Deals no damage. Defence is a single-attacker fit: Liberator's splash and main hits
+            // in the owner's replay (they agree with each other) are the only hits on her
+            // (`bountyBossReplay.integration.test.ts`).
             attack: 26390,
-            defence: 9086,
+            defence: 10890,
             hacking: 270,
             security: 160,
             crit: 22,
