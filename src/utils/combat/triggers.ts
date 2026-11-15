@@ -5918,6 +5918,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             kind: 'timed',
             duration,
             ...(cfg.hits !== undefined ? { hits: cfg.hits } : {}),
+            ...(intent.ability.equipmentEffectId !== undefined
+                ? { equipmentEffectId: intent.ability.equipmentEffectId }
+                : {}),
         };
         const grantKey = reactiveGrantKey(intent, ctx);
         for (const rid of recipients) {

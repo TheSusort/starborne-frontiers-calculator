@@ -36,6 +36,7 @@ import {
     OutgoingCondition,
 } from '../../types/abilities';
 import { Ship } from '../../types/ship';
+import { implantEffectId } from '../combat/buffDurationExtension';
 
 // ---------------------------------------------------------------------------
 // Gear-set ability registry (D-PR1: Leech; D-PR3: Hardened)
@@ -44,6 +45,7 @@ import { Ship } from '../../types/ship';
 // Each builder receives the number of COMPLETE sets worn (`completeSetCount`, always >= 1) and
 // scales its effect by it: every complete set adds the set's effect again, so 6 pieces of a
 // 2-piece set are three times one set. A 4-piece set can only reach 1 in six slots.
+
 const GEAR_SET_ABILITIES: Partial<
     Record<string, (sets: number) => Omit<Ability, 'id'> | undefined>
 > = {
@@ -161,7 +163,9 @@ const GEAR_SET_ABILITIES: Partial<
         config: { type: 'shield', pct: 4 * sets, basis: 'hp' },
         autoFilled: true,
     }),
-    // Boost (4pc set): every buff the wearer APPLIES lasts +1 turn (caster-side). Modeled NOT
+    // Boost (4pc set): every buff the wearer APPLIES lasts +1 turn (caster-side), except a buff
+    // an implant of the wearer's procs: Resonating Fury's 1-turn Crit Power Up III stays 1 turn on
+    // a Boost wearer (owner ruling 2026-11-15; `boostExtendsBuffFrom`). Modeled NOT
     // as a damage/heal fold but as a marker the engine collects into a per-owner extension map,
     // applied at the status-engine buff-duration write seams. Top-level type:'modifier' is a
     // placeholder (engine keys on config.type:'buff-duration-extension', like REFLECT). The
@@ -1282,7 +1286,7 @@ export function buildEquipmentAbilities(
                 partials.forEach((partial, i) => {
                     abilities.push({
                         ...partial,
-                        equipmentEffectId: `implant-${implantName}-${gearId}`,
+                        equipmentEffectId: implantEffectId(implantName, gearId),
                         // For single-ability implants, preserve the original id byte-exactly
                         // (suffix the unique gear-piece id so two copies of the same implant
                         // get distinct ability ids — the proc-rate gate keys on
