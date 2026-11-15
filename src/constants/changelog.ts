@@ -9,6 +9,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: the Boost set no longer lengthens buffs from implant procs.',
     "Combat simulator: Liberator's on-kill charge now fires once per killing action.",
     'Combat simulator: Arcane Siege now adds into outgoing damage buffs.',
+    'Combat simulator: Acidic Decay now counts as Corrosion for every Corrosion effect.',
+    'Combat simulator: skills that extend Inferno now also extend White Phosphorus.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

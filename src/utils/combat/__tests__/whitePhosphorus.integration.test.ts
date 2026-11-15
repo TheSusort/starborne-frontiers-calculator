@@ -159,3 +159,83 @@ describe.each<Placement>(['player', 'enemy'])('White Phosphorus on the %s side',
         expect(laterTicks(withDetonator)).toHaveLength(0);
     });
 });
+
+/**
+ * Owner ruling 2026-11-15: a debuff clause naming Inferno reaches White Phosphorus. An extender
+ * that acts every turn lengthens what it names by one turn each time, so the named debuff
+ * outlasts the fight while the control (a clause naming Corrosion) lets it run out. One-way: a
+ * clause naming White Phosphorus leaves a plain Inferno alone.
+ */
+describe.each<Placement>(['player', 'enemy'])(
+    'a debuff extension naming Inferno, %s side',
+    (placement) => {
+        const namedExtender = (buffName: string): BoardUnit =>
+            unit('extender', {
+                kit: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                {
+                                    id: 'named-extend',
+                                    type: 'extend-status',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [],
+                                    config: {
+                                        type: 'extend-status',
+                                        statusKind: 'debuff',
+                                        turns: 1,
+                                        buffName,
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+                speed: 200,
+            });
+        const ROUNDS = 9;
+        const ticksOfTier = (r: ReturnType<typeof run>, tier: number) =>
+            r.ticks.filter((t) => t.targetId === r.victimId && t.tier === tier).length;
+
+        it('grows White Phosphorus', () => {
+            const victim = unit('victim', { speed: 1, hp: 5e9 });
+            const named = run(
+                placement,
+                [whitePhosphorusOneShot, namedExtender('Inferno')],
+                victim,
+                ROUNDS
+            );
+            const control = run(
+                placement,
+                [whitePhosphorusOneShot, namedExtender('Corrosion')],
+                victim,
+                ROUNDS
+            );
+            expect(ticksOfTier(control, 45)).toBeGreaterThan(0);
+            expect(ticksOfTier(named, 45)).toBeGreaterThan(ticksOfTier(control, 45));
+        });
+
+        it('a clause naming White Phosphorus leaves a plain Inferno alone', () => {
+            const burner = unit('burner', {
+                kit: textKit('Burner', { charged: INFERNO_TEXT, chargeCount: 9 }),
+                speed: 290,
+                chargeCount: 9,
+                startCharged: true,
+            });
+            const victim = unit('victim', { speed: 1, hp: 5e9 });
+            const named = run(
+                placement,
+                [burner, namedExtender('White Phosphorus')],
+                victim,
+                ROUNDS
+            );
+            const control = run(placement, [burner, namedExtender('Corrosion')], victim, ROUNDS);
+            const grown = run(placement, [burner, namedExtender('Inferno')], victim, ROUNDS);
+            // Validity: the extender reaches this Inferno when it names it.
+            expect(ticksOfTier(grown, 15)).toBeGreaterThan(ticksOfTier(control, 15));
+            expect(ticksOfTier(named, 15)).toBe(ticksOfTier(control, 15));
+        });
+    }
+);

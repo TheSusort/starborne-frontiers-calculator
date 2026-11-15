@@ -375,17 +375,41 @@ export function dotEntriesOf(holder: DebuffEntryHolder, family?: DoTType): Debuf
 }
 
 /**
+ * The named DoT families that answer to their container's base name as well as their own, keyed
+ * by family. Owner rulings 2026-11-15: "Acidic Decay is a corrosion type debuff, so it counts as
+ * corrosion in all those situations" — detonation, Toxic Overflow, "inflicts Corrosion" reactions
+ * and debuff-name checks — and a debuff clause naming Inferno reaches White Phosphorus. An entry
+ * of such a family is held in its base's container, so a read keyed on that container already
+ * counts it; a read keyed on a debuff NAME goes through `dotEntryAnswersTo`.
+ */
+export const DOT_FAMILY_BASE_NAME: ReadonlyMap<string, string> = new Map([
+    ['Acidic Decay', 'Corrosion'],
+    ['White Phosphorus', 'Inferno'],
+]);
+
+/**
+ * Whether a DoT entry held in the container whose base name is `base` ("Corrosion", "Inferno" or
+ * "Damage over Time") answers to the debuff name `name`. An untagged entry answers to its base
+ * name. A tagged entry answers to its `family`, and to `base` when `DOT_FAMILY_BASE_NAME` maps
+ * the family to it. One-way: a plain Corrosion never answers to "Acidic Decay".
+ */
+export function dotEntryAnswersTo(entry: ActiveDoTStack, base: string, name: string): boolean {
+    if (entry.family === undefined) return base === name;
+    if (entry.family === name) return true;
+    return name === base && DOT_FAMILY_BASE_NAME.get(entry.family) === base;
+}
+
+/**
  * `holder` seen by a debuff clause that names one debuff ("extends Stasis by 1 turn"): only the
- * entries carrying that name. A DoT entry's name is its `family` tag when it has one (Belladonna's
- * "Acidic Decay"), else its container's base name — "Corrosion", "Inferno" or "Damage over Time",
- * the names `enemyDebuffNamesForTarget` in engine.ts reports. Every Bomb answers to "Bomb" and
+ * entries carrying that name. A DoT entry's names are `dotEntryAnswersTo`'s; the base names are
+ * the ones `enemyDebuffNamesForTarget` in engine.ts reports. Every Bomb answers to "Bomb" and
  * every Echoing Burst accumulator to "Echoing Burst". Any other name (a timed status, a tiered
  * name such as "Corrosion II") yields an all-empty view. The views share their entry objects with
  * the live containers, so `extendDebuffEntries` mutates the real entries.
  */
 export function debuffEntriesNamed(holder: DebuffEntryHolder, name: string): DebuffEntryHolder {
     const named = (entries: ActiveDoTStack[], base: string) =>
-        entries.filter((e) => (e.family ?? base) === name);
+        entries.filter((e) => dotEntryAnswersTo(e, base, name));
     return {
         corrosionEntries: named(holder.corrosionEntries, 'Corrosion'),
         infernoEntries: named(holder.infernoEntries, 'Inferno'),

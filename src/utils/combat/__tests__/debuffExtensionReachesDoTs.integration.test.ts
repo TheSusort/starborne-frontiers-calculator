@@ -120,6 +120,10 @@ function makeLoadedVictim(
     v.infernoEntries.push(dot());
     // Acidic Decay is a Corrosion entry re-tagged by Belladonna's conversion.
     v.corrosionEntries.push(dot({ remainingRounds: 2, family: 'Acidic Decay', unremovable: true }));
+    // White Phosphorus is an Inferno entry tagged with its family.
+    v.infernoEntries.push(
+        dot({ remainingRounds: 2, family: 'White Phosphorus', unremovable: true })
+    );
     v.pendingBombs.push({
         countdown: 1,
         damagePerStack: 10,
@@ -179,6 +183,7 @@ const durations = (statusEngine: StatusEngine, v: CombatActor) => ({
     corrosion: v.corrosionEntries[0]?.remainingRounds,
     inferno: v.infernoEntries[0]?.remainingRounds,
     acidicDecay: v.corrosionEntries.find((e) => e.family === 'Acidic Decay')?.remainingRounds,
+    whitePhosphorus: v.infernoEntries.find((e) => e.family === 'White Phosphorus')?.remainingRounds,
     bomb: v.pendingBombs[0]?.countdown,
     accumulator: v.pendingAccumulators[0]?.roundsRemaining,
 });
@@ -188,6 +193,7 @@ const UNMOVED = {
     corrosion: 1,
     inferno: 1,
     acidicDecay: 2,
+    whitePhosphorus: 2,
     bomb: 1,
     accumulator: 1,
 };
@@ -196,6 +202,7 @@ const EXTENDED_BY_ONE = {
     corrosion: 2,
     inferno: 2,
     acidicDecay: 3,
+    whitePhosphorus: 3,
     bomb: 2,
     accumulator: 2,
 };
@@ -279,16 +286,18 @@ describe("R109: Lev's crit debuff extension reaches every DoT, Bomb and accumula
 
 /**
  * A named debuff extension grows only the debuffs carrying that name: a timed status by its name,
- * a DoT entry by its family ("Corrosion", "Inferno", "Acidic Decay"), every Bomb by "Bomb" and
- * every Echoing Burst accumulator by "Echoing Burst". A name the victim does not carry moves
- * nothing.
+ * a DoT entry by its names (`dotEntryAnswersTo`: Acidic Decay answers to "Corrosion" as well as
+ * "Acidic Decay", White Phosphorus to "Inferno" as well as "White Phosphorus"; a plain Corrosion or
+ * Inferno answers to its base name alone), every Bomb by "Bomb" and every Echoing Burst
+ * accumulator by "Echoing Burst". A name the victim does not carry moves nothing.
  */
 describe('a named debuff extension grows only the debuffs of that name', () => {
     const cases: [string, Partial<typeof UNMOVED>][] = [
         ['Defense Down II', { defenseDown: 2 }],
-        ['Corrosion', { corrosion: 2 }],
+        ['Corrosion', { corrosion: 2, acidicDecay: 3 }],
         ['Acidic Decay', { acidicDecay: 3 }],
-        ['Inferno', { inferno: 2 }],
+        ['Inferno', { inferno: 2, whitePhosphorus: 3 }],
+        ['White Phosphorus', { whitePhosphorus: 3 }],
         ['Bomb', { bomb: 2 }],
         ['Echoing Burst', { accumulator: 2 }],
         ['Stasis', {}],
@@ -332,6 +341,7 @@ describe("R112: Provider's DoT extension reaches every DoT but no Bomb or Echoin
                 corrosion: 2,
                 inferno: 2,
                 acidicDecay: 3,
+                whitePhosphorus: 3,
             });
         });
     }
