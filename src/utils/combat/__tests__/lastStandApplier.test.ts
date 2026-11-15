@@ -356,4 +356,34 @@ describe('D-PR16 Last Stand (last-standing → self Barrier + Block Debuff co-gr
         expect(config.duration).toBe(1);
         expect(config.additionalBuffs?.[0]?.buffName).toBe('Block Debuff');
     });
+
+    it('a Boost wearer: neither the primary nor the co-granted buff is lengthened', () => {
+        // Boost never extends a buff from an implant proc (`boostExtendsBuffFrom`); the
+        // co-granted Block Debuff comes from the same proc as Barrier, so both keep 1 turn.
+        const boost: Ability = {
+            id: 'boost-set',
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'buff-duration-extension', turns: 1 },
+        };
+        const input = BASE({
+            shipSkills: {
+                slots: [noopActive, { slot: 'passive', abilities: [lastStandAbility, boost] }],
+            },
+            teamActors: [ally('ally-T2', 'T2', 3_000)],
+            healTargetId: 'ally-T2',
+            mode: 'healing',
+            enemyAttackers: [{ ...enemyHitter('enemy-atk', 5_000), position: 'T1' }],
+        });
+        const bus = createEventBus();
+        const expiredInRound: Record<string, number[]> = {};
+        bus.on('buff-expired', (e) => {
+            if (e.actorId === 'attacker') (expiredInRound[e.buffName] ??= []).push(e.round);
+        });
+        runCombat({ ...input, bus, numRounds: 4 });
+        expect(expiredInRound['Barrier']).toEqual([1]);
+        expect(expiredInRound['Block Debuff']).toEqual([1]);
+    });
 });

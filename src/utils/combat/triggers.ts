@@ -6026,6 +6026,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 recipients,
                 kind: 'timed',
                 duration: extra.duration,
+                ...(intent.ability.equipmentEffectId !== undefined
+                    ? { equipmentEffectId: intent.ability.equipmentEffectId }
+                    : {}),
             };
             for (const rid of recipients) {
                 if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip
