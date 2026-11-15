@@ -83,6 +83,39 @@ const round1Hits = (
     return { hits, id };
 };
 
+const stealthAbility: Ability = {
+    ...tauntAbility,
+    id: 'self-stealth',
+    config: { ...tauntAbility.config, buffName: 'Stealth' } as Ability['config'],
+};
+
+/** `round1Hits`, plus the units that had gained Stealth by the caster's first hit. */
+const round1HitsWithStealth = (
+    placement: Placement,
+    attacker: BoardUnit,
+    opponents: BoardUnit[]
+): {
+    hits: Map<string, boolean[]>;
+    id: (u: BoardUnit) => string;
+    stealthBeforeHit: Set<string>;
+} => {
+    const { input, id } = boardInput(placement, attacker, [], opponents, 1);
+    const bus = createEventBus();
+    const hits = new Map<string, boolean[]>();
+    const stealthed = new Set<string>();
+    let stealthBeforeHit: Set<string> | undefined;
+    bus.on('buff-applied', (e: Extract<CombatEvent, { type: 'buff-applied' }>) => {
+        if (e.buffName === 'Stealth') stealthed.add(e.actorId);
+    });
+    bus.on('attacked', (e: Extract<CombatEvent, { type: 'attacked' }>) => {
+        if (e.attackerId !== id(attacker) || e.round !== 1) return;
+        stealthBeforeHit ??= new Set(stealthed);
+        hits.set(e.targetId, [...(hits.get(e.targetId) ?? []), e.isPrimaryTarget === true]);
+    });
+    runCombat({ ...input, bus });
+    return { hits, id, stealthBeforeHit: stealthBeforeHit ?? new Set() };
+};
+
 describe.each(SIDES)('front-skip-defenders, caster on the %s side', (placement) => {
     it('passes over a defender at the front of its row to the attacker behind it', () => {
         const opp = [unit('def', 'M4', 'DEFENDER_SECURITY'), unit('atk', 'M3', 'ATTACKER')];
@@ -119,6 +152,33 @@ describe.each(SIDES)('front-skip-defenders, caster on the %s side', (placement) 
         ];
         const { hits, id } = round1Hits(placement, caster('M1'), opp);
         expect([...hits.keys()]).toEqual([id(opp[1])]);
+    });
+
+    // Owner ruling 2026-11-15: with every non-defender Stealthed, the visible defender is struck.
+    it('strikes the visible defender when every non-defender is Stealthed', () => {
+        const stealthed = (id: string, position: Position): BoardUnit => ({
+            ...unit(id, position, 'ATTACKER'),
+            kit: { slots: [{ slot: 'active' as const, abilities: [stealthAbility] }] },
+            speed: 350,
+        });
+        const board = (stealth: boolean) => [
+            unit('def', 'M4', 'DEFENDER'),
+            stealth ? stealthed('atk-m', 'M3') : unit('atk-m', 'M3', 'ATTACKER'),
+            stealth ? stealthed('atk-t', 'T4') : unit('atk-t', 'T4', 'ATTACKER'),
+        ];
+        const withStealth = board(true);
+        const { hits, id, stealthBeforeHit } = round1HitsWithStealth(
+            placement,
+            caster('M1'),
+            withStealth
+        );
+        // Validity: both non-defenders were Stealthed before the caster struck.
+        expect(stealthBeforeHit).toEqual(new Set([id(withStealth[1]), id(withStealth[2])]));
+        expect([...hits.keys()]).toEqual([id(withStealth[0])]);
+        // Control: without the Stealth, the defender is passed over.
+        const control = board(false);
+        const ctl = round1Hits(placement, caster('M1'), control);
+        expect(ctl.hits.has(ctl.id(control[0]))).toBe(false);
     });
 
     it('expands its cone around the chosen target, splashing a defender behind it', () => {
