@@ -3385,9 +3385,10 @@ describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite
             type: 'charge',
             target: 'all-allies',
             trigger: 'on-enemy-destroyed',
-            oncePerRound: true,
+            oncePerRootCast: 'cast',
             config: { type: 'charge', amount: 1 },
         });
+        expect(charges[0].oncePerRound).toBeUndefined();
         // No spurious on-cast charge from parseAllyChargeGrant.
         expect(charges.some((c) => c.trigger === 'on-cast')).toBe(false);
     });

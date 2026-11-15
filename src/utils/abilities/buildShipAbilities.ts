@@ -3171,8 +3171,10 @@ function abilitiesFromText(
                 trigger: 'on-enemy-destroyed',
                 conditions: [],
                 config: { type: 'charge', amount: allyCharge.amount },
-                // Once per round even when multiple enemies die in the same round (Liberator).
-                oncePerRound: true,
+                // Once per action that kills, however many enemies that action destroys; the
+                // text's "once per round" belongs to the extra action alone (owner ruling
+                // 2026-11-15).
+                oncePerRootCast: 'cast',
                 autoFilled: true,
             },
             pos: allyChargePos >= 0 ? allyChargePos : MAX_POS,

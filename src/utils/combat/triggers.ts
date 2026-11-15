@@ -2443,6 +2443,11 @@ export function registerReactiveListeners(args: {
                             eventCtx: {
                                 ...intent.eventCtx,
                                 victimId: e.actorId,
+                                // The action that destroyed it, for `oncePerRootCast`: the
+                                // killer's cast, or the reaction the death landed in. A death
+                                // with no killer (a DoT tick) is keyed on the victim's own turn.
+                                inflictorId: e.killerId ?? e.actorId,
+                                ...inflictionReactionCtx(e),
                                 ...(killedDebuffs !== undefined
                                     ? { killedEnemyDebuffCount: killedDebuffs }
                                     : {}),
