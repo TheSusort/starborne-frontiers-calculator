@@ -377,11 +377,10 @@ export function dotEntriesOf(holder: DebuffEntryHolder, family?: DoTType): Debuf
 /**
  * The named DoT families that are Corrosion-type debuffs. Owner ruling 2026-11-15: "Acidic Decay
  * is a corrosion type debuff, so it counts as corrosion in all those situations" — detonation,
- * Toxic Overflow, "inflicts Corrosion" reactions, and debuff-name checks. Every entry of such a
- * family lives in `corrosionEntries` (Eelun's inflict and Belladonna's conversion both put it
- * there), so every container-keyed read already counts it; `dotEntryAnswersTo` is the one
- * name-keyed read, and it consults this set. White Phosphorus, an Inferno by another name, is not
- * folded into "Inferno" here: no ruling covers it.
+ * Toxic Overflow, "inflicts Corrosion" reactions, and debuff-name checks. An entry of such a
+ * family is held in `corrosionEntries`, so a read keyed on that container counts it as Corrosion
+ * without consulting this set; a read keyed on a debuff NAME goes through `dotEntryAnswersTo`.
+ * White Phosphorus, an Inferno by another name, is not folded into "Inferno": no ruling covers it.
  */
 export const CORROSION_TYPE_FAMILIES: ReadonlySet<string> = new Set(['Acidic Decay']);
 

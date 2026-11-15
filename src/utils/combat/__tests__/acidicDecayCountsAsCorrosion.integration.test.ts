@@ -6,8 +6,8 @@
  *
  * Each board produces its Acidic Decay through a real path: Eelun Naphula's own kit inflicts it,
  * or Belladonna (hacking 2000, a certain conversion) converts the Corrosion an ally inflicts. The
- * victim V (M4) is the opponents' front unit; W (M3) is its neighbour. Every control board swaps
- * the Acidic Decay source for a unit that inflicts nothing. Both sides.
+ * victim V (M4) is the opponents' front unit; W (M3) is its neighbour. Each test's control is
+ * named at its assertion. Both sides.
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
