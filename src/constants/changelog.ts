@@ -8,6 +8,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Bounty bosses: Eelun Naphula and escorts can now be fought in the simulator.',
     'Combat simulator: the Boost set no longer lengthens buffs from implant procs.',
     "Combat simulator: Liberator's on-kill charge now fires once per killing action.",
+    'Combat simulator: Arcane Siege now adds to outgoing damage buffs instead of multiplying.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
