@@ -301,3 +301,56 @@ describe.each(SIDES)('Enrage Hacking III, Eelun on the %s side', (placement) => 
         expect(grants).toHaveLength(2);
     });
 });
+
+describe.each(SIDES)('reactive extra-action recipients, granter on the %s side', (placement) => {
+    const reactiveGrant = (recipients?: 'self' | 'other-allies'): ShipSkills => ({
+        slots: [
+            {
+                slot: 'passive',
+                abilities: [
+                    {
+                        id: 'test-reactive-extra',
+                        type: 'extra-action',
+                        target: 'self',
+                        trigger: 'on-ally-destroyed',
+                        conditions: [],
+                        config: {
+                            type: 'extra-action',
+                            oncePerRound: true,
+                            endOfRound: true,
+                            ...(recipients !== undefined ? { recipients } : {}),
+                        },
+                    },
+                ],
+            },
+        ],
+    });
+
+    /** Turns each unit takes in round 1, while `add` dies to the sweeper's opening strike. */
+    const round1Turns = (recipients?: 'self' | 'other-allies') => {
+        const granter = eelun({ kit: reactiveGrant(recipients), chargeCount: 0 });
+        const keeper = sturdy('keeper', 'T4');
+        const turns: Record<string, number> = {};
+        const { id } = run(
+            placement,
+            granter,
+            [frail('add', 'M2'), keeper],
+            [sweeper(), victim()],
+            1,
+            (bus) => {
+                bus.on('turn-started', (e: Ev<'turn-started'>) => {
+                    turns[e.actorId] = (turns[e.actorId] ?? 0) + 1;
+                });
+            }
+        );
+        return { granterTurns: turns[id(granter)], keeperTurns: turns[keeper.id] };
+    };
+
+    it("an 'other-allies' grant gives every other living ally the turn, not the granter", () => {
+        expect(round1Turns('other-allies')).toEqual({ granterTurns: 1, keeperTurns: 2 });
+    });
+
+    it('validity: without recipients the granter takes the extra turn instead', () => {
+        expect(round1Turns()).toEqual({ granterTurns: 2, keeperTurns: 1 });
+    });
+});

@@ -335,7 +335,8 @@ export interface Intent {
         inflictionReaction?: { firingId?: number; duringTurnOf?: string };
         /** The actor whose application landed (or, for `on-enemy-debuff-resisted`, was resisted
          *  as) the triggering debuff/DoT — the event's `sourceId`. Stamped by the
-         *  `on-enemy-debuff-inflicted` and `on-enemy-debuff-resisted` listeners. When
+         *  `on-enemy-debuff-inflicted` and `on-enemy-debuff-resisted` listeners; also by
+         *  `on-enemy-destroyed`, with the killer (the victim itself for a death with no killer). When
          *  no `inflictionReaction` is stamped the infliction is that actor's own cast, so
          *  `rootCastKey` keys the cast on it. */
         inflictorId?: string;
@@ -2423,8 +2424,10 @@ export function registerReactiveListeners(args: {
                         // (b) the drain-time `killed-enemy-had-debuff` condition can read the
                         // slain unit's OWN debuff store (recordDestroyed runs before this event
                         // fires and never clears it) rather than the fight-wide enemy-debuff
-                        // count. Inert for every OTHER on-enemy-destroyed ability (Sokol/
-                        // Liberator's extra-action/charge branches never read eventCtx).
+                        // count. An ability with `oncePerRootCast` also reads `inflictorId` and
+                        // the infliction-reaction stamp, through `passesOncePerRootCastGate`;
+                        // every other on-enemy-destroyed ability ignores the stamped fields it
+                        // has no use for.
                         //
                         // An owner-worded kill clause ("upon destroying an enemy" — Meiying,
                         // Valiant, Gallant …; `triggerKillerScope`) fires only on a death the
@@ -2861,7 +2864,8 @@ export interface IntentExecContext {
         granterId: string,
         abilityId: string,
         oncePerRound: boolean,
-        endOfRound: boolean
+        endOfRound: boolean,
+        recipients?: 'self' | 'other-allies'
     ) => void;
     /** Same-side ally/recipient id order for the current drain side: player team ids when
      *  draining the player side; enemy attacker ids when draining the enemy side. Sourced from
@@ -7599,7 +7603,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             intent.ownerId,
             intent.ability.id,
             cfg.oncePerRound,
-            cfg.endOfRound ?? false
+            cfg.endOfRound ?? false,
+            cfg.recipients
         );
         return;
     }

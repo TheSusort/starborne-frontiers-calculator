@@ -4189,6 +4189,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         abilityId: string;
         oncePerRound: boolean;
         endOfRound: boolean;
+        recipients?: 'self' | 'other-allies';
     }[] = [];
 
     // Per-round set of actor ids that received a positive HP repair this round (C2b-3).
@@ -11846,14 +11847,23 @@ export function runCombat(rawInput: CombatEngineInput): {
             granterId: string,
             abilityId: string,
             oncePerRound: boolean,
-            endOfRound: boolean
+            endOfRound: boolean,
+            recipients?: 'self' | 'other-allies'
         ): void => {
             const granter = allActorsById.get(granterId);
             if (!granter) return;
             if (inTurnLoop) {
-                processExtraActionGrants(granter, [{ abilityId, oncePerRound, endOfRound }]);
+                processExtraActionGrants(granter, [
+                    { abilityId, oncePerRound, endOfRound, recipients },
+                ]);
             } else {
-                pendingExtraActions.push({ granterId, abilityId, oncePerRound, endOfRound });
+                pendingExtraActions.push({
+                    granterId,
+                    abilityId,
+                    oncePerRound,
+                    endOfRound,
+                    recipients,
+                });
             }
         };
 
@@ -12521,6 +12531,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         abilityId: g.abilityId,
                         oncePerRound: g.oncePerRound,
                         endOfRound: g.endOfRound,
+                        recipients: g.recipients,
                     },
                 ]);
             }

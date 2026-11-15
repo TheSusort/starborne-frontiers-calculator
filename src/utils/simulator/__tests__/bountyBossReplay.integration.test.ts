@@ -740,7 +740,8 @@ describe('replay: Graphite alone against Eelun Naphula Lv32 and her escorts', ()
 // Beleth with splash on Eelun, giving +1 more; Los's charged and Thresh's charged then kill Eelun
 // before she acts. Liberator's log shows each hit as two numbers; the pins are their sum.
 describe('replay: the owner attack team against Eelun Naphula Lv32', () => {
-    // Seed 6: Resonating Fury procs on Graphite's round-1 shield.
+    // Seed 6 is chosen so Resonating Fury procs on Graphite's round-1 shield (the opener). A
+    // change to the RNG stream can move these pins without any engine change.
     setupKeyedRng(6);
     const result = eelunFight(
         withResonatingFury(

@@ -315,8 +315,8 @@ export function separateOutgoingModifiersOf(skills: ShipSkills | undefined): Abi
     );
 }
 
-/** The sum of `separateModifiers`, percentage points, gated at a ctx that is NEUTRAL apart from the owner's live
- *  shield state — a hit thrown outside the turn loop has no cast to gate against, and Arcane
+/** The sum of `separateModifiers`, percentage points, gated at a ctx that is NEUTRAL apart from
+ *  the owner's live shield state — a hit thrown outside the turn loop has no cast to gate against, and Arcane
  *  Siege's only condition is `self-shield`. `reactiveSeparateOutgoingSubjects.test.ts` fails over
  *  the corpus the day an `outgoingDamageSeparate` modifier gates on another subject. */
 function separateOutgoingPct(separateModifiers: readonly Ability[], actor: CombatActor): number {

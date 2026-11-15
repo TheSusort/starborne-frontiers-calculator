@@ -47,7 +47,7 @@ const playerBoard = (): BoardState => {
 };
 
 describe('Eelun Naphula encounter', () => {
-    it('runs to completion and a boss death ends the fight in the players favour', () => {
+    it("runs to completion and a boss death ends the fight in the player's favour", () => {
         setupKeyedRng(1);
         const result = simulateBattle({
             playerTeam: buildTeam(playerBoard(), deps),
