@@ -1,7 +1,8 @@
 /**
  * "When an enemy is destroyed, all allies add 1 charge to their charged skills" (Liberator) fires
- * once per action that kills: one action destroying three enemies gives +1, and two actions that
- * each kill give +2 (owner ruling 2026-11-15). Run through the real parse and placement path, on
+ * once per action that kills: one action destroying three enemies gives +1, two actions that
+ * each kill give +2, and so do one ship's turn and its extra action when each kills (owner ruling
+ * 2026-11-15). Run through the real parse and placement path, on
  * both sides of the board.
  */
 import { describe, expect, it } from 'vitest';
@@ -67,6 +68,22 @@ const twoActionsOneKillEach: BoardSpec = {
     rounds: 1,
 };
 
+/** The killer owns Liberator's passive, extra action included: its turn kills one enemy, and the
+ *  extra action that kill grants kills the next. */
+const oneShipTwoKillingActions: BoardSpec = {
+    player: [
+        {
+            ...killer('K', 'M4', 'Pattern-Base', 200),
+            passives: [
+                'When an enemy is destroyed, all allies <unit-skill>add 1 charge</unit-skill> to their charged skills and once per round, this unit <unit-skill>gains 1 extra action</unit-skill>.',
+            ],
+        },
+        { ...GRANTER, passives: [] },
+    ],
+    enemy: [weak('E1', 'M4'), weak('E2', 'M3'), weak('Spare', 'B1')],
+    rounds: 1,
+};
+
 /** Charge the passive granted to `who`: its reactive charge rows on that ship. */
 const passiveGrants = (board: BoardSpec, who: string) => {
     const run = runForcedBattle(board, true);
@@ -91,6 +108,18 @@ describe('on-kill all-allies charge: once per action that kills', () => {
         ['player side', twoActionsOneKillEach],
         ['enemy side', mirrorBoard(twoActionsOneKillEach)],
     ])('%s: two actions that each kill give +2', (_, board) => {
+        const { deaths, grants } = passiveGrants(board, 'L');
+        expect(deaths).toBe(2);
+        expect(grants).toBe(2);
+    });
+
+    it.each([
+        ['player side', oneShipTwoKillingActions],
+        ['enemy side', mirrorBoard(oneShipTwoKillingActions)],
+    ])('%s: one ship killing on its turn and on its extra action gives +2', (_, board) => {
+        const run = runForcedBattle(board, true);
+        const turns = run.result.combatLog[0].turns.filter((t) => t.actorId === run.id('K'));
+        expect(turns).toHaveLength(2);
         const { deaths, grants } = passiveGrants(board, 'L');
         expect(deaths).toBe(2);
         expect(grants).toBe(2);

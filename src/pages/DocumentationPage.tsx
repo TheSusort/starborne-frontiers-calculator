@@ -3379,7 +3379,9 @@ const DocumentationPage: React.FC = () => {
                                         hit or its own Bomb, not a teammate&apos;s hit or a
                                         damage-over-time tick. One worded &ldquo;when an enemy is
                                         destroyed&rdquo; (Liberator, Sokol) reacts to any enemy
-                                        death. Paracelsus&apos;s &ldquo;upon being destroyed by
+                                        death. Liberator&apos;s all-allies +1 charge comes once per
+                                        action that kills, however many enemies that action
+                                        destroys. Paracelsus&apos;s &ldquo;upon being destroyed by
                                         direct damage&rdquo; needs a direct hit for both its damage
                                         and its Everliving Regeneration II.
                                     </p>
@@ -5368,9 +5370,8 @@ const DocumentationPage: React.FC = () => {
                                     on the target), <strong>Arcane Siege</strong> (more outgoing
                                     damage while the ship is shielded), and{' '}
                                     <strong>Warpstrike</strong> (more outgoing damage while the ship
-                                    is debuffed). Intrusion and Warpstrike add to Out. Damage buffs;
-                                    Arcane Siege multiplies on its own, separately from both those
-                                    buffs and the squad leader&apos;s outgoing bonus. Arcane Siege
+                                    is debuffed). All three add to Out. Damage buffs; the squad
+                                    leader&apos;s outgoing bonus multiplies separately. Arcane Siege
                                     and the squad leader&apos;s outgoing bonus also apply to
                                     counter-attacks, reactive hits and reflected damage.
                                     Incoming-damage reduction is also modeled:{' '}
@@ -5457,10 +5458,12 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Boost</strong> gear set (each timed buff the wearer
                                     casts itself — on itself or allies, never one an ally gives it —
                                     lasts one extra turn, modeled in both the combat and DPS
-                                    simulators). The <strong>Voidfire Catalyst</strong> implant is
-                                    also modeled: it increases detonation damage (bomb bursts,
-                                    Inferno detonations, and Corrosion detonations) and bomb splash
-                                    damage by a percentage based on rarity — its rare and legendary
+                                    simulators; a buff from one of the wearer&apos;s implants, such
+                                    as Resonating Fury&apos;s Crit Power Up III, keeps its normal
+                                    length). The <strong>Voidfire Catalyst</strong> implant is also
+                                    modeled: it increases detonation damage (bomb bursts, Inferno
+                                    detonations, and Corrosion detonations) and bomb splash damage
+                                    by a percentage based on rarity — its rare and legendary
                                     variants amplify bomb splash damage only. Counterattacks are now
                                     modeled too: one of your ships with a &quot;when directly
                                     damaged&quot; passive (such as <strong>Stalwart</strong>)

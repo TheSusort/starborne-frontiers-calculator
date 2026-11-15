@@ -45,7 +45,6 @@ import { implantEffectId } from '../combat/buffDurationExtension';
 // Each builder receives the number of COMPLETE sets worn (`completeSetCount`, always >= 1) and
 // scales its effect by it: every complete set adds the set's effect again, so 6 pieces of a
 // 2-piece set are three times one set. A 4-piece set can only reach 1 in six slots.
-
 const GEAR_SET_ABILITIES: Partial<
     Record<string, (sets: number) => Omit<Ability, 'id'> | undefined>
 > = {
