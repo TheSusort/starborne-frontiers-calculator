@@ -6,6 +6,8 @@ import { ChangelogEntry } from '../types/changelog';
 // dialog listing nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Bounty bosses: Eelun Naphula and escorts can now be fought in the simulator.',
+    'Combat simulator: the Boost set no longer lengthens buffs from implant procs.',
+    "Combat simulator: Liberator's on-kill charge now fires once per killing action.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
