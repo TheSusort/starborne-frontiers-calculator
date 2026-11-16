@@ -5207,18 +5207,22 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
 
 /**
  * A row attack on the owner's own row (`own-row-front-enemy`, the Torpedo's blast): the front-most
- * living opposing actor there takes the full hit, every other one in the row half of it. With
- * `selfDestruct` the owner then destroys itself, whether or not the row held anyone.
+ * living opposing actor there takes the full hit, every other one in the row half of it, each only
+ * if it passes `perVictimOk`. With `selfDestruct` the owner then destroys itself, whether or not
+ * the row held anyone.
  */
 function resolveOwnRowBlast(
     intent: Intent,
     ctx: IntentExecContext,
     cfg: Extract<Ability['config'], { type: 'damage' }>,
-    allowDeadOwner: boolean
+    allowDeadOwner: boolean,
+    perVictimOk: (victimId: string) => boolean
 ): void {
     const [primary, ...covered] = ctx.ownRowEnemiesFor?.(intent.ownerId) ?? [];
     const victims = primary === undefined ? [] : [primary, ...covered];
     for (const victimId of victims) {
+        // The ability's enemy-state conditions are judged per struck ship.
+        if (!perVictimOk(victimId)) continue;
         const outcome = ctx.applyReactiveDamage?.(
             intent.ownerId,
             victimId,
@@ -7540,7 +7544,13 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // it before these two lines — and re-pin the golden boards, since that moves an RNG draw.
         if (!passesOncePerRoundGate(intent, ctx)) return;
         if (intent.ability.target === 'own-row-front-enemy') {
-            resolveOwnRowBlast(intent, ctx, cfg, deadOwnerMayResolve(owner.actor, intent));
+            resolveOwnRowBlast(
+                intent,
+                ctx,
+                cfg,
+                deadOwnerMayResolve(owner.actor, intent),
+                perVictimOk
+            );
             return;
         }
         // Reactive direct-damage proc (Grif's on-enemy-cleansed 75% no-crit, FrontLine's
@@ -7745,11 +7755,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // As in the debuff branch — re-check against the real routed target.
             if (!perVictimOk(targetId)) continue;
             if (!victimRoleMatches(roleConditions, targetId, ctx)) continue;
-            // A purge-immune ship is never purged (`CombatActor.purgeImmune`).
-            if (ctx.actorById?.(targetId)?.purgeImmune === true) {
-                removals.push({ targetId, removed: 0, blocked: false });
-                continue;
-            }
+            // A purge-immune ship is never purged (`CombatActor.purgeImmune`), and gets no
+            // attempt row either.
+            if (ctx.actorById?.(targetId)?.purgeImmune === true) continue;
             // A purge lands like an 'apply' debuff: nothing at an affinity disadvantage.
             // An `alwaysLandsDebuffs` owner purges whatever the matchup (`landsDespiteAffinity`).
             const purger = ctx.actorById?.(intent.ownerId);

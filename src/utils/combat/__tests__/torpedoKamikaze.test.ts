@@ -267,6 +267,43 @@ describe.each(SIDES)('torpedoes on the %s side', (placement) => {
         expect(taken(r, b.decoy)).toBe(0);
     });
 
+    it.each([
+        ['below', 0],
+        ['above', PRIMARY],
+    ] as const)(
+        'an enemy-HP condition (%s 50%%) is checked against each ship in the row',
+        (hpComparator, frontTakes) => {
+            const kit = torpedoKit();
+            const gated: ShipSkills = {
+                ...kit,
+                slots: kit.slots.map((sl) => ({
+                    ...sl,
+                    abilities: sl.abilities.map((a) =>
+                        a.target === 'own-row-front-enemy'
+                            ? {
+                                  ...a,
+                                  conditions: [
+                                      ...a.conditions,
+                                      {
+                                          subject: 'hp-threshold' as const,
+                                          derivable: true,
+                                          hpComparator,
+                                          hpPercent: 50,
+                                      },
+                                  ],
+                              }
+                            : a
+                    ),
+                })),
+            };
+            const b = board({ t4: { kit: gated } });
+            const r = run(placement, b.own, b.opponents, 1);
+            expect(taken(r, b.front)).toBe(frontTakes);
+            expect(taken(r, b.back)).toBe(frontTakes / 2);
+            expect(destroyed(r, r.id(b.t4))).toHaveLength(1);
+        }
+    );
+
     it('cannot crit, even at 100% crit', () => {
         const b = board({ t4: { crit: 100, critDamage: 150 } });
         const r = run(placement, b.own, b.opponents, 1);

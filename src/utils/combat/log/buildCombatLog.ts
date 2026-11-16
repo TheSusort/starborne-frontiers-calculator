@@ -61,7 +61,8 @@ const ENTRY_DISPLAY_RANK: Record<CombatLogEntryKind, number> = {
     bomb: 0,
     'shield-stripped': 0,
     'duration-changed': 0,
-    // A summon is the last clause of the cast that re-arms.
+    // A summon is the last clause of the cast that re-arms, and its revival must print before the
+    // re-armed unit's own fresh statuses (its Stealth), which also rank 0.
     revived: 0,
     // 1 — charge bookkeeping for the turn.
     'charge-changed': 1,

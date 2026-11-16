@@ -169,6 +169,49 @@ describe.each(SIDES)('Fenri threshold cleanse, carrier on the %s side', (placeme
     });
 });
 
+// "cleanses all but N" on a cast keeps N too, with or without a hit after it.
+describe.each(SIDES)('cast cleanse keeping two, carrier on the %s side', (placement) => {
+    const keepTwo: Ability = {
+        id: 'cleanse-keep-2',
+        type: 'cleanse',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'cleanse', count: 'all', keep: 2 },
+    };
+    const heldAfterCast = (active: Ability[]): number => {
+        const f = fenri({
+            kit: { slots: [{ slot: 'active', abilities: active }], controlImmune: true },
+        });
+        const { input, id } = boardInput(placement, f, [], inflicters(probes(4)), 1);
+        const bus = createEventBus();
+        let engine: StatusEngine | undefined;
+        let held = 0;
+        runCombat({
+            ...input,
+            bus,
+            __testTapStatusEngine: (e) => {
+                engine = e;
+            },
+            __testTapActors: (all: CombatActor[]) => {
+                const actor = all.find((a) => a.id === id(f));
+                bus.on('round-ended', () => {
+                    held = engine && actor ? actorDebuffCount(engine, actor) : 0;
+                });
+            },
+        });
+        return held;
+    };
+
+    it('a cleanse-only active leaves two of four debuffs', () => {
+        expect(heldAfterCast([keepTwo])).toBe(2);
+    });
+
+    it('a cleanse before the hit leaves two of four debuffs', () => {
+        expect(heldAfterCast([keepTwo, ...hitKit(1).slots[0].abilities])).toBe(2);
+    });
+});
+
 describe('Fenri threshold cleanse gate', () => {
     it('is a self-debuff count gate on the on-debuffed trigger, keeping five', () => {
         const cleanse = fenriPassive().find((a) => a.type === 'cleanse')!;

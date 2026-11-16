@@ -3108,11 +3108,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // resolves — the real battle sim always positions actors.
                     if (stripsShield && victim) stripShieldPct(victim, 100, bus, actor.id, r);
                 }
-                if (!logged && removals.length > 0) {
+                // A purge-immune victim gets no attempt row either.
+                const attempted = removals.filter((x) => x.victim?.purgeImmune !== true);
+                if (!logged && attempted.length > 0) {
                     bus.emit({
                         type: 'purge-attempt-log',
                         casterId: actor.id,
-                        targetIds: removals.map((x) => x.vid),
+                        targetIds: attempted.map((x) => x.vid),
                         round: r,
                         reason: 'nothing-to-remove',
                     });
@@ -3153,7 +3155,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 actor.id,
                 actor,
                 cfg.count,
-                cfg.debuffType
+                cfg.debuffType,
+                cfg.keep
             );
             if (removed > 0) {
                 ownDebuffsCleansed = true;
@@ -7813,7 +7816,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             rid,
                             rid === actor.id ? actor : sameSideLiving?.find((a) => a.id === rid),
                             cleanseCount,
-                            cfg.debuffType
+                            cfg.debuffType,
+                            cfg.keep
                         );
                         removed += removedForRid;
                         cleanseReachedIds.add(rid);

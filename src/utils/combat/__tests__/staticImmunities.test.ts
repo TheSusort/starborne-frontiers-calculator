@@ -151,6 +151,7 @@ const RECORDED: CombatEventType[] = [
     'debuff-resisted',
     'dot-applied',
     'purge-performed',
+    'purge-attempt-log',
     'steal-performed',
     'turn-started',
     'skill-fired',
@@ -434,7 +435,11 @@ describe.each(SIDES)('purge immunity, carrier on the %s side', (placement) => {
         const { id } = boardInput(placement, carrier, [], [p], 1);
         const r = run(placement, carrier, [], [p], 1);
         const cid = id(carrier);
-        return r.events.filter((e) => e.type === 'purge-performed' && e.targetId === cid).length;
+        return r.events.filter(
+            (e) =>
+                (e.type === 'purge-performed' && e.targetId === cid) ||
+                (e.type === 'purge-attempt-log' && e.targetIds.includes(cid))
+        ).length;
     };
 
     it.each(['cast', 'reaction'] as const)(
