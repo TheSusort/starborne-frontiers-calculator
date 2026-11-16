@@ -238,6 +238,15 @@ describe.each(SIDES)('summoner on the %s side', (placement) => {
         expect(r.hp[r.id(b.t2)]).toBe(TORPEDO_HP);
     });
 
+    it('a summoner listed first on its side (the focus actor on the player side) re-arms too', () => {
+        const b = board();
+        const summoner = chargedSummoner();
+        const r = run(placement, [summoner, b.t4, b.t2], b.opponents, 3);
+        expect(reviveRounds(r, b.t4)).toEqual([3]);
+        expect(reviveRounds(r, b.t2)).toEqual([3]);
+        expect(of(r, 'ship-revived').every((e) => e.summonerId === r.id(summoner))).toBe(true);
+    });
+
     it('the revive names its summoner', () => {
         const b = board();
         const summoner = chargedSummoner();
