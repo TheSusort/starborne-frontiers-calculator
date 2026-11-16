@@ -25,6 +25,8 @@ export interface LethalHpOpts {
     byDirectDamage?: boolean;
     /** See the `ship-destroyed` event's `byDetonation`. */
     byDetonation?: boolean;
+    /** See the `ship-destroyed` event's `selfDestruct`. */
+    selfDestruct?: boolean;
 }
 
 /**
@@ -106,7 +108,8 @@ export function resolveLethalHp(
         opts.bus,
         opts.killerId,
         opts.byDirectDamage,
-        opts.byDetonation
+        opts.byDetonation,
+        opts.selfDestruct
     );
     return 'destroyed';
 }

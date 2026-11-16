@@ -7,6 +7,7 @@ import { ChangelogEntry } from '../types/changelog';
 export const UNRELEASED_CHANGES: string[] = [
     'Statistics: Engineering tab now shows role and stat names properly.',
     'Statistics: top two engineering leaderboard names are no longer hidden.',
+    'Bounty bosses: Abyssal Fenri Khaliriz and his Torpedoes can now be fought in the simulator.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

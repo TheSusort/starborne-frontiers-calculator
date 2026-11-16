@@ -21,6 +21,7 @@ import { buildTeam } from '../../simulator/buildTeam';
 import { encounterBoard } from '../../simulator/bossBoard';
 import { referenceShip } from '../../ship/referenceShip';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
+import { formatCombatLogText } from '../log/formatText';
 import { checkInvariants } from '../audit/invariants';
 import type { BoardState } from '../../../components/simulator/PlacementBoard';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
@@ -544,6 +545,26 @@ describe('Abyssal Fenri encounter (simulateBattle)', () => {
         // T2, re-armed in round 3, takes its turn in round 4.
         expect(res.rounds.find((r) => r.round === 3)!.turnOrder).not.toContain(t2);
         expect(res.rounds.find((r) => r.round === 4)!.turnOrder).toContain(t2);
+    });
+
+    it('the self-hit is one readable "self-destructs" line and no damage figure, intake or damage taken', () => {
+        const res = fight();
+        const text = formatCombatLogText(res.combatLog, res.roster);
+        expect(text).toContain('[end] death E.Torpedo@T4 self-destructs');
+        expect(text).not.toContain('killed by');
+        expect(text).not.toContain('381600');
+        const t4 = torpedoAt(res, 'T4');
+        const deaths = res.combatLog
+            .flatMap((r) => r.endOfRound)
+            .filter((e) => e.kind === 'death' && e.actorId === t4);
+        expect(deaths.length).toBeGreaterThan(0);
+        expect(deaths.every((e) => e.note === 'self-destruct' && e.targets.length === 0)).toBe(
+            true
+        );
+        for (const round of res.rounds) {
+            const s = round.ships.find((x) => x.actorId === t4)!;
+            expect([s.damageTaken, s.incomingDamage, s.incomingBarrierAbsorbed]).toEqual([0, 0, 0]);
+        }
     });
 
     it('the combat log shows the summon and the invariants hold across the revive', () => {

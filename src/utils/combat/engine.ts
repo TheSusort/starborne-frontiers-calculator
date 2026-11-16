@@ -7252,8 +7252,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                     damageRaw = damageRaw * cascade.targetRetainedFraction;
                 }
             }
-            sink.addIncoming(damage, victim.id);
-            sink.addIncomingRaw(damageRaw, victim.id);
+            // A hit on a damage-immune unit is not intake: nothing arrives, so it books on no
+            // incoming or Barrier-absorbed channel (a report would read it as a Barrier absorb).
+            if (!damageImmuneHit) {
+                sink.addIncoming(damage, victim.id);
+                sink.addIncomingRaw(damageRaw, victim.id);
+            }
             // The intake just recorded — post incoming-block, post Protection redirect. Returned as
             // `incomingBooked` (minus any transform reversal below) so every caller that books a
             // per-victim display amount can book the number the funnel actually recorded instead of
@@ -7261,7 +7265,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // sink because the sink is write-only from this side and a nested apply (a redirected
             // Protection chunk, whose recipient is a DIFFERENT actor) may have written to it
             // already.
-            const incomingRecorded = damage;
+            const incomingRecorded = damageImmuneHit ? 0 : damage;
             // Amount of THIS hit converted into a DoT (Voron/Orel). Reported in the returned
             // outcome so the caller excludes it from the per-victim damage-taken credit.
             let transformedToDot = 0;
@@ -7533,7 +7537,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // but its effect is nullified; the blocked amount is tracked as .barrierAbsorbed (NOT
             // .shieldAbsorbed — Barrier never touches the shield).
             if (carriesBarrier) {
-                sink.addBarrierAbsorbed(damage, victim.id);
+                if (!damageImmuneHit) sink.addBarrierAbsorbed(damage, victim.id);
                 // Hit-counted Barrier: this absorb spends one charge. "for 1 hit" means a DIRECT
                 // hit, and the guard spells that out exactly as the funnel's other two consumables
                 // do (Hit Mitigation, Shield Converter):
@@ -7721,6 +7725,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     killerId: cause?.killerId,
                     byDirectDamage: cause?.byDirectDamage,
                     byDetonation: (cause?.bombPortion ?? 0) > 0,
+                    selfDestruct: cause?.bypassDamageImmunity === true,
                 });
                 if (outcome === 'destroyed') {
                     // Bomb-splash-on-death: a ship that dies with un-detonated bombs splashes a
@@ -8222,6 +8227,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             addConvertedToShield: (amount, victimId) => {
                 intakeFor(victimId).convertedToShield += amount;
             },
+        };
+        // The self-destruct hit is the unit's removal, not damage taken: it books no intake.
+        const selfDestructSink: DamageAccountingSink = {
+            ...sink,
+            addIncoming: () => {},
+            addIncomingRaw: () => {},
         };
         // #355 B1: how much damage a detonation/burst apply actually DELIVERED, for the numeric
         // channels its caller books by hand (`roundPerTargetDamage`, `creditDealt`,
@@ -12238,7 +12249,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     applyVictimDamage(
                         SELF_DESTRUCT_MAX_HP_MULTIPLE * maxHpOf(ownerId),
                         owner,
-                        sink,
+                        selfDestructSink,
                         {
                             byDirectDamage: false,
                             bypassDamageImmunity: true,

@@ -1228,6 +1228,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             actorId: e.actorId,
             targets: e.killerId ? [{ targetId: e.killerId }] : [],
             reactions: [],
+            ...(e.selfDestruct ? { note: 'self-destruct' } : {}),
         };
         ctx.attachEntry(entry);
     },

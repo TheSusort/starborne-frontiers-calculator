@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import BossEncounterPicker from '../BossEncounterPicker';
 import { bossShip } from '../../../constants/bountyBosses';
+import { encounterBoard } from '../../../utils/simulator/bossBoard';
 import type { BoardState } from '../PlacementBoard';
 
 const trigger = () => screen.getByRole('button', { name: /encounter/i });
@@ -18,6 +19,19 @@ describe('BossEncounterPicker', () => {
         const board = onChange.mock.calls[0][0] as BoardState;
         expect(Object.keys(board)).toEqual(['M1']);
         expect(board.M1?.ship.id).toBe('boss:fenri:32');
+    });
+
+    it('lists both Fenri levels as separate options', () => {
+        render(<BossEncounterPicker board={{}} onChange={vi.fn()} />);
+        fireEvent.click(trigger());
+        expect(screen.getByRole('option', { name: 'Fenri Khaliriz — Lv 32' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Abyssal Fenri Khaliriz — Lv 33' })).toBeTruthy();
+    });
+
+    it('shows Abyssal Fenri as selected when his encounter is loaded', () => {
+        const board = encounterBoard('fenri', 33)!;
+        render(<BossEncounterPicker board={board} onChange={vi.fn()} />);
+        expect(trigger().textContent).toContain('Abyssal Fenri Khaliriz — Lv 33');
     });
 
     it('derives its value from a boss on the board and None clears the board', () => {
@@ -76,6 +90,7 @@ describe('BossEncounterPicker', () => {
         const board = onChange.mock.calls[0][0] as BoardState;
         expect(Object.keys(board).sort()).toEqual(['M1', 'T2', 'T4']);
         expect(board.M1?.ship.id).toBe('boss:fenri:33');
+        expect(board.M2).toBeUndefined();
         expect(board.T2?.ship.id).toBe('npc:torpedo:135');
         expect(board.T4?.ship.id).toBe('npc:torpedo:135');
     });

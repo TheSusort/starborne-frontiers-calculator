@@ -160,6 +160,8 @@ const RECORDED: CombatEventType[] = [
 interface Result {
     events: CombatEvent[];
     hp: Record<string, number>;
+    /** Per-victim intake summed over every round (`RoundData.perActorIncoming`). */
+    intake: (id: string) => { incoming: number; barrierAbsorbed: number };
 }
 
 const run = (
@@ -174,7 +176,7 @@ const run = (
     const events: CombatEvent[] = [];
     for (const type of RECORDED) bus.on(type, (e) => events.push(e));
     const hp: Record<string, number> = {};
-    runCombat({
+    const result = runCombat({
         ...input,
         bus,
         __testTapActors: (all: CombatActor[]) => {
@@ -183,7 +185,17 @@ const run = (
             });
         },
     });
-    return { events, hp };
+    const intake = (id: string) => {
+        let incoming = 0;
+        let barrierAbsorbed = 0;
+        for (const rd of result.rounds) {
+            const row = rd.perActorIncoming?.[id];
+            incoming += row?.incoming ?? 0;
+            barrierAbsorbed += row?.barrierAbsorbed ?? 0;
+        }
+        return { incoming, barrierAbsorbed };
+    };
+    return { events, hp, intake };
 };
 
 const unit = (
@@ -233,6 +245,12 @@ describe.each(SIDES)('damage immunity, carrier on the %s side', (placement) => {
     it('control: the same unit without the flag takes the hit', () => {
         const { r, c } = setup(false);
         expect(r.hp[c]).toBeLessThan(1e6);
+    });
+
+    it('books the blocked hit on no intake channel, so no report reads it as a Barrier absorb', () => {
+        const { r, c, b } = setup(true);
+        expect(r.intake(c)).toEqual({ incoming: 0, barrierAbsorbed: 0 });
+        expect(r.intake(b).incoming).toBeGreaterThan(0);
     });
 
     it('fires no "when directly damaged" reaction on the immune unit, but does on the other victim', () => {

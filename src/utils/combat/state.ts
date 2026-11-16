@@ -779,7 +779,8 @@ export function recordDestroyed(
     bus: CombatEventBus,
     killerId?: string,
     byDirectDamage?: boolean,
-    byDetonation?: boolean
+    byDetonation?: boolean,
+    selfDestruct?: boolean
 ): void {
     if (actor.destroyedRound !== undefined) return;
     actor.destroyedRound = round;
@@ -790,6 +791,7 @@ export function recordDestroyed(
         killerId,
         byDirectDamage,
         ...(byDetonation ? { byDetonation: true } : {}),
+        ...(selfDestruct ? { selfDestruct: true } : {}),
     });
 }
 

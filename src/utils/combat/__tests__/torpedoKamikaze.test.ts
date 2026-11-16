@@ -118,6 +118,8 @@ interface Run {
     events: CombatEvent[];
     /** HP after the whole fight. */
     hp: Record<string, number>;
+    /** Per-victim intake summed over every round (`RoundData.perActorIncoming`). */
+    intake: (id: string) => { incoming: number; barrierAbsorbed: number };
     id: (u: BoardUnit) => string;
 }
 
@@ -134,10 +136,20 @@ const run = (
     const events: CombatEvent[] = [];
     for (const type of RECORDED) bus.on(type, (e) => events.push(e));
     let actors: CombatActor[] = [];
-    runCombat({ ...input, bus, __testTapActors: (all) => (actors = all) });
+    const result = runCombat({ ...input, bus, __testTapActors: (all) => (actors = all) });
     const hp: Record<string, number> = {};
     for (const a of actors) hp[a.id] = a.currentHp;
-    return { events, hp, id };
+    const intake = (actorId: string) => {
+        let incoming = 0;
+        let barrierAbsorbed = 0;
+        for (const rd of result.rounds) {
+            const row = rd.perActorIncoming?.[actorId];
+            incoming += row?.incoming ?? 0;
+            barrierAbsorbed += row?.barrierAbsorbed ?? 0;
+        }
+        return { incoming, barrierAbsorbed };
+    };
+    return { events, hp, id, intake };
 };
 
 const blastsBy = (r: Run, unitId: string) =>
@@ -229,6 +241,21 @@ describe.each(SIDES)('torpedoes on the %s side', (placement) => {
         expect(roundsOf(b.t2)).toEqual([2, 2]);
         expect(destroyed(r, r.id(b.t4)).map((e) => e.round)).toEqual([1]);
         expect(destroyed(r, r.id(b.t2)).map((e) => e.round)).toEqual([2]);
+    });
+
+    it('the self-hit is a removal, not intake: it books no incoming damage and no Barrier absorb', () => {
+        const b = board();
+        const r = run(placement, b.own, b.opponents, 1);
+        expect(destroyed(r, r.id(b.t4))).toHaveLength(1);
+        expect(r.intake(r.id(b.t4))).toEqual({ incoming: 0, barrierAbsorbed: 0 });
+    });
+
+    it('marks the death as a self-destruct with no killer', () => {
+        const b = board();
+        const r = run(placement, b.own, b.opponents, 1);
+        const [death] = destroyed(r, r.id(b.t4));
+        expect(death.selfDestruct).toBe(true);
+        expect(death.killerId).toBeUndefined();
     });
 
     it('hits the front-most enemy of its row in full and the rest of that row at 50%', () => {

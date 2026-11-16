@@ -273,6 +273,7 @@ const formatters: Record<
     },
     death: (entry, ctx) => {
         const actor = ctx.nameOf(entry.actorId);
+        if (entry.note === 'self-destruct') return `${actor}: self-destructs`;
         // The killer (when known) is carried as the entry's single target so we resolve it to a
         // ship name here rather than showing a raw actor id.
         const killerId = entry.targets[0]?.targetId;

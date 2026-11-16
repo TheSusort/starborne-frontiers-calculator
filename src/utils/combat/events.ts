@@ -915,6 +915,9 @@ export type CombatEvent =
           killerId?: string;
           byDirectDamage?: boolean;
           byDetonation?: boolean;
+          /** The unit destroyed itself (a Torpedo's blast): no killer, not a direct hit. Present
+           *  only when true. */
+          selfDestruct?: boolean;
       } & ReactiveStamp)
     /** A destroyed actor is back on the board: a summon re-armed it (`processSummons`, engine.ts)
      *  in its own cell with full HP, no statuses and its combat-start gains granted again. It is
