@@ -4,16 +4,17 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Bounty bosses: Eelun Naphula and escorts can now be fought in the simulator.',
-    'Combat simulator: the Boost set no longer lengthens buffs from implant procs.',
-    "Combat simulator: Liberator's on-kill charge now fires once per killing action.",
-    'Combat simulator: Arcane Siege now adds into outgoing damage buffs.',
-    'Combat simulator: Acidic Decay now counts as Corrosion for every Corrosion effect.',
-    'Combat simulator: skills that extend Inferno now also extend White Phosphorus.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.90.0',
+        date: '2026-11-16',
+        changes: [
+            'Bounty bosses: Eelun Naphula and escorts can now be fought in the simulator.',
+            '5 combat simulator fixes and adjustments.',
+        ],
+    },
     {
         version: '1.89.0',
         date: '2026-11-14',
