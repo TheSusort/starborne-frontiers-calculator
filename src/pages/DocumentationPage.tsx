@@ -4830,7 +4830,8 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         Switch the enemy board from Team to Bounty boss and use its
                                         Encounter option to load a bounty boss fight in place of a
-                                        team: Fenri Khaliriz (level 32) alone, or Mamma Maglienza
+                                        team: Fenri Khaliriz (level 32) alone, or Abyssal Fenri
+                                        Khaliriz (level 33) with two Torpedoes, or Mamma Maglienza
                                         (level 32) with three level 124 Capo escorts, or General
                                         Colosso (level 32) with three level 124 Major Grand escorts,
                                         or Eelun Naphula (level 32) with two Sitri, Beleth and
@@ -4845,6 +4846,26 @@ const DocumentationPage: React.FC = () => {
                                         the fullest row for Mamma, the emptiest for the Capos.
                                         Encounters need the normal board; None brings the empty
                                         board back
+                                    </li>
+                                    <li>
+                                        Abyssal Fenri Khaliriz: he starts with two Torpedoes beside
+                                        him, and his charged skill sets Torpedoes that have blown up
+                                        back in place. Each end of round he stuns the enemy with the
+                                        highest Defense for a turn, and he cleanses most of his
+                                        debuffs once he carries six or more. He heals and gains
+                                        Attack Up whenever one of your ships dies, and takes half
+                                        damage from damage over time and Bombs. He cannot be
+                                        controlled
+                                    </li>
+                                    <li>
+                                        Torpedo: cannot be damaged, debuffed or purged, and starts
+                                        in Stealth. At the end of a round, when it is the front ship
+                                        in its row, it blows itself up and hits your front ship in
+                                        that row hard, with half damage to the others in the row. It
+                                        ignores Defense and cannot crit, and it deals double damage
+                                        to Defenders. The log shows it as a self-destruct, and it
+                                        counts as an enemy destroyed for your ships, but no ship of
+                                        yours gets the kill
                                     </li>
                                     <li>
                                         General Colosso: the Major Grands tag your ships with

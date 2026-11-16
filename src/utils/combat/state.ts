@@ -576,8 +576,13 @@ export interface CombatActor {
      *  cast resolves; a charged cast neither reads nor clears it. Read by the
      *  `ally-died-since-own-active` condition subject. */
     allyDiedSinceActive?: boolean;
-    /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
+    /** Round of this actor's current death (stamped by recordDestroyed). Undefined while alive,
+     *  including after `reviveActor` brings it back. */
     destroyedRound?: number;
+    /** How many times this actor has been destroyed this battle. Stamped by recordDestroyed and
+     *  never reset, so a unit a summon re-arms still counts as a destroyed enemy (owner ruling
+     *  2026-11-16, #519); each later death adds one. */
+    timesDestroyed?: number;
     /** The reaction chain (`setHitRoot` in triggers.ts) in scope when this actor was destroyed, if
      *  any. "All reactions trigger before a ship dies" (R117): the ship's own reactions to the
      *  events of that chain still resolve after its death; reactions to any later chain do not.
@@ -591,6 +596,10 @@ export interface CombatActor {
     footprint?: readonly Position[];
     /** A bounty boss: its destruction defeats its whole side (see `sideIsWiped`). */
     isBoss?: boolean;
+    /** The ship this actor fields (`Ship.id`, e.g. `npc:torpedo:135` for a bounty add). Read by
+     *  the summon (`processSummons`, engine.ts) to find the dead adds it re-arms. Absent → no
+     *  summon ever re-arms this actor. */
+    shipId?: string;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
      *  plumbing — set at construction, consumed by resolvePositionalTarget. engine.ts's
      *  `targetingBypassesOf` ORs it with the timed `Rogue's Liberty` buff (rogueLiberty.ts) and
@@ -642,6 +651,21 @@ export interface CombatActor {
      *  against this actor — the gate is `immuneToDot` (dotImmunity.ts). Bombs still land.
      *  Absent → false. */
     dotImmune?: boolean;
+    /** Immune to damage (ShipSkills.damageImmune): every damage source — direct hit, splash, DoT
+     *  tick, bomb burst, reactive damage, reflect — deals this actor 0 HP. `applyVictimDamage`
+     *  treats it as a Barrier that is never spent (see its `bypassDamageImmunity` for the one
+     *  caller that must get through), and the HP writes that skip the funnel read it too. The hit
+     *  is no direct damage on the actor (`directlyDamagesVictim`), so no "when directly damaged"
+     *  reaction fires. Absent → false. */
+    damageImmune?: boolean;
+    /** Immune to ALL debuffs (ShipSkills.debuffImmune): no debuff, DoT, Bomb or control is ever
+     *  attempted against this actor, with no roll, no resist and no reaction — the gates are
+     *  `immuneToEnemyStatus` and `immuneToDot`, and `targetCarriesBlockDebuff` for the sites that
+     *  have no silent skip. Control-only immunity is `controlImmune`. Absent → false. */
+    debuffImmune?: boolean;
+    /** Immune to purge (ShipSkills.purgeImmune): a purge never removes a buff from this actor
+     *  and reports nothing for it. Absent → false. */
+    purgeImmune?: boolean;
     /** Every attack of this actor crits at a 100% rate, whatever its affinity matchup or crit
      *  debuffs (ShipSkills.alwaysCrits). Absent → the ordinary capped crit rate. */
     alwaysCrits?: boolean;
@@ -667,6 +691,7 @@ export function createActor(
         position?: Position;
         footprint?: readonly Position[];
         isBoss?: boolean;
+        shipId?: string;
         ignoresForcedTargeting?: boolean;
         ignoresStealth?: boolean;
         doesntBreakStasis?: boolean;
@@ -675,6 +700,9 @@ export function createActor(
         chargeLossImmune?: boolean;
         controlImmune?: boolean;
         dotImmune?: boolean;
+        damageImmune?: boolean;
+        debuffImmune?: boolean;
+        purgeImmune?: boolean;
         alwaysCrits?: boolean;
         alwaysLandsDebuffs?: boolean;
         preFight?: PreFightCombatModifiers;
@@ -692,10 +720,7 @@ export function createActor(
     return {
         ...rest,
         currentHp: partial.stats.hp,
-        // Pre-fight shield seeding: "Start combat shielded for N% of max HP" — hp is
-        // already post-leader (the pre-fight stat pass mutated plan stats before actor
-        // construction). Absent preFight → 0.
-        shieldPool: partial.stats.hp * ((partial.preFight?.startingShieldPctOfHp ?? 0) / 100),
+        shieldPool: startingShieldPool(partial.stats.hp, partial.preFight),
         charges: startCharged ? chargeCount : 0,
         chargeCount,
         corrosionEntries: [],
@@ -706,6 +731,7 @@ export function createActor(
         position: partial.position,
         footprint: partial.footprint,
         isBoss: partial.isBoss,
+        shipId: partial.shipId,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
         ignoresStealth: partial.ignoresStealth,
         doesntBreakStasis: partial.doesntBreakStasis,
@@ -717,9 +743,47 @@ export function createActor(
     };
 }
 
-/** Record an actor's destruction exactly once: stamp `destroyedRound` (first call wins)
- *  and emit a single `ship-destroyed` for it. Idempotent — repeat calls are no-ops, so
- *  the "set once" guard doubles as the single-emit guard. Callers floor `currentHp` to 0
+/** Pre-fight shield seeding: "Start combat shielded for N% of max HP" — `maxHp` is already
+ *  post-leader (the pre-fight stat pass mutated plan stats before actor construction). Absent
+ *  preFight → 0. */
+function startingShieldPool(maxHp: number, preFight: PreFightCombatModifiers | undefined): number {
+    return maxHp * ((preFight?.startingShieldPctOfHp ?? 0) / 100);
+}
+
+/**
+ * Bring a destroyed actor back as a fresh combatant in its own cell (a summon re-arming it):
+ * alive (`destroyedRound` cleared, so a later death records again), `maxHp` HP, the shield pool
+ * it would start the fight with, no charges, no DoTs, Bombs or Echoing Burst accumulators, and
+ * its own-turn counter back at 0. Every container is REASSIGNED, never emptied in place (see
+ * `burstContainerWiped`). Statuses live in the StatusEngine, the turn pool and the combat-start
+ * gains in the engine — `processSummons` (engine.ts) resets those.
+ */
+export function reviveActor(actor: CombatActor, maxHp: number): void {
+    actor.destroyedRound = undefined;
+    actor.destroyedInHitRoot = undefined;
+    actor.allyDiedSinceActive = undefined;
+    actor.currentHp = maxHp;
+    actor.shieldPool = startingShieldPool(maxHp, actor.preFight);
+    actor.charges = 0;
+    actor.turnsTaken = 0;
+    actor.corrosionEntries = [];
+    actor.infernoEntries = [];
+    actor.genericDoTEntries = [];
+    actor.pendingBombs = [];
+    actor.pendingAccumulators = [];
+}
+
+/** Destructions among `actors` so far this battle: every death counts, including those of a unit
+ *  a summon has since re-armed (owner ruling 2026-11-16, #519). The live source for "for each
+ *  destroyed enemy" (Judge). */
+export function destroyedCountOf(actors: readonly CombatActor[]): number {
+    return actors.reduce((sum, a) => sum + (a.timesDestroyed ?? 0), 0);
+}
+
+/** Record an actor's death: stamp `destroyedRound`, count it in `timesDestroyed` and emit
+ *  `ship-destroyed`. Once per life —
+ *  repeat calls while it is dead are no-ops, so the stamp doubles as the single-emit guard;
+ *  after `reviveActor` the next death records again. Callers floor `currentHp` to 0
  *  themselves; this helper only owns the destroyed-round bookkeeping + the emission. */
 export function recordDestroyed(
     actor: CombatActor,
@@ -727,10 +791,12 @@ export function recordDestroyed(
     bus: CombatEventBus,
     killerId?: string,
     byDirectDamage?: boolean,
-    byDetonation?: boolean
+    byDetonation?: boolean,
+    selfDestruct?: boolean
 ): void {
     if (actor.destroyedRound !== undefined) return;
     actor.destroyedRound = round;
+    actor.timesDestroyed = (actor.timesDestroyed ?? 0) + 1;
     bus.emit({
         type: 'ship-destroyed',
         actorId: actor.id,
@@ -738,6 +804,7 @@ export function recordDestroyed(
         killerId,
         byDirectDamage,
         ...(byDetonation ? { byDetonation: true } : {}),
+        ...(selfDestruct ? { selfDestruct: true } : {}),
     });
 }
 

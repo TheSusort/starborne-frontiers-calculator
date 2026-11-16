@@ -26,7 +26,7 @@ describe('#407: CHARGE_TARGET_KIND cannot drift from ABILITY_TARGET_SELECTOR', (
         const selectorTargets = ALL_TARGETS.filter((t) => enemySelectorKind(t) !== null);
         // Guard the sweep: if the selector classification ever emptied out, every assertion in the
         // loop below would pass vacuously.
-        expect(selectorTargets).toHaveLength(3);
+        expect(selectorTargets).toHaveLength(4);
 
         for (const target of selectorTargets) {
             expect(CHARGE_TARGET_KIND[target]).toBe(`selector-${enemySelectorKind(target)}`);
@@ -43,7 +43,7 @@ describe('#407: CHARGE_TARGET_KIND cannot drift from ABILITY_TARGET_SELECTOR', (
         expect(wrong).toEqual([]);
     });
 
-    it('preserves the exact twelve target -> kind pairs the derivation replaced', () => {
+    it('preserves the exact target -> kind pairs the derivation replaced', () => {
         // Written out deliberately: this was a pure dispatch refactor, and this is the record that
         // no arm moved while the three selector values became derived.
         expect(CHARGE_TARGET_KIND).toEqual({
@@ -61,6 +61,8 @@ describe('#407: CHARGE_TARGET_KIND cannot drift from ABILITY_TARGET_SELECTOR', (
             'enemy-most-buffs': 'selector-most-buffs',
             'enemy-highest-attack': 'selector-highest-attack',
             'enemy-highest-speed': 'selector-highest-speed',
+            'enemy-highest-defense': 'selector-highest-defense',
+            'own-row-front-enemy': 'none',
         });
     });
 });

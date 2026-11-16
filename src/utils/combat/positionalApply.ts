@@ -98,6 +98,9 @@ export interface VictimDamageOutcome {
      *  (Lionheart's 10 stacks). Read through {@link directlyDamagesVictim}. Absent otherwise,
      *  including for a partial split. */
     fullyRedirected?: boolean;
+    /** The victim is `damageImmune` and the hit dealt it nothing (reported with `barriered`).
+     *  Read through {@link directlyDamagesVictim}. Absent otherwise. */
+    damageImmune?: boolean;
 }
 
 /**
@@ -108,13 +111,18 @@ export interface VictimDamageOutcome {
  *  - A hit fully transformed into a DoT (Voron, Orel, Hit Mitigation) is not (R138).
  *  - A hit FULLY redirected by Protection is not direct damage to the protected ship (R139). A
  *    partial redirect (Meatshield's 30%) leaves the kept share direct.
+ *  - A hit on a `damageImmune` ship is not: it dealt nothing.
  * A Barrier-nullified hit still answers true here; the Stasis reduction excludes it on its own
  * (`barriered`).
  */
 export function directlyDamagesVictim(
-    outcome: Pick<VictimDamageOutcome, 'transformedToDot' | 'fullyRedirected'>
+    outcome: Pick<VictimDamageOutcome, 'transformedToDot' | 'fullyRedirected' | 'damageImmune'>
 ): boolean {
-    return (outcome.transformedToDot ?? 0) <= 0 && outcome.fullyRedirected !== true;
+    return (
+        (outcome.transformedToDot ?? 0) <= 0 &&
+        outcome.fullyRedirected !== true &&
+        outcome.damageImmune !== true
+    );
 }
 
 /**

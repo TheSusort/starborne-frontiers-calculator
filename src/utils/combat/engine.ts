@@ -53,12 +53,14 @@ import {
     type EnemySelectorKind,
 } from '../abilities/abilityTargetSide';
 import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
+import { parseNpcShipId } from '../../constants/bountyBosses';
 import { composeDotDamageFactor } from '../damageComposition';
 import { ONE_SHOT_PERSISTENT_BUFFS } from '../../constants/oneShotPersistentBuffs';
+import { rowOf } from '../targeting/board';
 import { dotResistLabel, isBlockDebuff, targetCarriesBlockDebuff } from './debuffImmunity';
 import { immuneToDot } from './dotImmunity';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
-import { aliveTargetsOf, type AliveRoster } from './targetableActors';
+import { aliveTargetsOf, isAliveTarget, type AliveRoster } from './targetableActors';
 import {
     foldActorBuffTotals,
     effectiveStatsOf,
@@ -77,6 +79,8 @@ import {
     PendingAccumulator,
     PendingBomb,
     createActor,
+    reviveActor,
+    destroyedCountOf,
     selectNextBySpeed,
     orderByTurnPriority,
     positionTurnRank,
@@ -107,7 +111,7 @@ import {
     resolvesPositionalVictim,
     type PositionalActing,
 } from './positionalBinding';
-import { aimCellOf, type CellOccupant } from './cellIndex';
+import { aimCellOf, unitsInRowFrontToBack, type CellOccupant } from './cellIndex';
 import {
     applyPositionalDamage,
     damagedVictim,
@@ -225,6 +229,7 @@ import {
     victimIncomingDotDamagePct,
     victimOwnEnemyFamilies,
     victimSelfBuffs,
+    type ReactiveDamageOpts,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { allyHpFraction, lowestHpAllyRecipients, narrowByFaction } from './supportRecipients';
@@ -266,6 +271,12 @@ export const MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND = 20;
  *  Fenced in BOTH directions by `sentinelActorIdReservation.test.ts` — no actor may carry it,
  *  and no caller may claim it. */
 export const SENTINEL_ENEMY_ACTOR_ID = 'enemy';
+
+/** A self-destruct ("it destroys itself", Torpedo) hits its owner for this many times its max HP,
+ *  credited to no one and not as direct damage (owner ruling 2026-11-16): "when an enemy is
+ *  destroyed" passives fire on it, kill-owned ones do not. The owner always dies: its shield,
+ *  Barrier, damage immunity and Cheat Death do not stop the self-hit (`selfDestruct` delegate). */
+const SELF_DESTRUCT_MAX_HP_MULTIPLE = 10;
 
 /** #396: the two channels `victimIncomingModifiers` combines across the self/enemy store boundary.
  *  Module-level so the array is not rebuilt per victim per hit. */
@@ -933,6 +944,8 @@ export interface EnemyActorInput {
     footprint?: readonly Position[];
     /** A bounty boss: its destruction defeats its whole side. */
     isBoss?: boolean;
+    /** The ship this actor fields (`CombatActor.shipId`). */
+    shipId?: string;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1086,6 +1099,7 @@ export function buildEnemyPlayerActorRuntime(
         position: e.position,
         footprint: e.footprint,
         isBoss: e.isBoss,
+        shipId: e.shipId,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
         ignoresStealth: e.ignoresStealth,
         doesntBreakStasis: e.doesntBreakStasis,
@@ -1095,6 +1109,9 @@ export function buildEnemyPlayerActorRuntime(
         alwaysLandsDebuffs: e.shipSkills?.alwaysLandsDebuffs,
         controlImmune: e.shipSkills?.controlImmune,
         dotImmune: e.shipSkills?.dotImmune,
+        damageImmune: e.shipSkills?.damageImmune,
+        debuffImmune: e.shipSkills?.debuffImmune,
+        purgeImmune: e.shipSkills?.purgeImmune,
         affinity: e.affinity,
         preFight: e.preFight,
     });
@@ -1588,6 +1605,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     footprint?: readonly Position[];
     /** A bounty boss: its destruction defeats its whole side. */
     isBoss?: boolean;
+    /** The ship this actor fields (`CombatActor.shipId`). */
+    shipId?: string;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1732,6 +1751,8 @@ export interface CombatEngineInput {
         footprint?: readonly Position[];
         /** A bounty boss: its destruction defeats its whole side. */
         isBoss?: boolean;
+        /** The ship this actor fields (`CombatActor.shipId`). */
+        shipId?: string;
         /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
          *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
          *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1790,6 +1811,8 @@ export interface CombatEngineInput {
     footprint?: readonly Position[];
     /** A bounty boss: its destruction defeats its whole side. */
     isBoss?: boolean;
+    /** The ship this actor fields (`CombatActor.shipId`). */
+    shipId?: string;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1969,6 +1992,9 @@ interface ReactiveSideCtx {
      *  IntentExecContext. Resolved LIVE (no onceByOwner memo) — unlike enemyWithMostBuffs,
      *  Chakara's co-located clause is a SELF-buff that never changes an enemy's speed. */
     enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
+    /** Fenri: per-side highest-defence opposing-actor resolver, resolved LIVE. See
+     *  IntentExecContext. */
+    enemyWithHighestDefense?: (ownerId: string) => string | undefined;
     /** Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
      *  DAMAGE proc (per-victim-conditional AoE). Player side → living enemy attackers; enemy side
      *  → living player actors. See IntentExecContext. Resolved LIVE per drain (no memo). */
@@ -2541,6 +2567,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         position: input.position,
         footprint: input.footprint,
         isBoss: input.isBoss,
+        shipId: input.shipId,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
         ignoresStealth: input.ignoresStealth,
         doesntBreakStasis: input.doesntBreakStasis,
@@ -2550,6 +2577,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         alwaysLandsDebuffs: input.shipSkills.alwaysLandsDebuffs,
         controlImmune: input.shipSkills.controlImmune,
         dotImmune: input.shipSkills.dotImmune,
+        damageImmune: input.shipSkills.damageImmune,
+        debuffImmune: input.shipSkills.debuffImmune,
+        purgeImmune: input.shipSkills.purgeImmune,
         affinity: input.affinity,
         preFight: input.preFight,
     });
@@ -2667,6 +2697,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             position: t.position,
             footprint: t.footprint,
             isBoss: t.isBoss,
+            shipId: t.shipId,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
             ignoresStealth: t.ignoresStealth,
             doesntBreakStasis: t.doesntBreakStasis,
@@ -2676,6 +2707,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             alwaysLandsDebuffs: t.walk?.shipSkills.alwaysLandsDebuffs,
             controlImmune: t.walk?.shipSkills.controlImmune,
             dotImmune: t.walk?.shipSkills.dotImmune,
+            damageImmune: t.walk?.shipSkills.damageImmune,
+            debuffImmune: t.walk?.shipSkills.debuffImmune,
+            purgeImmune: t.walk?.shipSkills.purgeImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
@@ -3325,17 +3359,19 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Read LIVE (`a.corrosionEntries`, not a cached array) because the Cheat-Death
     // wipe REASSIGNS these properties rather than splicing them.
     //
-    // A plain array, not a getter: `enemyAttackerActors` is never mutated after construction
-    // (verified — no push/splice anywhere), so the MEMBERSHIP is fixed for the run while each
-    // member's containers are still read live at reporting time. A future PR that summons an
-    // enemy mid-run must revisit this line.
+    // A plain array, not a getter: `enemyAttackerActors` is never mutated after construction, so
+    // the MEMBERSHIP is fixed for the run while each member's containers are still read live at
+    // reporting time. A summon does not add actors: it re-arms a destroyed member in place
+    // (`processSummons`), whose containers `reviveActor` replaces with empty ones, and which
+    // `dotCarrierReports` reads as live again because its `destroyedRound` is cleared.
     const dotCarrierActors: CombatActor[] = [...enemyAttackerActors];
 
     /**
      * Is this carrier's DoT container still LIVE state, or a corpse's frozen leftovers?
      *
      * Nothing clears a DoT container on death (`recordDestroyed` in state.ts only stamps
-     * `destroyedRound` and emits), so a killed carrier keeps whatever stood on it. Whether that
+     * `destroyedRound` and emits), so a killed carrier keeps whatever stood on it until a summon
+     * re-arms it (`reviveActor` empties them). Whether that
      * is real depends on ONE thing: does the carrier still take its turn and TICK?
      *
      * This predicate is therefore the enemy-side restriction of the ROUND LOOP'S OWN dead-skip —
@@ -3385,8 +3421,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Squad-leader "+X% attack for each other alive <faction> ally" is LIVE. Each such actor's
     // `preFight` becomes an engine-owned copy whose `attackPct` includes the per-ally term for the
     // same-side allies of its own faction alive now (`liveLeaderAttackPct`), set here and redone
-    // on every death. Every `preFight.attackPct` reader therefore sees the live count; the
-    // caller's input block is never mutated.
+    // on every death and every revive. Every `preFight.attackPct` reader therefore sees the live
+    // count; the caller's input block is never mutated.
     const leaderAllyAttackBase = new Map<string, PreFightCombatModifiers>();
     for (const a of allActors) {
         if (a.preFight && a.preFight.attackPctPerOtherFactionAlly !== 0) {
@@ -3415,6 +3451,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     if (leaderAllyAttackBase.size > 0) {
         refreshLeaderAllyAttack();
         bus.on('ship-destroyed', refreshLeaderAllyAttack);
+        bus.on('ship-revived', refreshLeaderAllyAttack);
     }
 
     /** Prophet (#591): each actor's LIVE, per-fight shield-penetration bonus — permanent and
@@ -3718,11 +3755,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             bombStacks: 0,
             effectiveCritRate: 0,
             enemyDebuffNames: enemyDebuffNamesForTarget(victim),
+            enemyType: roleClassOf(victim),
             ...(liveCountsMeasurable
                 ? {
-                      enemyDestroyedCount: [...allActorsById.values()].filter(
-                          (a) => a.side !== owner.side && a.destroyedRound !== undefined
-                      ).length,
+                      enemyDestroyedCount: destroyedCountOf(
+                          [...allActorsById.values()].filter((a) => a.side !== owner.side)
+                      ),
                   }
                 : {}),
         });
@@ -3738,6 +3776,29 @@ export function runCombat(rawInput: CombatEngineInput): {
      * (a DPS run defaults `hp` to 0).
      */
     const maxHpOf = (id: string): number => allActorsById.get(id)?.stats.hp ?? 0;
+
+    /**
+     * A victim's `enemy-type` class: its own role's class (`roleBaseClass`, so a Defender sub-role
+     * reads 'Defender'); for a role-less victim, the class the caster's own turn falls back to —
+     * the fight-wide `input.enemyType` when the victim is on the enemy side (the DPS calculator's
+     * configured enemy), none for a player-side victim (an enemy caster's turn carries no
+     * fight-wide class). Mirrors `RecipientGateReading.role` + the `TurnBindings.enemyTypeArg`
+     * fallback the bound target's turn reads.
+     */
+    const roleClassOf = (victim: CombatActor): EnemyBaseClass | undefined => {
+        const role = roleByActorId.get(victim.id);
+        if (role) return roleBaseClass(role);
+        return victim.side === 'enemy' ? enemyType : undefined;
+    };
+
+    /** Every actor fighting on `side`, dead or alive. */
+    const rosterOfSide = (side: CombatActor['side']): CombatActor[] =>
+        side === 'player' ? allPlayerActors : enemyAttackerActors;
+    /** The board row a unit stands in for "its row": the row of the cell it casts from. */
+    const ownRowOf = (a: CombatActor) => {
+        const cell = aimCellOf(a);
+        return cell === undefined ? undefined : rowOf(cell);
+    };
 
     // ── Side-context bundle ────────────────────────────────────────────────────
     // ONE side-parameterized SideContext instead of hand-paired per-side closures.
@@ -4335,7 +4396,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // upstream, so `raw` can already be negative by the time it reaches here,
                       // and a negative `raw` here would silently RAISE `currentHp`, uncapped by
                       // max HP, with no log row and no booked amount.
-                      const burn = Math.max(0, raw);
+                      const burn = victim.damageImmune === true ? 0 : Math.max(0, raw);
                       victim.currentHp = Math.max(0, victim.currentHp - burn);
                       // ── R7′ ATTRIBUTION: the APPLIER, never the healer ───────────────────────
                       // The damage AND the kill belong to the Zosimos that inflicted the status,
@@ -5407,8 +5468,9 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  (Mamma Maglienza, "50% less damage from DoTs and Detonations"). A Bomb or Echoing Burst
      *  burst and Bomb splash (a dying ship's splash, Demolisher's splash copy) take this factor; a
      *  detonate-DoT burst takes the stronger of it and the victim's DoT reduction for that family,
-     *  never both (`detonatedDotFactor`). */
-    const incomingDetonationReductionFor = (victimId: string): number =>
+     *  never both (`detonatedDotFactor`). `bomb` marks a Bomb burst or Bomb splash, the only
+     *  detonations a `bombOnly` reduction applies to. */
+    const incomingDetonationReductionFor = (victimId: string, bomb = false): number =>
         composeDotReductionFactor(
             incomingReductionPartsForHit(incomingAbilitiesOf(victimId), {
                 didCrit: false,
@@ -5422,6 +5484,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 selfHpPct: selfHpPctOf(victimId),
                 attackerTauntedOrProvoked: false,
                 detonation: true,
+                bombDetonation: bomb,
             })
         );
     /** A detonated DoT is both a DoT and a detonation; one "less damage from DoTs and
@@ -6755,6 +6818,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  footprint victim and for a later hit in the chain. Undefined reads as
                  *  true — the non-positional cast sites, which bind one victim. */
                 isPrimaryTarget?: boolean;
+                /** True only for a unit's own destruction (a self-destruct hit on itself): it
+                 *  gets through the victim's `damageImmune` and Barrier. No other damage path
+                 *  sets it. */
+                bypassDamageImmunity?: boolean;
             }
             // AppliedVictimDamage, not VictimDamageOutcome: this funnel always sets
             // `incomingBooked`, so the booking sites below read it without a fallback.
@@ -6803,9 +6870,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             // never touches the shield).
             // Detection mirrors the Cheat-Death check in lethalHp.ts (selfBuffNamesForOwners
             // aggregates snapshot + timed + active ability self statuses).
-            const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
-                BARRIER_BUFFS.has(n)
-            );
+            // `CombatActor.damageImmune` rides the same branch as a Barrier that is never spent
+            // (`damageImmuneHit`): full immunity from every source that funnels here.
+            const damageImmuneHit =
+                victim.damageImmune === true && cause?.bypassDamageImmunity !== true;
+            const carriesBarrier =
+                cause?.bypassDamageImmunity !== true &&
+                (damageImmuneHit ||
+                    selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
+                        BARRIER_BUFFS.has(n)
+                    ));
             // The victim-side factors in `damage`, as the Protection cascade reads them: the
             // caller's `cause.redirectBasis`, with a partial block folded into `incomingFactor`.
             let redirectBasis = cause?.redirectBasis;
@@ -7179,8 +7253,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                     damageRaw = damageRaw * cascade.targetRetainedFraction;
                 }
             }
-            sink.addIncoming(damage, victim.id);
-            sink.addIncomingRaw(damageRaw, victim.id);
+            // A hit on a damage-immune unit is not intake: nothing arrives, so it books on no
+            // incoming or Barrier-absorbed channel (a report would read it as a Barrier absorb).
+            if (!damageImmuneHit) {
+                sink.addIncoming(damage, victim.id);
+                sink.addIncomingRaw(damageRaw, victim.id);
+            }
             // The intake just recorded — post incoming-block, post Protection redirect. Returned as
             // `incomingBooked` (minus any transform reversal below) so every caller that books a
             // per-victim display amount can book the number the funnel actually recorded instead of
@@ -7188,7 +7266,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // sink because the sink is write-only from this side and a nested apply (a redirected
             // Protection chunk, whose recipient is a DIFFERENT actor) may have written to it
             // already.
-            const incomingRecorded = damage;
+            const incomingRecorded = damageImmuneHit ? 0 : damage;
             // Amount of THIS hit converted into a DoT (Voron/Orel). Reported in the returned
             // outcome so the caller excludes it from the per-victim damage-taken credit.
             let transformedToDot = 0;
@@ -7456,11 +7534,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Shield Converter review) — no re-fetch needed here.
             // Barrier branch (carriesBarrier computed above the block step). HP does not move → the
             // emit below is a no-op crossing (oldPct === newPct), still fired once for emission
-            // consistency. The damage still "arrives" (the victim's .incoming already incremented)
-            // but its effect is nullified; the blocked amount is tracked as .barrierAbsorbed (NOT
-            // .shieldAbsorbed — Barrier never touches the shield).
+            // consistency. A Barrier nullifies the hit's effect but not its record: the victim's
+            // .incoming is incremented and the blocked amount is tracked as .barrierAbsorbed (NOT
+            // .shieldAbsorbed — Barrier never touches the shield). Damage immunity is different:
+            // nothing is booked at all (`incomingRecorded` is 0, no barrierAbsorbed).
             if (carriesBarrier) {
-                sink.addBarrierAbsorbed(damage, victim.id);
+                if (!damageImmuneHit) sink.addBarrierAbsorbed(damage, victim.id);
                 // Hit-counted Barrier: this absorb spends one charge. "for 1 hit" means a DIRECT
                 // hit, and the guard spells that out exactly as the funnel's other two consumables
                 // do (Hit Mitigation, Shield Converter):
@@ -7475,6 +7554,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Every case still gets FULL immunity — the guard only decides whether the charge
                 // is spent. No-op (returns false) for a turn-duration Barrier.
                 if (
+                    !damageImmuneHit &&
                     cause?.byDirectDamage === true &&
                     (cause.bombPortion ?? 0) === 0 &&
                     damage > 0
@@ -7508,11 +7588,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                     hpDamage: 0,
                     shieldAbsorbed: 0,
                     barriered: true,
+                    ...(damageImmuneHit ? { damageImmune: true } : {}),
                     converted: false,
-                    // Barrier nullifies the hit's EFFECT but does not un-record it: `.incoming` holds
-                    // the amount and an equal `.barrierAbsorbed` nets it back out downstream. So the
-                    // display channels book it, exactly as they do for any other barriered hit —
-                    // unlike `immediateDamage`, which is 0 here (nothing landed).
+                    // A Barrier hit is recorded: `.incoming` holds the amount and an equal
+                    // `.barrierAbsorbed` nets it back out, so `incomingRecorded` is the amount and
+                    // the display channels book it. A damage-immune hit records nothing:
+                    // `incomingRecorded` is 0, so nothing is booked. `immediateDamage` is 0 either way.
                     incomingBooked: incomingRecorded,
                     // Provably always 0 here: this branch is `carriesBarrier === true`, but the
                     // cascade that populates `protectionRedirected` is gated on
@@ -7646,6 +7727,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     killerId: cause?.killerId,
                     byDirectDamage: cause?.byDirectDamage,
                     byDetonation: (cause?.bombPortion ?? 0) > 0,
+                    selfDestruct: cause?.bypassDamageImmunity === true,
                 });
                 if (outcome === 'destroyed') {
                     // Bomb-splash-on-death: a ship that dies with un-detonated bombs splashes a
@@ -7677,7 +7759,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 const splash = splashDamageForBomb(bomb, bomb.splashModifier);
                                 if (splash <= 0) continue;
                                 const splashIntake =
-                                    splash * incomingDetonationReductionFor(ally.id);
+                                    splash * incomingDetonationReductionFor(ally.id, true);
                                 const splashOutcome = applyVictimDamage(splashIntake, ally, sink, {
                                     killerId: bomb.sourceId,
                                     byDirectDamage: true,
@@ -8148,6 +8230,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 intakeFor(victimId).convertedToShield += amount;
             },
         };
+        // The self-destruct hit is the unit's removal, not damage taken: it books no intake.
+        const selfDestructSink: DamageAccountingSink = {
+            ...sink,
+            addIncoming: () => {},
+            addIncomingRaw: () => {},
+        };
         // #355 B1: how much damage a detonation/burst apply actually DELIVERED, for the numeric
         // channels its caller books by hand (`roundPerTargetDamage`, `creditDealt`,
         // `perActorDetonation`, a standing `'detonation'` leech).
@@ -8612,8 +8700,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // affinity). `ignoresDefense` (without `flatBasis`): the normal attack-basis/crit walk
             // still runs, but the victim's Defense term is bypassed (defence: 0) — kept minimal,
             // for generality beyond Demolisher's own (flat) path. Both absent ⟹ the plain
-            // attack-basis walk below.
-            opts?: { ignoresDefense?: boolean; flatBasis?: number }
+            // attack-basis walk below. `splash`: see `ReactiveDamageOpts`.
+            opts?: ReactiveDamageOpts
         ): { dealt: number; didCrit: boolean } | void => {
             const owner = allActorsById.get(ownerId);
             const victim = allActorsById.get(victimId);
@@ -8742,7 +8830,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // term entirely (defence: 0) instead of the normal substituted defence.
                     opts?.ignoresDefense ? { ...profile, defence: 0 } : profile,
                     didCrit,
-                    1, // roleScale: a reactive proc is a single full hit
+                    // roleScale: a reactive proc is one full hit, a covered row victim half of one.
+                    opts?.splash ? 0.5 : 1,
                     procReduction.parts,
                     procReduction.attackerCritPenaltyPct
                 );
@@ -8791,8 +8880,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
             // A Bomb splash copy is not a direct hit, so it is aimed at no one.
             const procAim = splashCopy ? undefined : aimReactiveHit(victim.id);
+            // A covered victim of a row proc is not the hit's primary target.
+            if (procAim && opts?.splash) procAim.isPrimary = false;
             // A splash copy is Bomb damage, so the victim's detonation reductions apply to it.
-            const procIntake = splashCopy ? raw * incomingDetonationReductionFor(victim.id) : raw;
+            const procIntake = splashCopy
+                ? raw * incomingDetonationReductionFor(victim.id, true)
+                : raw;
             try {
                 procOutcome = applyVictimDamage(procIntake, victim, sink, {
                     killerId: ownerId,
@@ -9118,19 +9211,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ];
                 })
             );
-        /**
-         * A struck victim's `enemy-type` class for the per-victim refolds below: its own role's
-         * class; for a role-less victim, the class the caster's own turn falls back to — the
-         * fight-wide `input.enemyType` when the victim is on the enemy side (the DPS
-         * calculator's configured enemy), none for a player-side victim (an enemy caster's
-         * turn carries no fight-wide class). Mirrors `RecipientGateReading.role` + the
-         * `TurnBindings.enemyTypeArg` fallback the bound target's turn reads.
-         */
-        const victimEnemyType = (victim: CombatActor): EnemyBaseClass | undefined => {
-            const role = roleByActorId.get(victim.id);
-            if (role) return roleBaseClass(role);
-            return victim.side === 'enemy' ? enemyType : undefined;
-        };
+        /** A struck victim's `enemy-type` class for the per-victim refolds below (`roleClassOf`). */
+        const victimEnemyType = roleClassOf;
         /**
          * `primaryCtx` with every subject that describes THE ENEMY re-pointed at `victim`: its
          * buffs (count and names), debuffs (count and names), DoT entries, adjacent units, HP and
@@ -9710,6 +9792,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 case 'enemy-most-buffs':
                 case 'enemy-highest-attack':
                 case 'enemy-highest-speed':
+                case 'enemy-highest-defense':
+                case 'own-row-front-enemy':
                 case 'adjacent-enemies':
                 case 'target-and-adjacent-enemies':
                 case 'self':
@@ -10145,7 +10229,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // the bomb was worth, the same way `attacked` reports a hit's pre-transfer
                         // value. Only the numeric channels below move to the delivered amount.
                     });
-                    const bombIntake = result.bomb * incomingDetonationReductionFor(victim.id);
+                    const bombIntake =
+                        result.bomb * incomingDetonationReductionFor(victim.id, true);
                     const bombOutcome = applyVictimDamage(bombIntake, victim, sink, {
                         killerId: actorId,
                         byDirectDamage: true,
@@ -10224,9 +10309,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             victim: CombatActor,
             sink: DamageAccountingSink,
             sourceId: string,
-            damage: number
+            damage: number,
+            bomb: boolean
         ): void => {
-            const intake = damage * incomingDetonationReductionFor(victim.id);
+            // `bomb` is true only for a real Bomb; an Echoing Burst forced to 0 takes the
+            // detonation factor without a `bombOnly` reduction.
+            const intake = damage * incomingDetonationReductionFor(victim.id, bomb);
             const outcome = applyVictimDamage(intake, victim, sink, {
                 killerId: sourceId,
                 byDirectDamage: true,
@@ -10287,7 +10375,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 damage,
                             }),
                         creditDetonation: (sourceId, damage) => {
-                            const intake = damage * incomingDetonationReductionFor(actor.id);
+                            const intake = damage * incomingDetonationReductionFor(actor.id, true);
                             const outcome = applyVictimDamage(intake, actor, sink, {
                                 killerId: sourceId,
                                 byDirectDamage: true,
@@ -10615,6 +10703,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             return highestAttackInRoster(aliveOpposing());
                         case 'highest-speed':
                             return highestSpeedInRoster(aliveOpposing());
+                        case 'highest-defense':
+                            return highestDefenseInRoster(aliveOpposing());
                         default: {
                             const exhaustive: never = kind;
                             throw new Error(
@@ -10727,18 +10817,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                 shieldedAllyCount: tb.shieldedAllyCount(),
                 // Judge R2 ("20% more direct damage for each destroyed enemy, up to max of
                 // 100%"): opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed
-                // the kill and cumulative across rounds (owner ruling 2026-08-30). `destroyedRound`
-                // is the engine's canonical destroyed signal (same one adjacency.ts filters on),
-                // and `tb.opposingRoster` is built once and never pruned, so a corpse stays in the
-                // array and keeps being counted. Team-symmetric via `tb`: the player side tallies
+                // the kill and cumulative across rounds (owner ruling 2026-08-30); see
+                // `destroyedCountOf`. `tb.opposingRoster` is built once and never pruned, so a
+                // corpse stays in the array and keeps being counted. Team-symmetric via `tb`: the player side tallies
                 // the enemy roster, the enemy side tallies the player roster.
                 //
                 // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
                 ...(liveCountsMeasurable
                     ? {
-                          enemyDestroyedCount: tb.opposingRoster.filter(
-                              (x) => x.destroyedRound !== undefined
-                          ).length,
+                          enemyDestroyedCount: destroyedCountOf(tb.opposingRoster),
                           // General Colosso ("15% for each dead ally ship"): the same tally on
                           // the acting unit's own side, itself excluded, any cause of death.
                           allyDestroyedCount: [...allActorsById.values()].filter(
@@ -10784,8 +10871,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Forced bomb-detonation sink (Lingshe's countdown-reduce-to-0). `sink` serves
                 // both directions — ids are globally unique across sides — so no per-side
                 // selection is needed.
-                forceDetonateBomb: (victim: CombatActor, sourceId: string, damage: number) =>
-                    forceDetonateBombOnVictim(victim, sink, sourceId, damage),
+                forceDetonateBomb: (
+                    victim: CombatActor,
+                    sourceId: string,
+                    damage: number,
+                    bomb: boolean
+                ) => forceDetonateBombOnVictim(victim, sink, sourceId, damage, bomb),
                 // Positional detonation hint: when the engine will take the positional apply path
                 // (same predicate that computes aoeVictimIds — pattern + target + position all set),
                 // runPlayerTurn SKIPS the anchor detonation (no consume/credit/emit) and instead
@@ -11690,7 +11781,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // act). Returns true when the actor is the dead heal target and the caller must `continue`.
         const handleDeadTargetSkip = (actor: CombatActor): boolean => {
             // A DESTROYED focus does not act, in ANY mode — independent of `healReportActive`.
-            // `destroyedRound` is the canonical death signal (state.ts, stamped once by
+            // `destroyedRound` is the canonical death signal (state.ts, stamped by
             // `recordDestroyed`); `currentHp <= 0` is NOT, because a never-alive actor (DPS's
             // `hp`-defaults-to-0 focus, see the gate below) also satisfies it
             // (normalizeRoster.ts). Before #415 this case was covered incidentally by the
@@ -11757,6 +11848,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 conditionalDamage: 0,
                 detonationDamage: 0,
                 extraActionGrants: [],
+                summons: [],
                 // Synthesized skip turn fires no positional attack (no positionalScalars) → this
                 // resolver is never invoked; a no-op keeps the required-field shape.
                 rollVictimCrit: () => false,
@@ -11826,6 +11918,64 @@ export function runCombat(rawInput: CombatEngineInput): {
                         pending.set(recipient.id, pendingOf(recipient.id) + 1);
                     }
                 }
+            }
+        };
+
+        /**
+         * A cast's summons ("summons two torpedoes in the top row"), run once the cast has
+         * resolved. The roster is fixed for the run, so a summon re-arms instead of adding: every
+         * DEAD actor on the summoner's side whose ship is the bounty add `addId` comes back in its
+         * own cell as a fresh combatant (owner ruling 2026-11-16: a living one is left alone):
+         *  - `reviveActor` (state.ts): alive, full HP, its starting shield pool, no charges, no
+         *    DoTs/Bombs/accumulators;
+         *  - every status it carried is wiped (`StatusEngine.clearAll`) and its Cheat Death is
+         *    unspent again;
+         *  - its turn pool for the rest of THIS round is emptied, whatever the summoner's speed
+         *    relative to it: a unit entering mid-round has missed the round's seeding (every
+         *    actor's pool is seeded at round start), so its first turn is next round's;
+         *  - its combat-start gains are granted again through the same seeding the fight start
+         *    runs (`seedPassiveTimedStatuses`, `seedPreCombatShields`).
+         * It is not a repair: no heal event, no repair reaction. Nothing re-arms on a cast that
+         * ended the fight.
+         * A revive resets exactly the state listed above. Per-fight engine maps keyed by actor id
+         * (once-per-fight latches, next-crit-power, the Prophet bonus) are NOT reset, and
+         * ally-directed pre-combat grants are NOT re-granted to the revived actor, so a summon of
+         * anything with those mechanics must revisit them here.
+         */
+        const processSummons = (summoner: CombatActor, addIds: readonly string[]): void => {
+            if (addIds.length === 0 || sideIsWiped()) return;
+            for (const actor of actorsBySide(summoner.side)) {
+                if (actor.destroyedRound === undefined || actor.shipId === undefined) continue;
+                const add = parseNpcShipId(actor.shipId);
+                if (!add || !addIds.includes(add.id)) continue;
+                const rt = allRuntimesById.get(actor.id);
+                if (!rt) continue;
+                reviveActor(actor, maxHpOf(actor.id));
+                statusEngine.clearAll(actor.id);
+                cheatDeathConsumed.delete(actor.id);
+                cheatDeathConsumedRound.delete(actor.id);
+                // The round's row needs a focus turn: a focus re-armed before its slot came up
+                // gets the no-action turn its emptied pool no longer produces.
+                if (actor.id === focusActorId && pendingOf(actor.id) > 0) {
+                    pushSynthesizedFocusSkipTurn();
+                }
+                pending.set(actor.id, 0);
+                endOfRoundPending.set(actor.id, 0);
+                bus.emit({
+                    type: 'ship-revived',
+                    actorId: actor.id,
+                    round: r,
+                    summonerId: summoner.id,
+                });
+                seedPassiveTimedStatuses(
+                    [rt],
+                    statusEngine,
+                    bus,
+                    actor.side === 'player' ? enemyType : undefined,
+                    r,
+                    factionOf
+                );
+                seedPreCombatShields([rt]);
             }
         };
 
@@ -12032,8 +12182,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 },
                 // Same shared sink the cast-path forced detonation uses — a
                 // reduce-duration shrink can drive a bomb to 0 on EITHER side's actor.
-                forceDetonateBomb: (victim, sourceId, damage) =>
-                    forceDetonateBombOnVictim(victim, sink, sourceId, damage),
+                forceDetonateBomb: (victim, sourceId, damage, bomb) =>
+                    forceDetonateBombOnVictim(victim, sink, sourceId, damage, bomb),
                 // Side-agnostic ship-role lookup (the SAME
                 // roleByActorId map Meatshield's defense-substitution and Graphite's
                 // roleFilter already consume) — feeds the reactive `purge` branch's
@@ -12060,6 +12210,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
                 // Chakara's live highest-speed opposing-actor resolver.
                 enemyWithHighestSpeed: sideCtx.enemyWithHighestSpeed,
+                enemyWithHighestDefense: sideCtx.enemyWithHighestDefense,
                 // Living opposing roster for an 'all-enemies' reactive
                 // damage proc (Judge/Incinerator per-victim-conditional AoE).
                 livingOpposingActorIds: sideCtx.livingOpposingActorIds,
@@ -12077,6 +12228,43 @@ export function runCombat(rawInput: CombatEngineInput): {
                 recipientMaxHpFor: maxHpOf,
                 firstActivatorId: sideCtx.firstActivatorId,
                 lastStandingId: sideCtx.lastStandingId,
+                // Row geometry is side-agnostic: each reads the owner's own side off the actor.
+                isFrontOfRowFor: (ownerId) => {
+                    const owner = allActorsById.get(ownerId);
+                    const row = owner && isAliveTarget(owner) ? ownRowOf(owner) : undefined;
+                    if (!owner || row === undefined) return false;
+                    return (
+                        unitsInRowFrontToBack(aliveTargetsOf(rosterOfSide(owner.side)), row)[0] ===
+                        owner
+                    );
+                },
+                ownRowEnemiesFor: (ownerId) => {
+                    const owner = allActorsById.get(ownerId);
+                    const row = owner ? ownRowOf(owner) : undefined;
+                    if (!owner || row === undefined) return [];
+                    const opposing = rosterOfSide(owner.side === 'player' ? 'enemy' : 'player');
+                    return unitsInRowFrontToBack(aliveTargetsOf(opposing), row).map((a) => a.id);
+                },
+                selfDestruct: (ownerId) => {
+                    const owner = allActorsById.get(ownerId);
+                    if (!owner || owner.destroyedRound !== undefined) return;
+                    // The self-hit must kill: no shield pool to soak it, no Cheat Death to
+                    // intercept it (marked spent, so the lethal resolution records the destroy).
+                    owner.shieldPool = 0;
+                    cheatDeathConsumed.add(ownerId);
+                    applyVictimDamage(
+                        SELF_DESTRUCT_MAX_HP_MULTIPLE * maxHpOf(ownerId),
+                        owner,
+                        selfDestructSink,
+                        {
+                            byDirectDamage: false,
+                            bypassDamageImmunity: true,
+                        }
+                    );
+                    if (owner.destroyedRound === undefined) {
+                        throw new Error(`self-destruct: ${ownerId} survived its own self-hit`);
+                    }
+                },
                 oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
                 perRoundFireCounts: sideCtx.perRoundFireCounts,
                 // Live not-hit-this-round gate (Alacrity). hitThisRound is a single
@@ -12191,6 +12379,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
             );
 
+        // Opposing actor with the greatest LIVE effective DEFENCE (Fenri's end-of-round Stasis).
+        // Ties go to the lowest `positionTurnRank`, then roster order. Pre-gated at the seam, same
+        // as its siblings above. Stealth does not exclude a ship: this is a selector, not a
+        // targeting skill.
+        const highestDefenseInRoster = (roster: AliveRoster): string | undefined =>
+            highestAttackAmong(
+                [...roster]
+                    .sort((x, y) => positionTurnRank(x.position) - positionTurnRank(y.position))
+                    .map((a) => a.id),
+                (id) => {
+                    const a = roster.find((x) => x.id === id);
+                    return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).defence : 0;
+                }
+            );
+
         // The id of the sole living actor in a roster, or undefined if !=1 alive.
         // Drives the `last-standing` condition (Last Stand). Recomputed each drain so it
         // reflects deaths recorded before the reactive drain.
@@ -12258,6 +12461,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Plain arrow, NOT onceByOwner — Chakara has no purge/damage race
             // (its co-located clause is a self-buff), so LIVE re-resolution per drain is correct.
             enemyWithHighestSpeed: () => highestSpeedInRoster(alivePlayerDrainOpposing()),
+            enemyWithHighestDefense: () => highestDefenseInRoster(alivePlayerDrainOpposing()),
             // Living opposing roster for an 'all-enemies' reactive damage proc
             // (Judge/Incinerator) — each resolved victim's own hp-threshold/enemy-debuff gates are
             // re-checked per victim downstream. #407: reads the shared gate instead of its own
@@ -12295,6 +12499,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyWithHighestAttack: () => highestAttackInRoster(aliveEnemyDrainOpposing()),
             // Plain arrow, NOT onceByOwner — see playerDrainCtx's comment.
             enemyWithHighestSpeed: () => highestSpeedInRoster(aliveEnemyDrainOpposing()),
+            enemyWithHighestDefense: () => highestDefenseInRoster(aliveEnemyDrainOpposing()),
             // Mirror — an enemy owner scans the living player roster. #407: same
             // shared gate as the player mirror above.
             livingOpposingActorIds: () => aliveEnemyDrainOpposing().map((a) => a.id),
@@ -12703,6 +12908,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // is the one intake that runs in this same turn yet passes byDirectDamage:false,
                 // so it never uses this value as a killer.
                 actingActorId = actor.id;
+                // The bounty adds this turn's cast summons (`processSummons`).
+                let castSummons: readonly string[] = [];
                 // This turn's cast opens a new reaction chain per sub-attack (`castHitRoot`).
                 castRootBase = `cast:${++castRootSeq}`;
                 setHitRoot(castHitRoot(0), 0);
@@ -13431,6 +13638,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // re-applying timed buffs, adding persistent stacks, and ticking
                             // accumulators are all correct for a real second turn.
                             processExtraActionGrants(actor, turn.extraActionGrants);
+                            castSummons = turn.summons;
                         } else if (actor.id === focusActorId) {
                             // The focus killed itself with its own timed burst → synthesize a
                             // no-action focus turn so the post-round focusTurns.length guard does
@@ -13696,6 +13904,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }
 
                             processExtraActionGrants(actor, teamTurn.extraActionGrants);
+                            castSummons = teamTurn.summons;
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } // end stasis gate (walked-team branch)
                 } else if (actor.kind === 'enemy') {
@@ -13968,6 +14177,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // processExtraActionGrants absorb any runaway grants. grantAllyCharges stays
                             // undefined (enemy's "allies" are enemy-side, not the player team).
                             processExtraActionGrants(actor, enemyTurn.extraActionGrants);
+                            castSummons = enemyTurn.summons;
                             // The enemy's passive-slot instance is staged on the positional gate
                             // alone, like the two player-side sites: it is not the firing hit's
                             // rider, so it lands whether or not the firing hit is applied
@@ -14128,6 +14338,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     } // end stasis gate (real-enemy branch)
                 }
 
+                processSummons(actor, castSummons);
                 // Drain point (b): follow-ups triggered by this actor's turn body run as
                 // "consecutive actions" within the turn — BEFORE the owner Post Turn. A status
                 // they land on this actor takes the own-turn reprieve (R123); one they land on

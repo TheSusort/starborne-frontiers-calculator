@@ -57,6 +57,9 @@ export type CombatLogEntryKind =
     | 'steal'
     | 'charge-changed'
     | 'death'
+    /** A summon re-armed a destroyed ship (`ship-revived`). Booked to the SUMMONER, with the
+     *  re-armed ship in `targets`. */
+    | 'revived'
     | 'detonation'
     | 'bomb'
     | 'buff-expired'

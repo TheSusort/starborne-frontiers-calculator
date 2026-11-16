@@ -34,6 +34,7 @@ import {
     gateFiringAbilities,
     gateConditions,
     extraActionsFromSkill,
+    summonsFromSkill,
     partitionDotDamageAbilities,
     type ExtraActionGrant,
 } from '../abilities/applyAbilities';
@@ -564,6 +565,9 @@ export interface PlayerTurnResult {
     /** Extra-action grants this turn fired (pre-gated). The ENGINE owns queue
      *  re-insertion + the oncePerRound/backstop bookkeeping. */
     extraActionGrants: ExtraActionGrant[];
+    /** Bounty-add ids this turn's firing skill summons (pre-gated). The ENGINE re-arms them once
+     *  the cast has resolved (`processSummons`). */
+    summons: string[];
     /** Per-cast attacker-side damage scalars for the positional apply path.
      *  Populated from the SAME locals that feed the aggregate `directDamage`, so feeding
      *  these + `hitCrits` through `victimHitDamage` for the bound victim's defense profile
@@ -818,6 +822,7 @@ const CONDITION_CONTEXT_SUBJECT = {
     wasHitThisRound: 'caster',
     firstActivator: 'caster',
     isLastStanding: 'caster',
+    isFrontOfRow: 'caster',
     turnsTaken: 'caster',
     stealthedEnemyCount: 'caster',
     shieldedAllyCount: 'caster',
@@ -1318,7 +1323,12 @@ export interface PlayerTurnArgs {
      *  shield-then-HP debit with NO Barrier/Cheat-Death/destroyed handling — `reduceEnemyBombs` is
      *  itself inert without a resolved `targetId`, which only a positional/engine-scoped caller ever
      *  supplies in production, so the fallback is exercised only by tests that hand-build args. */
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    forceDetonateBomb?: (
+        victim: CombatActor,
+        sourceId: string,
+        damage: number,
+        bomb: boolean
+    ) => void;
     /** #363 (Fuying): actor id → faction, for the recipient FACTION intersection applied to a
      *  `factionFilter`'d ally scope ("grants Tianchen allies Stealth"). Supplied by engine.ts's
      *  `buildTurnArgs` from the side-agnostic `factionByActorId` map, so an ENEMY-side caster
@@ -2034,6 +2044,9 @@ function applyAccumulators(args: {
      *  this skill included (R149): the accumulator is a debuff (R112), so it is blocked before
      *  any landing roll is drawn. */
     blocked: () => boolean;
+    /** Whether the target is `debuffImmune`: the accumulator is never attempted, with nothing
+     *  rolled and nothing reported. */
+    immune: () => boolean;
     /** Reports an accumulator Block Debuff stopped (no landing roll). */
     emitBlocked: (turns: number) => void;
     /** One landing decision for one accumulator — DRAWS, so it is called once per accumulator. */
@@ -2043,6 +2056,7 @@ function applyAccumulators(args: {
 }): number {
     let landed = 0;
     for (const acc of args.accumulators) {
+        if (args.immune()) continue;
         if (args.blocked()) {
             args.emitBlocked(acc.turns);
             continue;
@@ -2124,7 +2138,12 @@ function reduceEnemyBombs(args: {
     detonatorId: string;
     /** One 'inflict' landing roll against `victim` — DRAWS, so call it once per recipient. */
     landsReductionOn: (victim: CombatActor) => boolean;
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    forceDetonateBomb?: (
+        victim: CombatActor,
+        sourceId: string,
+        damage: number,
+        bomb: boolean
+    ) => void;
     /** #407: the board-neighbour fan-out and the SELECTOR delegate, threaded so this loop resolves
      *  recipients by exactly the same rules as the debuff-clause path. */
     adjacentEnemyIdsFor?: (anchorId: string) => string[];
@@ -2778,6 +2797,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             vid === undefined || vid === enemy?.id ? enemy : opposingVictimById?.get(vid);
         return getAffinityMatchup(attackerAff, victim?.affinity) === 'disadvantage';
     };
+    /** A purge-immune ship (`CombatActor.purgeImmune`) loses no buff to a purge or a steal. */
+    const purgeImmuneVictim = (vid: string | undefined): boolean => {
+        const victim =
+            vid === undefined || vid === enemy?.id ? enemy : opposingVictimById?.get(vid);
+        return victim?.purgeImmune === true;
+    };
 
     // Applies one passed timed self status to its recipients. The status lives on each recipient
     // (decrements at the recipient's Post Turn; family + persistent rules run per recipient side
@@ -2941,7 +2966,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             const source =
                 opposingVictimById?.get(sourceId) ??
                 (hasVictim && sourceId === enemy.id ? enemy : undefined);
-            if (extensionImmune(sourceId)) continue;
+            if (extensionImmune(sourceId) || purgeImmuneVictim(sourceId)) continue;
             // How many stacks of each STACK-STEALABLE status the source holds right now.
             // Computed HERE and passed in, rather than inside statusEngine.steal: the count
             // has to aggregate all four status stores AND evaluate aura conditions against a
@@ -3032,10 +3057,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             opposingVictimById?.get(vid) ?? (hasVictim && vid === enemy.id ? enemy : undefined);
         // `blocked`: the affinity disadvantage alone stopped a purge that had buffs to take.
         const removals = recipients.map((vid) => {
+            const victim = victimOf(vid);
+            // A purge-immune ship is never purged: nothing removed, and no affinity row either.
+            if (victim?.purgeImmune === true) return { vid, victim, removed: 0, blocked: false };
             const immune = extensionImmune(vid) && !landsDespiteAffinity(actor);
             return {
                 vid,
-                victim: victimOf(vid),
+                victim,
                 removed: immune ? 0 : statusEngine.purge(vid, count),
                 blocked: immune && statusEngine.removableBuffCount(vid) > 0,
             };
@@ -3080,11 +3108,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // resolves — the real battle sim always positions actors.
                     if (stripsShield && victim) stripShieldPct(victim, 100, bus, actor.id, r);
                 }
-                if (!logged && removals.length > 0) {
+                // A purge-immune victim gets no attempt row either.
+                const attempted = removals.filter((x) => x.victim?.purgeImmune !== true);
+                if (!logged && attempted.length > 0) {
                     bus.emit({
                         type: 'purge-attempt-log',
                         casterId: actor.id,
-                        targetIds: removals.map((x) => x.vid),
+                        targetIds: attempted.map((x) => x.vid),
                         round: r,
                         reason: 'nothing-to-remove',
                     });
@@ -3125,7 +3155,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 actor.id,
                 actor,
                 cfg.count,
-                cfg.debuffType
+                cfg.debuffType,
+                cfg.keep
             );
             if (removed > 0) {
                 ownDebuffsCleansed = true;
@@ -3207,7 +3238,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // No victim ⇒ nobody is carrying Block Debuff against this cast, so `false`. This
     // also makes the Block-Debuff DoT branch further down provably unreachable on a no-victim turn.
     const targetImmuneToDebuffs = hasVictim
-        ? targetCarriesBlockDebuff(statusEngine, enemy.id)
+        ? targetCarriesBlockDebuff(statusEngine, enemy.id, enemy)
         : false;
     // Turn-local landing decision: an immune target auto-resists (return false WITHOUT drawing
     // the gate, so the existing resist branches record it); otherwise 'apply' (affinity) lands
@@ -3258,7 +3289,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // #413: same three arms, same `viaRoll` contract as the turn-scoped twin above — only the
         // final `debuffLandingGate` call draws, and only it can produce a proc-worthy resist.
         if (
-            targetCarriesBlockDebuff(statusEngine, victim.id) ||
+            targetCarriesBlockDebuff(statusEngine, victim.id, victim) ||
             blockDebuffPendingFor?.(victim.id) === true
         ) {
             return { landed: false, viaRoll: false };
@@ -5959,7 +5990,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // died, and an actor that was NEVER ALIVE, both read the same way. Gating on it silences
         // the focus's whole event stream from the moment cumulative damage crosses `enemyHp`
         // (reproduced in `multiHitInlineEmitGuards.test.ts`'s runCombat-level block).
-        // `destroyedRound` is the canonical aliveness signal (state.ts, stamped once by
+        // `destroyedRound` is the canonical aliveness signal (state.ts, stamped by
         // `recordDestroyed` — the same signal the dead-owner gate in triggers.ts reads), so the
         // guard fires only on a genuinely destroyed bound target.
         //
@@ -6363,6 +6394,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             blocked: () =>
                 targetCarriesBlockDebuff(statusEngine, enemy.id) ||
                 blockDebuffPendingFor?.(enemy.id) === true,
+            immune: () => enemy.debuffImmune === true,
             emitBlocked: (turns) => {
                 resistedEnemyDebuffs.push({ buffName: 'Echoing Burst', turnsRemaining: turns });
                 deferredEnemyApplications.push({
@@ -6601,6 +6633,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             blocked: () =>
                 targetCarriesBlockDebuff(statusEngine, rid) ||
                 blockDebuffPendingFor?.(rid) === true,
+            immune: () => victim.debuffImmune === true,
             emitBlocked: () => {
                 deferredEnemyApplications.push({
                     applyState: () => {},
@@ -6693,7 +6726,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         selfBuffStacksForOwner(statusEngine, targetId, buffName) > 0
                             ? targetId
                             : buffHolderIdByPosition?.(buffName);
-                    if (sourceId !== undefined && !extensionImmune(sourceId)) {
+                    if (
+                        sourceId !== undefined &&
+                        !extensionImmune(sourceId) &&
+                        !purgeImmuneVictim(sourceId)
+                    ) {
                         const availableAtSource = selfBuffStacksForOwner(
                             statusEngine,
                             sourceId,
@@ -7779,7 +7816,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             rid,
                             rid === actor.id ? actor : sameSideLiving?.find((a) => a.id === rid),
                             cleanseCount,
-                            cfg.debuffType
+                            cfg.debuffType,
+                            cfg.keep
                         );
                         removed += removedForRid;
                         cleanseReachedIds.add(rid);
@@ -8152,6 +8190,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         conditionalDamage,
         detonationDamage,
         extraActionGrants,
+        summons: summonsFromSkill(gatedSkill),
         positionalScalars,
         passiveSlotHit,
         perVictimOutgoing,

@@ -3036,7 +3036,7 @@ export interface IntentExecContext {
          *  CURRENT SHIELD instead of max HP. Mutually exclusive with hpBasisPct in the corpus. */
         shieldBasisPct?: number,
         allowDeadOwner?: boolean,
-        opts?: { ignoresDefense?: boolean; flatBasis?: number }
+        opts?: ReactiveDamageOpts
         // Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
         // the combat log (reactive-damage-performed); void/0 when the proc was guarded (dead
         // victim, non-positive) or the delegate is absent (unit fixtures).
@@ -3143,7 +3143,12 @@ export interface IntentExecContext {
      *  statusEngine debuffs (both are debuffs; one driven to 0 bursts — owner ruling R113).
      *  Absent (unit-test ctxs) → the Bomb / Echoing Burst cut helpers (bombCountdown.ts) fall
      *  back to a bare shield-then-HP debit. */
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    forceDetonateBomb?: (
+        victim: CombatActor,
+        sourceId: string,
+        damage: number,
+        bomb: boolean
+    ) => void;
     /** Resolve ANY actor's ship role (Ship.type) by id, either side — the SAME `roleByActorId` map
      *  (side-agnostic by key) Meatshield's defense-substitution and Graphite's `roleFilter`
      *  reaction-time check already consume. Used by the reactive `purge` branch to re-check an
@@ -3176,12 +3181,24 @@ export interface IntentExecContext {
     /** Id of the sole living actor on the drain owner's side (recomputed each drain),
      *  or undefined when !=1 actor is alive. Drives the `last-standing` gate (Last Stand). */
     lastStandingId?: string;
+    /** Whether `ownerId` is the front-most living unit of its own side in its row, read live
+     *  (`self-front-of-row`). Absent → the gate is not met. */
+    isFrontOfRowFor?: (ownerId: string) => boolean;
+    /** The living opposing actors in `ownerId`'s row, front-most first (`own-row-front-enemy`).
+     *  Empty when the row holds none. */
+    ownRowEnemiesFor?: (ownerId: string) => string[];
+    /** "it destroys itself" (`selfDestruct` on a damage config): the owner's lethal self-hit,
+     *  read the rule at `SELF_DESTRUCT_MAX_HP_MULTIPLE` (engine.ts). */
+    selfDestruct?: (ownerId: string) => void;
     /** Doomsayer: living opposing actor with the greatest live effective attack. */
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
     /** Chakara: living opposing actor with the greatest live effective speed.
      *  Resolved LIVE per owner (unlike enemyWithMostBuffs, no purge co-occurs with it, so no
      *  onceByOwner memo is needed). Optional — absent in unit-test ctxs that don't drive it. */
     enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
+    /** Fenri: living opposing actor with the greatest live effective defence (ties → board
+     *  position). Resolved LIVE per owner. Optional — absent in unit-test ctxs that don't drive it. */
+    enemyWithHighestDefense?: (ownerId: string) => string | undefined;
     /** Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
      *  DAMAGE proc. The executor enumerates these and re-checks the ability's per-victim enemy
      *  conditions (hp-threshold / enemy-debuff) against EACH victim's own live state. Optional —
@@ -3330,6 +3347,9 @@ export function buildActorConditionContext(
         /** Owner is the sole living actor on its side. Default false. Populated by
          *  buildDrainContext. */
         lastStanding?: boolean;
+        /** The owner is the front-most living unit of its side in its row. Default false.
+         *  Populated by buildDrainContext. */
+        frontOfRow?: boolean;
         /** Owner's own-turn counter (CombatActor.turnsTaken). Default 0 (DPS-assumption).
          *  Populated by buildDrainContext. */
         turnsTaken?: number;
@@ -3394,6 +3414,7 @@ export function buildActorConditionContext(
         wasHitThisRound: shared.wasHitThisRound,
         firstActivator: shared.firstActivator,
         lastStanding: shared.lastStanding,
+        frontOfRow: shared.frontOfRow,
         turnsTaken: shared.turnsTaken,
         enemiesHitThisCast: shared.enemiesHitThisCast,
         allyTeamNames: shared.allyTeamNames,
@@ -3696,6 +3717,8 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string, intent?: Int
         // Live last-standing gate (Last Stand). lastStandingId is undefined unless EXACTLY
         // one same-side actor is alive → DPS / no-delegate paths read "not alone" ⇒ not met.
         lastStanding: ctx.lastStandingId === ownerId,
+        // Live "first in the row" gate (Torpedo). No delegate → not met.
+        frontOfRow: ctx.isFrontOfRowFor?.(ownerId) ?? false,
         // Every-n-turns gate (Chrono Reaver). Default 0 → DPS / no-delegate
         // paths read 0 (the evaluator's t<=0 guard blocks ALL periods at turn 0, so
         // every-n-turns is never met).
@@ -4058,17 +4081,31 @@ export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor)
  * debuffs: `'bomb'` draws on Bomb stacks and Echoing Burst accumulators, `'dot'` on Corrosion,
  * Inferno and generic DoT stacks only (owner ruling R112), then takes the newest. `actor` absent
  * (a hand-built ctx without an actor reader) → named debuffs only. Returns how many were removed.
+ *
+ * `keep` ("cleanses all but 5 debuffs") turns the amount into `held - keep`, where `held` counts
+ * every debuff the holder carries, unremovable ones included; the pool still offers removable
+ * debuffs only, so an unremovable debuff stays and the holder may end above `keep`.
  */
 export function cleanseDebuffs(
     statusEngine: StatusEngine,
     actorId: string,
     actor: CombatActor | undefined,
     count: number | 'all',
-    debuffType?: 'bomb' | 'dot'
+    debuffType?: 'bomb' | 'dot',
+    keep?: number
 ): number {
+    const amount =
+        keep === undefined
+            ? count
+            : Math.max(
+                  0,
+                  (actor
+                      ? actorDebuffCount(statusEngine, actor)
+                      : ownerDebuffCount(statusEngine, actorId)) - keep
+              );
     return statusEngine.cleanse(
         actorId,
-        count,
+        amount,
         actor ? dotCleanseCandidates(actor, debuffType) : [],
         debuffType === undefined
     );
@@ -5168,6 +5205,55 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
     };
 }
 
+/**
+ * A row attack on the owner's own row (`own-row-front-enemy`, the Torpedo's blast): the front-most
+ * living opposing actor there takes the full hit, every other one in the row half of it, each only
+ * if it passes `perVictimOk`. With `selfDestruct` the owner then destroys itself, whether or not
+ * the row held anyone.
+ */
+function resolveOwnRowBlast(
+    intent: Intent,
+    ctx: IntentExecContext,
+    cfg: Extract<Ability['config'], { type: 'damage' }>,
+    allowDeadOwner: boolean,
+    perVictimOk: (victimId: string) => boolean
+): void {
+    const [primary, ...covered] = ctx.ownRowEnemiesFor?.(intent.ownerId) ?? [];
+    const victims = primary === undefined ? [] : [primary, ...covered];
+    for (const victimId of victims) {
+        // The ability's enemy-state conditions are judged per struck ship.
+        if (!perVictimOk(victimId)) continue;
+        const outcome = ctx.applyReactiveDamage?.(
+            intent.ownerId,
+            victimId,
+            intent.ability.id,
+            cfg.multiplier,
+            cfg.hits ?? 1,
+            cfg.noCrit ?? false,
+            undefined,
+            undefined,
+            allowDeadOwner,
+            {
+                ignoresDefense: cfg.ignoresDefense === true,
+                ...(victimId === primary ? {} : { splash: true }),
+            }
+        );
+        emitReactiveDamageLog(ctx, intent.ownerId, victimId, outcome);
+    }
+    if (cfg.selfDestruct) ctx.selfDestruct?.(intent.ownerId);
+}
+
+/** How a reactive damage proc is thrown, beyond its multiplier (`applyReactiveDamage`).
+ *  `flatBasis`: a flat copy of an already-resolved figure (Demolisher's Bomb splash).
+ *  `ignoresDefense`: the victim's Defense term is bypassed. `splash`: the victim is covered by a
+ *  row/AoE footprint rather than its anchor, so the hit lands at half damage and is not a
+ *  primary-target hit (`roleScaleFor` in positionalApply.ts is the cast-path rule). */
+export interface ReactiveDamageOpts {
+    ignoresDefense?: boolean;
+    flatBasis?: number;
+    splash?: boolean;
+}
+
 /** What a reactive damage hit reports back: the hit as thrown (`dealt`) and what its victim took
  *  (`taken` — after its incoming-block proc and any Protection split). The log row reads `taken`
  *  when present. */
@@ -5358,7 +5444,7 @@ function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext)
 type SelectorChargeKind = `selector-${EnemySelectorKind}`;
 
 type ChargeTargetKind =
-    SelectorChargeKind | 'enemy-bulk' | 'lowest-hp-ally' | 'ally-bulk' | 'owner-gain';
+    SelectorChargeKind | 'enemy-bulk' | 'lowest-hp-ally' | 'ally-bulk' | 'owner-gain' | 'none';
 
 /**
  * #407: the VALUE side of the same derivation — the map's three selector entries are computed from
@@ -5401,6 +5487,10 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     'enemy-most-buffs': selectorChargeKind('enemy-most-buffs'),
     'enemy-highest-attack': selectorChargeKind('enemy-highest-attack'),
     'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
+    'enemy-highest-defense': selectorChargeKind('enemy-highest-defense'),
+    // The target exists for the blast alone; a charge clause on it is a no-op, never an
+    // owner-only gain.
+    'own-row-front-enemy': 'none',
 };
 
 /** `Intent.eventSeq` bookkeeping: the number each emitted event object got, the next number to
@@ -5676,13 +5766,16 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // text reaches this arm today.
             case 'selector-most-buffs':
             case 'selector-highest-attack':
-            case 'selector-highest-speed': {
+            case 'selector-highest-speed':
+            case 'selector-highest-defense': {
                 const selectedId =
                     chargeKind === 'selector-most-buffs'
                         ? ctx.enemyWithMostBuffs?.(intent.ownerId)
                         : chargeKind === 'selector-highest-attack'
                           ? ctx.enemyWithHighestAttack?.(intent.ownerId)
-                          : ctx.enemyWithHighestSpeed?.(intent.ownerId);
+                          : chargeKind === 'selector-highest-defense'
+                            ? ctx.enemyWithHighestDefense?.(intent.ownerId)
+                            : ctx.enemyWithHighestSpeed?.(intent.ownerId);
                 // Unresolved (no living candidate, or the delegate is absent) → NO-OP, matching
                 // the purge branch. It must NEVER fall through to the
                 // owner-gain arm below: that would turn "remove a charge from one enemy" into "give
@@ -5754,6 +5847,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // `CHARGE_TARGET_KIND` doc comment for why these fall to the owner-only gain below.
             case 'owner-gain':
                 break;
+            case 'none':
+                return;
             default: {
                 const exhaustive: never = chargeKind;
                 throw new Error(
@@ -6112,13 +6207,17 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // without it Warden's "when this Unit inflicts a Debuff, it inflicts Out. Damage Down II"
         // never reaches the real enemy. Same priority order the reactive `damage` branch uses:
         // counterTargetId first, debuffVictimId second.
+        const selectsOwnTarget =
+            intent.ability.target === 'enemy-highest-attack' ||
+            intent.ability.target === 'enemy-highest-defense';
         const counterTargetId =
             intent.ability.target === 'enemy-highest-attack'
                 ? ctx.enemyWithHighestAttack?.(intent.ownerId)
-                : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.debuffVictimId);
-        // No living highest-attack enemy → no-op (don't fall back to the default enemy).
-        if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined)
-            return;
+                : intent.ability.target === 'enemy-highest-defense'
+                  ? ctx.enemyWithHighestDefense?.(intent.ownerId)
+                  : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.debuffVictimId);
+        // No living selected enemy → no-op (don't fall back to the default enemy).
+        if (selectsOwnTarget && counterTargetId === undefined) return;
         // Amartya's recipient-targeted repair reaction fans the debuff out to
         // EVERY repaired enemy from the triggering heal-performed event ("that defender"
         // distributes across a multi-target heal) — mirrors the buff branch's repairedRecipientIds
@@ -6146,8 +6245,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                   ? intent.eventCtx?.victimId !== undefined
                       ? (ctx.adjacentOpposingIdsFor?.(intent.eventCtx.victimId) ?? [])
                       : []
-                  : intent.ability.target !== 'enemy-highest-attack' &&
-                      intent.eventCtx?.critVictimIds !== undefined
+                  : !selectsOwnTarget && intent.eventCtx?.critVictimIds !== undefined
                     ? intent.eventCtx.critVictimIds
                     : [counterTargetId];
         // The recipient's role, lifted off the global gate by `liftsEnemyRoleGate` (Amartya's
@@ -6213,7 +6311,11 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const blockDebuffPending = (): boolean =>
                 blockDebuffPendingOn(ctx.pendingBlockDebuffGrants, debuffTargetId);
             const blockedByImmunity =
-                targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId) || blockDebuffPending();
+                targetCarriesBlockDebuff(
+                    ctx.statusEngine,
+                    debuffTargetId,
+                    ctx.actorById?.(debuffTargetId)
+                ) || blockDebuffPending();
             // #413: `cfg.application` is the sole input `owner.landsTimedEnemyApplication` uses to
             // pick its arm: `'apply'` resolves on affinity and draws nothing, anything else calls
             // `debuffLandingGate`. So this reads the arm choice rather than re-deciding the
@@ -7257,7 +7359,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 rid,
                 ctx.actorById?.(rid),
                 count,
-                cfg.debuffType
+                cfg.debuffType,
+                cfg.keep
             );
             if (n > 0) cleansePerTarget.push({ targetId: rid, count: n });
             removed += n;
@@ -7440,6 +7543,16 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // a future ability combines them, extract the selector chain into a pure resolver and gate on
         // it before these two lines — and re-pin the golden boards, since that moves an RNG draw.
         if (!passesOncePerRoundGate(intent, ctx)) return;
+        if (intent.ability.target === 'own-row-front-enemy') {
+            resolveOwnRowBlast(
+                intent,
+                ctx,
+                cfg,
+                deadOwnerMayResolve(owner.actor, intent),
+                perVictimOk
+            );
+            return;
+        }
         // Reactive direct-damage proc (Grif's on-enemy-cleansed 75% no-crit, FrontLine's
         // on-enemy-charged-cast 80%, Judge/Chakara/Incinerator/Rhodium's
         // start-of-round/end-of-round passives) runs the SAME defense-mitigated,
@@ -7642,6 +7755,9 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // As in the debuff branch — re-check against the real routed target.
             if (!perVictimOk(targetId)) continue;
             if (!victimRoleMatches(roleConditions, targetId, ctx)) continue;
+            // A purge-immune ship is never purged (`CombatActor.purgeImmune`), and gets no
+            // attempt row either.
+            if (ctx.actorById?.(targetId)?.purgeImmune === true) continue;
             // A purge lands like an 'apply' debuff: nothing at an affinity disadvantage.
             // An `alwaysLandsDebuffs` owner purges whatever the matchup (`landsDespiteAffinity`).
             const purger = ctx.actorById?.(intent.ownerId);

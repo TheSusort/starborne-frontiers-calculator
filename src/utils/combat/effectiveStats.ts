@@ -507,13 +507,21 @@ export function effectiveDamageStatsOf(args: {
 
 /** Whether a reactive proc can answer `cond` for its owner's passive damage modifiers: the
  *  engine supplies each reading live at the hit (`reactivePassiveOutgoingPct`) — the
- *  destroyed-enemy count, and the VICTIM's debuff names for a name-gated `enemy-debuff`
- *  ("to enemies afflicted with Inferno"). A modifier gated on anything else is left out, never
- *  folded against a guessed reading; `reactiveOutgoingModifierSubjects.test.ts` lists the corpus
- *  ships this leaves out. */
+ *  destroyed-enemy count, the VICTIM's debuff names for a name-gated `enemy-debuff`
+ *  ("to enemies afflicted with Inferno"), and the VICTIM's role class for `enemy-type`
+ *  ("100% more direct damage to Defenders"). A modifier gated on anything else is left out, never
+ *  folded against a guessed reading.
+ *
+ *  `enemy-type` is folded for every ship with such a passive modifier, including a gear or implant
+ *  damage proc of a ship whose refit passive reads "deals 30% more damage when hitting a
+ *  defender" (Zeolite): that passive applies to its reactive procs (owner ruling 2026-11-16).
+ *  `reactiveOutgoingModifierSubjects.test.ts` censuses only ships whose KIT holds a reactive
+ *  damage ability, so it does not enumerate equipment procs; `zeoliteDefenderProc.test.ts` pins
+ *  that case. */
 export function reactiveHitAnswers(cond: Ability['conditions'][number]): boolean {
     return (
         cond.subject === 'enemy-destroyed' ||
+        cond.subject === 'enemy-type' ||
         (cond.subject === 'enemy-debuff' && cond.buffName !== undefined)
     );
 }

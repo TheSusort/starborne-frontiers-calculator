@@ -34,11 +34,14 @@ export function controlImmunityBlocks(buffName: string, effects?: ParsedBuffEffe
     return (effects?.speed ?? dataSpeedByName.get(buffName) ?? 0) < 0;
 }
 
-/** Whether `target` never receives `buffName` (see {@link controlImmunityBlocks}). */
+/** Whether `target` never receives `buffName`: a `debuffImmune` target receives no debuff at all
+ *  (`CombatActor.debuffImmune`); a `controlImmune` one never receives the statuses
+ *  {@link controlImmunityBlocks} names. */
 export function immuneToEnemyStatus(
-    target: { controlImmune?: boolean } | undefined,
+    target: { controlImmune?: boolean; debuffImmune?: boolean } | undefined,
     buffName: string,
     effects?: ParsedBuffEffects
 ): boolean {
+    if (target?.debuffImmune === true) return true;
     return target?.controlImmune === true && controlImmunityBlocks(buffName, effects);
 }

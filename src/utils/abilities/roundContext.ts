@@ -121,6 +121,9 @@ export function buildRoundContext(state: {
     firstActivator?: boolean;
     /** True when the acting unit is the sole living actor on its side. Default false. */
     lastStanding?: boolean;
+    /** True when the acting unit is the front-most living unit of its side in its row. Default
+     *  false. */
+    frontOfRow?: boolean;
     /** The condition owner's own-turn counter. Default 0 (DPS-assumption: inert for
      *  period>=2 conditions). Populated live by the engine drain context. */
     turnsTaken?: number;
@@ -259,6 +262,7 @@ export function buildRoundContext(state: {
         wasHitThisRound: state.wasHitThisRound ?? false,
         firstActivator: state.firstActivator ?? false,
         isLastStanding: state.lastStanding ?? false,
+        isFrontOfRow: state.frontOfRow ?? false,
         turnsTaken: state.turnsTaken ?? 0,
         stealthedEnemyCount: state.stealthedEnemyCount ?? 0,
         shieldedAllyCount: state.shieldedAllyCount ?? 0,

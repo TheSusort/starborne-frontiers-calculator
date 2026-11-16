@@ -3,7 +3,8 @@
  * Thresh (B4) at their planner final stats, against Fenri Lv32, against Mamma Maglienza Lv32
  * with her three Capos, against General Colosso Lv32 with his three Major Grands (that team,
  * Los alone, and Graphite with Asphyxiator), and against Eelun Naphula Lv32 with her four
- * escorts (Graphite alone, and Grif, Liberator, Graphite, Los and Thresh). Each pin is a hit read
+ * escorts (Graphite alone, and Grif, Liberator, Graphite, Los and Thresh), and against Abyssal
+ * Fenri Lv33 with his two Torpedoes (two teams, each with a squad leader). Each pin is a hit read
  * off the in-game combat log.
  * The Fenri block checks the harness itself (Fenri's stats were fitted in an earlier fight); the
  * other blocks check the encounter's fitted stats and targeting.
@@ -11,7 +12,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { buildTeam } from '../buildTeam';
 import { encounterBoard } from '../bossBoard';
-import { simulateBattle, type BattlePlacement } from '../../calculators/battleSimulator';
+import {
+    simulateBattle,
+    type BattlePlacement,
+    type BattleSimulationInput,
+} from '../../calculators/battleSimulator';
 import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { bossShip } from '../../../constants/bountyBosses';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
@@ -156,6 +161,42 @@ const FLEET: Record<string, FleetShip> = {
             crit: 97,
             critDamage: 128,
             speed: 164.95,
+        },
+    },
+    // Hayyan and Sentinel: planner final stats read 2026-11-16 (`starborne` MCP, get_my_fleet,
+    // main profile), when the ships above were re-read and still matched. Hayyan's heal
+    // modifier is part of her planner stats.
+    Hayyan: {
+        position: 'T1',
+        affinity: 'electric',
+        type: 'SUPPORTER',
+        refits: 6,
+        stats: {
+            hp: 69978.5,
+            attack: 3209.9,
+            defence: 4502.6,
+            hacking: 135.5,
+            security: 134.65,
+            crit: 105,
+            critDamage: 174,
+            speed: 104.55,
+            healModifier: 40,
+        },
+    },
+    Sentinel: {
+        position: 'M3',
+        affinity: 'thermal',
+        type: 'SUPPORTER',
+        refits: 5,
+        stats: {
+            hp: 35541.7,
+            attack: 8945.8,
+            defence: 4933.9,
+            hacking: 105,
+            security: 118.3,
+            crit: 63,
+            critDamage: 52,
+            speed: 305.14,
         },
     },
 };
@@ -845,4 +886,229 @@ describe('replay: the owner attack team against Eelun Naphula Lv32', () => {
         for (const ship of last.ships.filter((s) => !enemyIds.has(s.actorId)))
             expect(ship.hpPct).toBe(100);
     });
+});
+
+const fenri33Fight = (
+    playerTeam: BattlePlacement[],
+    playerSquadLeader: BattleSimulationInput['playerSquadLeader'],
+    rounds: number
+) =>
+    simulateBattle(
+        {
+            playerTeam,
+            enemyTeam: buildTeam(encounterBoard('fenri', 33)!, deps),
+            rounds,
+            playerSquadLeader,
+        },
+        getGearPiece
+    );
+
+/** What a heal entry's repair on `targetId` would have been with room to land: the game shows
+ *  the full repair, the log splits it into landed `amount` and `overheal`. */
+const grossHeal = (entry: CombatLogEntry, targetId: string) => {
+    const t = entry.targets.find((x) => x.targetId === targetId);
+    return t === undefined ? undefined : (t.amount ?? 0) + (t.overheal ?? 0);
+};
+
+// Hayyan T1, Grif T4, Thresh B2, Judge B4 under Viper Lv3 (XAOC: Grif alone gets its +10% HP and
+// attack and +7.5% outgoing damage; every enemy loses 20 speed). Fenri's attack and defence were
+// fitted to this fight.
+describe('replay: Hayyan, Grif, Thresh and Judge against Abyssal Fenri Lv33 and his Torpedoes', () => {
+    // Seed 1: none of Fenri's hits crit, as in game, and both of his Stasis applications land.
+    setupKeyedRng(1);
+    const result = fenri33Fight(
+        teamOf({ Hayyan: 'T1', Grif: 'T4', Thresh: 'B2', Judge: 'B4' }),
+        { faction: 'XAOC', name: 'Viper', stage: 3 },
+        3
+    );
+    const entries = entriesOf(result);
+    const fenri = idOf(result, 'Abyssal Fenri Khaliriz');
+    const torpedoAt = (position: Position) =>
+        result.roster.find((r) => r.name === 'Torpedo' && r.position === position)!.actorId;
+    const inRound = (round: number) => entries.filter((e) => e.round === round);
+    const indexOf = (round: number, match: (entry: CombatLogEntry) => boolean) =>
+        inRound(round).findIndex(({ entry }) => match(entry));
+    const attackBy = (actorId: string, round: number) =>
+        inRound(round).find(({ entry }) => entry.kind === 'attack' && entry.actorId === actorId)
+            ?.entry;
+    const target = (entry: CombatLogEntry | undefined, name: string) =>
+        entry?.targets.find((t) => t.targetId === idOf(result, name));
+    const killedBy = (actorId: string, round: number) =>
+        inRound(round)
+            .filter(({ entry }) => entry.kind === 'death' && entry.targets[0]?.targetId === actorId)
+            .map(({ entry }) => nameOf(result, entry.actorId))
+            .sort();
+
+    it("Judge's opening active crits Fenri for 81,694 and Thresh's for 113,643", () => {
+        const judge = target(attackBy(idOf(result, 'Judge'), 1), 'Abyssal Fenri Khaliriz');
+        const thresh = target(attackBy(idOf(result, 'Thresh'), 1), 'Abyssal Fenri Khaliriz');
+        expect([judge?.didCrit, thresh?.didCrit]).toEqual([true, true]);
+        expectMeasured(judge?.amount, 81_694, TIGHT);
+        expectMeasured(thresh?.amount, 113_643, TIGHT);
+    });
+
+    it('Judge and Thresh both act before Fenri in round 1', () => {
+        const attackers = inRound(1)
+            .filter(({ entry }) => entry.kind === 'attack')
+            .map(({ entry }) => nameOf(result, entry.actorId));
+        expect(attackers.slice(0, 3)).toEqual(['Judge', 'Thresh', 'Abyssal Fenri Khaliriz']);
+    });
+
+    it("Hayyan's opening repair is 29,528 on each of the four ships", () => {
+        const heal = inRound(1).find(
+            ({ entry }) => entry.kind === 'heal' && entry.actorId === idOf(result, 'Hayyan')
+        )?.entry;
+        expect(heal).toBeDefined();
+        for (const name of ['Hayyan', 'Grif', 'Thresh', 'Judge'])
+            expectMeasured(grossHeal(heal!, idOf(result, name)), 29_528, TIGHT);
+    });
+
+    it("Fenri's round-1 active hits Judge for 61,977 and splashes Thresh for 29,660, killing both", () => {
+        const cast = attackBy(fenri, 1);
+        expect(cast?.slot).toBe('active');
+        const judge = target(cast, 'Judge');
+        const thresh = target(cast, 'Thresh');
+        expect(judge?.isPrimary).toBe(true);
+        expect([judge?.didCrit, thresh?.didCrit]).not.toContain(true);
+        expectMeasured(judge?.amount, 61_977, TIGHT);
+        expectMeasured(thresh?.amount, 29_660, TIGHT);
+        expect(killedBy(fenri, 1)).toEqual(['Judge', 'Thresh']);
+    });
+
+    // One action killing two ships repairs once (owner ruling 2026-11-16). The game showed it as a
+    // crit of 103,016 (12% of max HP at crit power 72); the sim's crit power is 71.
+    it("Fenri's double kill repairs him once, 12% of his max HP, and grants one Attack Up II", () => {
+        const repairs = inRound(1).filter(
+            ({ entry }) => entry.kind === 'heal' && entry.actorId === fenri
+        );
+        expect(repairs).toHaveLength(1);
+        const { entry } = repairs[0];
+        const crit = entry.targets[0]?.didCrit === true;
+        expect(grossHeal(entry, fenri)).toBeCloseTo(0.12 * 499_108 * (crit ? 1.71 : 1), 0);
+        const attackUp = inRound(1).filter(
+            ({ entry }) =>
+                entry.kind === 'buff' && entry.actorId === fenri && entry.note === 'Attack Up II'
+        );
+        expect(attackUp).toHaveLength(1);
+    });
+
+    it('at the end of round 1 Fenri puts Stasis on Grif, then the T4 Torpedo blasts Grif 43,623 and Hayyan 21,812', () => {
+        const t4 = torpedoAt('T4');
+        const stasis = indexOf(
+            1,
+            (e) =>
+                e.kind === 'debuff' &&
+                e.note === 'Stasis' &&
+                e.actorId === fenri &&
+                e.targets[0]?.targetId === idOf(result, 'Grif')
+        );
+        const blastAt = indexOf(1, (e) => e.kind === 'attack' && e.actorId === t4);
+        expect(stasis).toBeGreaterThanOrEqual(0);
+        expect(blastAt).toBeGreaterThan(stasis);
+        const blast = hitsBy(result, 'Torpedo', 1);
+        const grif = blast.find((t) => t.targetId === idOf(result, 'Grif'));
+        const hayyan = blast.find((t) => t.targetId === idOf(result, 'Hayyan'));
+        expect(blast.every((t) => !t.didCrit)).toBe(true);
+        expectMeasured(grif?.amount, 43_623, TIGHT);
+        expectMeasured(hayyan?.amount, 21_812, TIGHT);
+        expect(inRound(1).some(({ entry }) => entry.kind === 'death' && entry.actorId === t4)).toBe(
+            true
+        );
+    });
+
+    // Grif's 43,598 planner HP would not survive the 43,623 blast; Viper's +10% HP does.
+    it("Fenri's round-2 active hits Grif for 62,898 and kills him", () => {
+        const cast = attackBy(fenri, 2);
+        expect(cast?.slot).toBe('active');
+        const grif = target(cast, 'Grif');
+        expect(grif?.didCrit).not.toBe(true);
+        expectMeasured(grif?.amount, 62_898, TIGHT);
+        expect(killedBy(fenri, 2)).toEqual(['Grif']);
+    });
+
+    it('at the end of round 2 Fenri puts Stasis on Hayyan, then the T2 Torpedo blasts her for 43,623', () => {
+        const t2 = torpedoAt('T2');
+        const hayyan = idOf(result, 'Hayyan');
+        const stasis = indexOf(
+            2,
+            (e) =>
+                e.kind === 'debuff' &&
+                e.note === 'Stasis' &&
+                e.actorId === fenri &&
+                e.targets[0]?.targetId === hayyan
+        );
+        const blastAt = indexOf(2, (e) => e.kind === 'attack' && e.actorId === t2);
+        expect(stasis).toBeGreaterThanOrEqual(0);
+        expect(blastAt).toBeGreaterThan(stasis);
+        const hit = attackBy(t2, 2)?.targets.find((t) => t.targetId === hayyan);
+        expect(hit?.didCrit).not.toBe(true);
+        expectMeasured(hit?.amount, 43_623, TIGHT);
+    });
+
+    // The T2 blast breaks the Stasis, so Hayyan keeps her round-3 turn.
+    it("Hayyan acts in round 3, then Fenri's charged hits her for 97,442", () => {
+        const hayyan = idOf(result, 'Hayyan');
+        const ownTurn = indexOf(3, (e) => e.actorId === hayyan && e.slot !== undefined);
+        const charged = indexOf(3, (e) => e.kind === 'attack' && e.actorId === fenri);
+        expect(ownTurn).toBeGreaterThanOrEqual(0);
+        expect(charged).toBeGreaterThan(ownTurn);
+        const cast = attackBy(fenri, 3);
+        expect(cast?.slot).toBe('charged');
+        const hit = cast?.targets.find((t) => t.targetId === hayyan);
+        expect(hit?.didCrit).not.toBe(true);
+        expectMeasured(hit?.amount, 97_442, TIGHT);
+    });
+
+    // The charged kills Hayyan, the last ship, so the fight ends there and nothing is re-armed.
+    it('the round-3 charged kills Hayyan and ends the fight', () => {
+        expect(killedBy(fenri, 3)).toEqual(['Hayyan']);
+        expect(result.outcome).toMatchObject({ winner: 'enemy', lastRound: 3 });
+    });
+
+    // In game the T2 blast broke Hayyan's Stasis and she then repaired herself 10,738 before her
+    // round-3 turn: her 4% "cleanses a debuff from an ally" repair at crit (69,978.5 x 4% x 1.40
+    // x 2.74), as if the break were her cleanse. The owner suspects a game bug; not modelled.
+    it.todo("Hayyan's Stasis breaking repairs her for 10,738");
+});
+
+// Grif, Sentinel, Asphyxiator, Judge and Thresh under Colonel Lv2 (Legion: Judge and Sentinel get
+// its +10% attack, +7.5% defence penetration and +7.5% attack per other living Legion ally). The
+// in-game layout is not recorded: this one puts Asphyxiator, Judge and Thresh in Sentinel's cone,
+// with Judge acting before Thresh, so Thresh's Intrusion reads Judge's Concentrate Fire. These
+// pins corroborate the defence fitted in the fight above.
+describe('replay: Grif, Sentinel, Asphyxiator, Judge and Thresh against Abyssal Fenri Lv33', () => {
+    setupKeyedRng(1);
+    const result = fenri33Fight(
+        teamOf({ Grif: 'T3', Sentinel: 'M3', Asphyxiator: 'M4', Judge: 'B2', Thresh: 'M2' }),
+        { faction: 'FRONTIER_LEGION', name: 'Colonel', stage: 2 },
+        1
+    );
+    const fenri = idOf(result, 'Abyssal Fenri Khaliriz');
+
+    it("Asphyxiator's opening active crits Fenri for 52,012 under his own Defense Down III", () => {
+        expect(grantedBeforeAttack(result, 'Attack Up III', 'Asphyxiator', 'Asphyxiator', 1)).toBe(
+            true
+        );
+        const hit = hitsBy(result, 'Asphyxiator', 1).find((t) => t.targetId === fenri);
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 52_012, TIGHT);
+    });
+
+    it("Sentinel's reaction hits Fenri for 4,750", () => {
+        const hits = hitsBy(result, 'Sentinel', 1).filter((t) => t.targetId === fenri);
+        expect(hits.length).toBeGreaterThan(0);
+        for (const hit of hits) expectMeasured(hit.amount, 4_750, TIGHT);
+    });
+
+    it("Thresh's active crits Fenri for 265,009 and destroys him", () => {
+        const hit = hitsBy(result, 'Thresh', 1).find((t) => t.targetId === fenri);
+        expect(hit?.didCrit).toBe(true);
+        expectMeasured(hit?.amount, 265_009, TIGHT);
+        expect(result.outcome).toMatchObject({ winner: 'player', lastRound: 1 });
+    });
+
+    // The turn order matches the game (Grif, Sentinel, Asphyxiator, Judge, Thresh, all in round
+    // 1), yet Judge's active reads 255,673, 5.2% low: about 5.4 more defence penetration than the
+    // sim gives him would close it.
+    it.todo("Judge's crit on Fenri is 269,777");
 });

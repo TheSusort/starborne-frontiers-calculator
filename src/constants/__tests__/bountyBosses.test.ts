@@ -210,6 +210,34 @@ describe('npcShip', () => {
     });
 });
 
+describe('Abyssal Fenri Khaliriz', () => {
+    it('builds at level 33 from its own kit and stats', () => {
+        const ship = bossShip('fenri', 33)!;
+        expect(ship.id).toBe('boss:fenri:33');
+        expect(ship.name).toBe('Abyssal Fenri Khaliriz');
+        expect(ship.affinity).toBe('antimatter');
+        expect(ship.chargeSkillCharge).toBe(2);
+        expect(ship.baseStats).toMatchObject({ hp: 499108, speed: 130 });
+        expect(bossFootprint(ship)).toEqual(['M1', 'M2']);
+    });
+
+    it('leaves the level 32 kit and name untouched', () => {
+        const ship = bossShip('fenri', 32)!;
+        expect(ship.name).toBe('Fenri Khaliriz');
+        expect(ship.activeSkillText).toContain('350% damage');
+    });
+
+    it('places a torpedo at T2 and T4, and the torpedo resolves', () => {
+        const encounter = BOUNTY_ENCOUNTERS.find((e) => e.bountyId === 'fenri' && e.level === 33)!;
+        expect(encounter.adds).toEqual([
+            { addId: 'torpedo', position: 'T2' },
+            { addId: 'torpedo', position: 'T4' },
+        ]);
+        expect(parseNpcShipId('npc:torpedo:135')).toEqual({ id: 'torpedo', level: 135 });
+        expect(npcShip('torpedo', 135)).not.toBeNull();
+    });
+});
+
 describe('BOUNTY_ENCOUNTERS', () => {
     it('lists Fenri without adds and Mamma with three Capos', () => {
         const fenri = BOUNTY_ENCOUNTERS.find((e) => e.bountyId === 'fenri' && e.level === 32)!;

@@ -3078,7 +3078,39 @@ export function detectAllyDebuffedTrigger(
 
 // "at the end of the round, … purges …" — Rhodium end-of-round purge. Position-scoped.
 // Verified against RAW CSV: 'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs …'
-const END_OF_ROUND_RE = /\bat\s+the\s+end\s+of\s+the\s+round\b/i;
+// "of a round" is the Torpedo's wording of the same trigger.
+const END_OF_ROUND_RE = /\bat\s+the\s+end\s+of\s+(?:the|a)\s+round\b/i;
+
+// Abyssal Fenri's charged "… and summons two torpedoes in the top row". Narrow to that wording:
+// no ship in docs/ship-skills.csv summons anything.
+const SUMMON_TORPEDOES_RE = /\bsummons\s+two\s+torpedoes\s+in\s+the\s+top\s+row\b/i;
+
+/** The bounty add a skill text summons and where the clause starts, or `null`. */
+export function parseSummon(
+    text: string | null | undefined
+): { addId: 'torpedo'; pos: number } | null {
+    if (!text) return null;
+    const m = SUMMON_TORPEDOES_RE.exec(text);
+    return m ? { addId: 'torpedo', pos: m.index } : null;
+}
+
+// The Torpedo's "if this Unit is the first in the row" gate and its "it destroys itself" rider.
+const FIRST_IN_ROW_RE = /\bif\s+this\s+unit\s+is\s+the\s+first\s+in\s+the\s+row\b/i;
+const DESTROYS_ITSELF_RE = /\bdestroys\s+itself\b/i;
+
+/** True when `anchorPos` sits in a sentence gated on the owner being first in its row. */
+export function parseFirstInRowGate(text: string | null | undefined, anchorPos: number): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && FIRST_IN_ROW_RE.test(sentence);
+}
+
+/** True when `anchorPos` sits in a sentence where the owner "destroys itself" to deal it. */
+export function parseSelfDestruct(text: string | null | undefined, anchorPos: number): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && DESTROYS_ITSELF_RE.test(sentence);
+}
 
 /**
  * Returns 'end-of-round' when `anchorPos` falls inside the sentence carrying the
@@ -3339,6 +3371,23 @@ export function parseHighestAttackEnemyTarget(
     if (!text) return false;
     const sentence = rawSentenceAround(text, anchorPos);
     return sentence !== undefined && HIGHEST_ATTACK_ENEMY_RE.test(sentence);
+}
+
+// "the enemy with the highest Defense" — the enemy-highest-defense target axis. Names the enemy and
+// the stat together, like HIGHEST_ATTACK_ENEMY_RE.
+const HIGHEST_DEFENSE_ENEMY_RE = /\benemy\s+with\s+the\s+highest\s+defen[cs]e\b/i;
+
+/**
+ * Returns true when `anchorPos` falls inside a sentence naming the highest-Defense enemy
+ * (HIGHEST_DEFENSE_ENEMY_RE); otherwise false. Position-scoped on the RAW text.
+ */
+export function parseHighestDefenseEnemyTarget(
+    text: string | null | undefined,
+    anchorPos: number
+): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && HIGHEST_DEFENSE_ENEMY_RE.test(sentence);
 }
 
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
@@ -4001,7 +4050,7 @@ export function parseNoCrit(text: string | null | undefined): boolean {
 // Ship-kit W5 (Demolisher bomb-splash): "This damage ignores Defense ..." — the splash damage
 // bypasses the target's Defense mitigation term entirely. Boolean only; the flag rides the
 // damage config (ignoresDefense) and is consumed by the REACTIVE damage executor (Task C3).
-const IGNORES_DEFENSE_RE = /ignores?\s+defense/i;
+const IGNORES_DEFENSE_RE = /(?:ignores?|bypass(?:es)?)\s+(?:enemy\s+)?defen[cs]e/i;
 /** Whether a skill's damage clause ignores the target's Defense (Demolisher bomb-splash).
  *  Reference data: docs/ship-skills.csv. */
 export function parseIgnoresDefense(text: string | null | undefined): boolean {
@@ -4091,9 +4140,41 @@ export function parseControlImmune(text: string | null | undefined): boolean {
 /** True iff this skill text declares the unit is immune to damage over time effects ("immune to
  *  Control, damage over time effects and Charge Loss effects", General Colosso). A reduction of DoT
  *  damage ("takes 50% less damage from DoTs") is not an immunity. */
-const DOT_IMMUNE_RE = /\bimmune to\b[^.]*?\bdamage over time effects\b/i;
+// The scan stops at "takes" so an immunity clause never reaches a following "takes N% less
+// damage from damage over time effects" clause.
+const DOT_IMMUNE_RE = /\bimmune to\b(?:(?!\btakes\b)[^.])*?\bdamage over time effects\b/i;
 export function parseDotImmune(text: string | null | undefined): boolean {
     return !!text && DOT_IMMUNE_RE.test(stripUnitTags(text));
+}
+
+/** Which of damage, debuffs and purge a skill text declares the unit immune to. Reads a list
+ *  right after "immune to" ("This Unit is immune to damage, debuffs, and purge."), so "immune to
+ *  Control debuffs" sets none of them: `debuffs` is every debuff, Control-only is
+ *  {@link parseControlImmune}. */
+const IMMUNITY_LIST_RE = /\bimmune to\s+([^.]*)/gi;
+export function parseStaticImmunities(text: string | null | undefined): {
+    damage: boolean;
+    debuffs: boolean;
+    purge: boolean;
+} {
+    const out = { damage: false, debuffs: false, purge: false };
+    if (!text) return out;
+    for (const m of stripUnitTags(text).matchAll(IMMUNITY_LIST_RE)) {
+        const items = m[1]
+            .split(/\s*,\s*(?:and\s+)?|\s+and\s+/i)
+            .map((x) => x.trim().toLowerCase());
+        if (items.includes('damage')) out.damage = true;
+        if (items.includes('debuffs')) out.debuffs = true;
+        if (items.includes('purge')) out.purge = true;
+    }
+    return out;
+}
+
+/** True iff this skill text says "ignores all targeting changing effects" (Torpedo's blast):
+ *  Taunt, Provoke, Stealth and Concentrate Fire all stop steering that attack. */
+const IGNORES_ALL_TARGETING_RE = /\bignores all targeting changing effects\b/i;
+export function parseIgnoresAllTargetingEffects(text: string | null | undefined): boolean {
+    return !!text && IGNORES_ALL_TARGETING_RE.test(stripUnitTags(text));
 }
 
 /** True iff this skill text says the unit "has infinite Hacking" (Mamma Maglienza): its debuffs
@@ -5904,6 +5985,7 @@ export function parseCleanse(text: string | null | undefined): {
     explicitTarget: boolean;
     debuffType?: 'bomb' | 'dot';
     countScaling?: { stat: 'critDamage'; per: number };
+    keep?: number;
 }[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -5913,6 +5995,7 @@ export function parseCleanse(text: string | null | undefined): {
         explicitTarget: boolean;
         debuffType?: 'bomb' | 'dot';
         countScaling?: { stat: 'critDamage'; per: number };
+        keep?: number;
     }[] = [];
     CLEANSE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -5945,15 +6028,42 @@ export function parseCleanse(text: string | null | undefined): {
             scaleMatch && typeof count === 'number'
                 ? { stat: 'critDamage' as const, per: parseInt(scaleMatch[1], 10) }
                 : undefined;
+        // "cleanses all but 5 debuffs": the cleanse leaves that many held rather than removing a
+        // fixed number.
+        const keepMatch = count === 'all' ? CLEANSE_KEEP_RE.exec(afterCount) : null;
         results.push({
             count,
             target,
             explicitTarget,
             ...(debuffType ? { debuffType } : {}),
             ...(countScaling ? { countScaling } : {}),
+            ...(keepMatch ? { keep: parseInt(keepMatch[1], 10) } : {}),
         });
     }
     return results;
+}
+
+// The "but N" that follows "cleanses all" (matched against the text after the count word).
+const CLEANSE_KEEP_RE = /^\s+but\s+(\d+)\b/i;
+
+// "When debuffed and having N or more debuffs" — a self reaction gated on the debuffs held after the
+// landing. Narrow to the two-part phrase so the bare "when debuffed" of other text is untouched.
+const WHEN_DEBUFFED_HAVING_RE = /\bwhen\s+debuffed\s+and\s+having\b/i;
+
+/**
+ * The count gate of a "When debuffed and having N or more debuffs, …" reaction whose sentence
+ * holds `anchorPos`, or null when the sentence is not that shape. The caller maps the reaction to
+ * the `on-debuffed` trigger and the returned condition (self-debuff gte N).
+ */
+export function parseWhenDebuffedHavingGate(
+    text: string | null | undefined,
+    anchorPos: number
+): Condition | null {
+    if (!text) return null;
+    const sentence = rawSentenceAround(text, anchorPos);
+    if (sentence === undefined || !WHEN_DEBUFFED_HAVING_RE.test(sentence)) return null;
+    const gate = countGateCondition(sentence);
+    return gate?.subject === 'self-debuff' ? gate : null;
 }
 
 /**

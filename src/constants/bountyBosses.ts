@@ -4,6 +4,15 @@ import type { BaseStats } from '../types/stats';
 import type { BountyId } from './bounties';
 import type { ShipTypeName } from './shipTypes';
 
+/** A boss's skills at one level, for bosses whose kit changes between levels. */
+export interface BountyBossKit {
+    name: string;
+    activeSkillText: string;
+    chargeSkillText: string;
+    chargeSkillCharge: number;
+    passiveSkillText: string;
+}
+
 export interface BountyBoss {
     id: BountyId;
     name: string;
@@ -19,6 +28,8 @@ export interface BountyBoss {
     chargeSkillText: string;
     chargeSkillCharge: number;
     passiveSkillText: string;
+    /** A level's own kit; a level without an entry uses the boss's fields above. */
+    kitByLevel?: Partial<Record<number, BountyBossKit>>;
     statsByLevel: Partial<Record<number, BaseStats>>;
 }
 
@@ -40,7 +51,46 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
         chargeSkillCharge: 2,
         passiveSkillText:
             'The Boss is immune to Control debuffs and Charge Loss effects and takes <unit-damage>50% less damage</unit-damage> from DoTs.<br />Every turn, the Boss gains <unit-skill>Pressing Onslaught</unit-skill>.<br />Whenever any enemy unit dies, the Boss <unit-damage>repairs 10%</unit-damage> of its MAX HP and gains <unit-skill>Attack Up II</unit-skill> for 2 turns.<br />Additionally, on kill, the Boss clears <unit-skill>Pressing Onslaught</unit-skill>.',
+        kitByLevel: {
+            33: {
+                name: 'Abyssal Fenri Khaliriz',
+                activeSkillText:
+                    'The Boss deals <unit-damage>400% damage</unit-damage> and inflicts <unit-skill>White Phosphorus II</unit-skill> for 3 turns.',
+                chargeSkillText:
+                    "The Boss deals <unit-damage>450% damage</unit-damage>, inflicts <unit-skill>White Phosphorus III</unit-skill> for 3 turns, and summons two torpedoes in the top row.<br />When the Boss's HP drops below 66%, the damage increases by 50%.<br />When the Boss's HP falls below 33%, <unit-skill>White Phosphorus III</unit-skill> duration increases to 4 turns.",
+                chargeSkillCharge: 2,
+                passiveSkillText:
+                    'The Boss is immune to Control debuffs and Charge Loss effects, takes <unit-damage>50% less damage</unit-damage> from damage over time effects and Bombs.<br />Every turn, the Boss gains <unit-skill>Pressing Onslaught</unit-skill>.<br />Whenever any enemy unit dies, the Boss <unit-damage>repairs 12%</unit-damage> of its Max HP and gains <unit-skill>Attack Up II</unit-skill> for 3 turns.<br />When debuffed and having 6 or more debuffs, the Boss <unit-aid>cleanses all but 5</unit-aid> debuffs.<br />At the end of the round, the Boss inflicts <unit-skill>Stasis</unit-skill> for 1 turn on the enemy with the highest Defense.',
+            },
+        },
         statsByLevel: {
+            33: {
+                hp: 499108,
+                // Attack and defence are fitted to the owner's fights (#519, replayed in
+                // bountyBossReplay.integration.test.ts). Attack is proven by agreement: one value
+                // fits his round-1 active on Judge (primary) and Thresh (splash), his round-2 hit
+                // on Grif (Pressing Onslaught x2, Attack Up II) and his round-3 charged on Hayyan
+                // (x3), each within 0.02%. Defence is proven by agreement between Judge (27%
+                // penetration) and Thresh (7% plus Intrusion) in one fight, both within 0.01%;
+                // Asphyxiator's and Thresh's crits under Defense Down III in another fight agree
+                // too, but only under an assumed board layout, and Judge's hit in that fight reads
+                // 5% low (unexplained).
+                attack: 29295,
+                defence: 15950,
+                // Placeholders carried from level 32. A crit repair at crit power 72 would match
+                // the 103,016 the game showed after his round-1 kills (59,893 x 1.72); 71 is kept
+                // until a second source confirms it.
+                hacking: 270,
+                security: 160,
+                crit: 22,
+                critDamage: 71,
+                speed: 130,
+                hpRegen: 0,
+                shield: 0,
+                shieldPenetration: 0,
+                defensePenetration: 0,
+                damageReduction: 0,
+            },
             32: {
                 hp: 327000,
                 // Attack and defence are fitted to measured in-game hits (#519): attack to his
@@ -198,6 +248,42 @@ export interface BountyAdd {
 }
 
 export const BOUNTY_ADDS: readonly BountyAdd[] = [
+    {
+        id: 'torpedo',
+        name: 'Torpedo',
+        affinity: 'antimatter',
+        type: 'ATTACKER',
+        imageKey: 'Torpedo',
+        level: 135,
+        activeTarget: '',
+        activePattern: '',
+        chargedTarget: '',
+        chargedPattern: '',
+        activeSkillText: '',
+        chargeSkillText: '',
+        chargeSkillCharge: 0,
+        passiveSkillText:
+            'This Unit is immune to damage, debuffs, and purge.<br />At the start of combat, it gains <unit-skill>Stealth</unit-skill> for 10 turns.<br />At the end of a round, if this Unit is the first in the row, it destroys itself to deal <unit-damage>150% damage</unit-damage> that cannot critically hit, bypasses enemy Defense, and ignores all targeting changing effects.<br />This Unit deals 100% more direct damage to Defenders.',
+        stats: {
+            hp: 38160,
+            // Single-source fit: the 43,623 primary blast on a non-Defender at 150%, defence
+            // bypassed, no crit. The 21,812 splash on a second ship agrees, but it is the same
+            // number halved, not an independent check.
+            attack: 29082,
+            // It takes no damage, so defence never reaches a hit.
+            defence: 0,
+            hacking: 270,
+            security: 160,
+            crit: 22,
+            critDamage: 32,
+            speed: 93,
+            hpRegen: 0,
+            shield: 0,
+            shieldPenetration: 0,
+            defensePenetration: 0,
+            damageReduction: 0,
+        },
+    },
     {
         id: 'capo',
         name: 'Capo',
@@ -388,6 +474,14 @@ export interface BountyEncounter {
 export const BOUNTY_ENCOUNTERS: readonly BountyEncounter[] = [
     { bountyId: 'fenri', level: 32, adds: [] },
     {
+        bountyId: 'fenri',
+        level: 33,
+        adds: [
+            { addId: 'torpedo', position: 'T2' },
+            { addId: 'torpedo', position: 'T4' },
+        ],
+    },
+    {
         bountyId: 'maglienza',
         level: 32,
         adds: [
@@ -478,9 +572,16 @@ export function bossShip(id: BountyId, level: number): Ship | null {
     const boss = BOUNTY_BOSSES.find((candidate) => candidate.id === id);
     const stats = boss?.statsByLevel[level];
     if (!boss || !stats) return null;
+    const kit: BountyBossKit = boss.kitByLevel?.[level] ?? {
+        name: boss.name,
+        activeSkillText: boss.activeSkillText,
+        chargeSkillText: boss.chargeSkillText,
+        chargeSkillCharge: boss.chargeSkillCharge,
+        passiveSkillText: boss.passiveSkillText,
+    };
     return {
         id: bossShipId(id, level),
-        name: boss.name,
+        name: kit.name,
         rarity: 'legendary',
         faction: '',
         type: boss.type,
@@ -490,10 +591,10 @@ export function bossShip(id: BountyId, level: number): Ship | null {
         implants: {},
         refits: [],
         level: 60,
-        activeSkillText: boss.activeSkillText,
-        chargeSkillText: boss.chargeSkillText,
-        chargeSkillCharge: boss.chargeSkillCharge,
-        firstPassiveSkillText: boss.passiveSkillText,
+        activeSkillText: kit.activeSkillText,
+        chargeSkillText: kit.chargeSkillText,
+        chargeSkillCharge: kit.chargeSkillCharge,
+        firstPassiveSkillText: kit.passiveSkillText,
         activeTarget: boss.activeTarget,
         activePattern: boss.activePattern,
         chargedTarget: boss.chargedTarget,

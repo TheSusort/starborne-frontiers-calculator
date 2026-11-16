@@ -130,4 +130,30 @@ describe('boss boards', () => {
         expect(restored.enemyBoard.M1?.ship.id).toBe('boss:fenri:32');
         expect(restored.dropped).toEqual([]);
     });
+
+    it('round-trips the Abyssal Fenri encounter: boss at M1, a torpedo on each add cell', async () => {
+        const { encounterBoard, withoutStrayBossCells } = await import('../bossBoard');
+        const { resolveShipId } = await import('../../ship/resolveShipId');
+        const board = encounterBoard('fenri', 33)!;
+        const setup = serializeSetup({ ...args, playerBoard: {}, enemyBoard: board });
+        expect(setup.enemyBoard).toEqual({
+            M1: { shipId: 'boss:fenri:33' },
+            T2: { shipId: 'npc:torpedo:135' },
+            T4: { shipId: 'npc:torpedo:135' },
+        });
+        const restored = deserializeSetup(setup, (id) =>
+            resolveShipId(id, {
+                getShipById: () => undefined,
+                units: [],
+                getAscensionStats: () => null,
+            })
+        );
+        expect(restored.dropped).toEqual([]);
+        expect(Object.keys(restored.enemyBoard).sort()).toEqual(['M1', 'T2', 'T4']);
+        expect(restored.enemyBoard.M1?.ship.id).toBe('boss:fenri:33');
+        expect(restored.enemyBoard.T2?.ship.id).toBe('npc:torpedo:135');
+        expect(restored.enemyBoard.T4?.ship.id).toBe('npc:torpedo:135');
+        // The loaded board survives the stray-cell sweep: the torpedoes are not on M2.
+        expect(withoutStrayBossCells(restored.enemyBoard)).toBe(restored.enemyBoard);
+    });
 });

@@ -57,6 +57,7 @@ function state(actorId: string, side: 'player' | 'enemy', damageTaken: number): 
         hpPct: 100,
         shieldPct: 0,
         alive: true,
+        deaths: 0,
         activeBuffs: [],
         activeDebuffs: [],
     };

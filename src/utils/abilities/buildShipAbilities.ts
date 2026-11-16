@@ -95,7 +95,12 @@ import {
     detectPurgeEnemyTypeCondition,
     detectMostBuffsTarget,
     parseHighestSpeedEnemyTarget,
+    parseFirstInRowGate,
+    parseSummon,
+    parseSelfDestruct,
     parseHighestAttackEnemyTarget,
+    parseHighestDefenseEnemyTarget,
+    parseWhenDebuffedHavingGate,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
     detectReactionEnemyRole,
@@ -110,6 +115,7 @@ import {
     detectAllyShieldDestroyedTrigger,
     detectCleanseOncePerRound,
     parseNoCrit,
+    parseIgnoresAllTargetingEffects,
     parseIgnoresDefense,
     parseIgnoresStealth,
     parseForceAffinityAdvantage,
@@ -117,6 +123,7 @@ import {
     parseChargeLossImmune,
     parseControlImmune,
     parseDotImmune,
+    parseStaticImmunities,
     parseInfiniteHacking,
     parseAlwaysCrits,
     detectIgnoresForcedTargeting,
@@ -880,6 +887,8 @@ interface ParsedIncomingDamageReduction {
     pct?: number;
     hpScaling?: { perUnit: number; cap: number };
     matchIndex: number;
+    /** The 'detonation' scope covers Bomb detonations only ("… and Bombs"). */
+    bombOnly?: true;
     /** #363 (Fuying): the reduction applies to ALLIES, not the carrier. Absent → 'self', which
      *  is what all six pre-existing phrasings (Iridium/Anemone/Panon/Wusheng/Tormenter/Voron)
      *  are. */
@@ -968,17 +977,19 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
 
     // "This Unit takes N% less damage from Damage over Time effects" (Voron) / "… from DoTs"
     // (Fenri) — a flat reduction against the unit's OWN incoming DoT ticks. "… from DoTs and
-    // Detonations" (Mamma Maglienza) adds the same reduction against detonations.
+    // Detonations" (Mamma Maglienza) adds the same reduction against detonations; "… and Bombs"
+    // (Abyssal Fenri) adds it against Bomb detonations only.
     const voronM =
-        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+(?:damage\s+over\s+time\s+effects|dots?\b)(\s+and\s+detonations\b)?/i.exec(
+        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+(?:damage\s+over\s+time\s+effects|dots?\b)(?:(\s+and\s+detonations\b)|(\s+and\s+bombs\b))?/i.exec(
             plain
         );
     if (voronM) {
         out.push({
-            scopes: voronM[2] ? ['dot', 'detonation'] : ['dot'],
+            scopes: voronM[2] || voronM[3] ? ['dot', 'detonation'] : ['dot'],
             condition: 'always',
             pct: parseFloat(voronM[1]),
             matchIndex: voronM.index,
+            ...(voronM[3] ? { bombOnly: true as const } : {}),
         });
     }
 
@@ -1156,7 +1167,9 @@ function markCountGateBranches(positioned: PositionedAbility[], text: string): v
  * owner-scoped only when every kill sentence in it names this Unit as the killer.
  *
  * Also stamps `triggerRequiresDirectDeath` on a reaction whose own sentence says "on kill"
- * (`killSentenceRequiresDirectDeath`).
+ * (`killSentenceRequiresDirectDeath`), and `oncePerRootCast: 'cast'` on one whose own sentence
+ * says "Whenever any enemy unit dies": it resolves once per action that kills, however many
+ * enemies that action destroys (Fenri's repair; owner ruling 2026-11-16, #519).
  */
 function markKillerScope(positioned: PositionedAbility[], text: string): void {
     const onKill = positioned.filter((p) => p.ability.trigger === 'on-enemy-destroyed');
@@ -1180,8 +1193,18 @@ function markKillerScope(positioned: PositionedAbility[], text: string): void {
             killSentenceRequiresDirectDeath(sentenceContaining(masked, p.pos))
         )
             p.ability.triggerRequiresDirectDeath = true;
+        if (
+            p.pos >= 0 &&
+            p.pos < masked.length &&
+            p.ability.oncePerRound === undefined &&
+            p.ability.oncePerRootCast === undefined &&
+            ANY_ENEMY_DIES_RE.test(sentenceContaining(masked, p.pos))
+        )
+            p.ability.oncePerRootCast = 'cast';
     }
 }
+
+const ANY_ENEMY_DIES_RE = /\bwhenever\s+any\s+enemy(?:\s+unit)?\s+dies\b/i;
 
 /**
  * Maps an existing-detector ConditionalCondition into a model Condition. The
@@ -1450,7 +1473,8 @@ function abilitiesFromText(
         // target's Defense mitigation term at the reactive damage executor (Task C3).
         const ignoresDefense = parseIgnoresDefense(text);
         // Ship-kit W6 (Lodolite/Rhodium/Selenite): "This attack can target Stealthed enemies".
-        const ignoresStealth = parseIgnoresStealth(text);
+        const ignoresAllTargeting = parseIgnoresAllTargetingEffects(text);
+        const ignoresStealth = parseIgnoresStealth(text) || ignoresAllTargeting;
         // Wusheng: "deals 220% damage with affinity advantage" forces this on-cast hit (and its
         // paired Stasis 'apply' landing) to affinity advantage at the engine seams.
         const forceAffinityAdvantage = parseForceAffinityAdvantage(text);
@@ -1492,6 +1516,9 @@ function abilitiesFromText(
                     ...(forceAffinityAdvantage ? { forceAffinityAdvantage: true } : {}),
                     ...(ignoresDefense ? { ignoresDefense: true } : {}),
                     ...(ignoresStealth ? { ignoresStealth: true } : {}),
+                    ...(ignoresAllTargeting
+                        ? { ignoresForcedTargeting: true, ignoresConcentrateFire: true }
+                        : {}),
                 },
                 autoFilled: true,
             },
@@ -1518,6 +1545,16 @@ function abilitiesFromText(
         // unaffected. out[0] is safe to mutate here: it is the base branch pushed first (see above).
         if (damageTrigger === 'start-of-round' && parseHighestSpeedEnemyTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-highest-speed';
+        }
+        // The Torpedo's end-of-round blast: "if this Unit is the first in the row, it destroys
+        // itself to deal …" is a row attack on its own row, gated live on standing first in it.
+        if (damageTrigger === 'end-of-round' && parseFirstInRowGate(text, damagePos)) {
+            const blast = out[0].ability;
+            blast.target = 'own-row-front-enemy';
+            blast.conditions = [{ subject: 'self-front-of-row', derivable: true }];
+            if (parseSelfDestruct(text, damagePos) && blast.config.type === 'damage') {
+                blast.config.selfDestruct = true;
+            }
         }
         // Ship-kit W5 (Demolisher bomb-splash): the reactive bomb-detonated damage clause
         // ("... deals 100% of the Bomb's damage to all adjacent enemies") re-targets from the
@@ -2790,7 +2827,10 @@ function abilitiesFromText(
         //  - self-death ("Upon dying, this Unit cleanses ...") -> on-destroyed, any cause.
         //  - a PASSIVE-slot cleanse whose sentence carries a direct-damage reaction phrase ->
         //    on-attacked. An active/charged cleanse is on-cast.
+        const debuffedGate =
+            slot === 'passive' ? parseWhenDebuffedHavingGate(text, cleansePos) : null;
         const reactiveTrigger =
+            (debuffedGate ? ('on-debuffed' as const) : undefined) ??
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??
             detectEveryTurnTrigger(text, cleansePos) ??
@@ -2817,12 +2857,13 @@ function abilitiesFromText(
                 type: 'cleanse',
                 target: cleanseTarget,
                 trigger: reactiveTrigger ?? 'on-cast',
-                conditions: [],
+                conditions: debuffedGate ? [debuffedGate] : [],
                 config: {
                     type: 'cleanse',
                     count: c.count,
                     ...(c.debuffType ? { debuffType: c.debuffType } : {}),
                     ...(c.countScaling ? { countScaling: c.countScaling } : {}),
+                    ...(c.keep !== undefined ? { keep: c.keep } : {}),
                 },
                 ...(cleanseOncePerRound ? { oncePerRound: true } : {}),
                 autoFilled: true,
@@ -3231,6 +3272,22 @@ function abilitiesFromText(
         });
     }
 
+    const summon = parseSummon(text);
+    if (summon) {
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'summon',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'summon', addId: summon.addId },
+                autoFilled: true,
+            },
+            pos: summon.pos,
+        });
+    }
+
     // Overload removal ("removes Overload"): the Marauder ships drop a named self-buff on a
     // reactive trigger. parseSelfBuffRemovals scopes the trigger to the removal clause's position;
     // the buff is cleared from ALL self stores (scope: 'all'). The removal fires unconditionally:
@@ -3339,6 +3396,9 @@ function abilitiesFromText(
                     config: {
                         type: 'incoming-reduction',
                         scope,
+                        ...(dir.bombOnly && scope === 'detonation'
+                            ? { bombOnly: true as const }
+                            : {}),
                         condition: dir.condition,
                         pct: dir.pct ?? 0,
                         critFamily: false,
@@ -4330,6 +4390,12 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 parseHighestAttackEnemyTarget(rowTextForThisBuff, buffPos)
             ) {
                 enemyTarget = 'enemy-highest-attack';
+            } else if (
+                rowTextForThisBuff &&
+                buffPos >= 0 &&
+                parseHighestDefenseEnemyTarget(rowTextForThisBuff, buffPos)
+            ) {
+                enemyTarget = 'enemy-highest-defense';
             }
         }
         mergeBuff(buff, enemyTarget);
@@ -4499,6 +4565,10 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
     const controlImmune = getShipSkillRows(ship).some((row) => parseControlImmune(row.text));
     const dotImmune = getShipSkillRows(ship).some((row) => parseDotImmune(row.text));
+    const staticImmunities = getShipSkillRows(ship).map((row) => parseStaticImmunities(row.text));
+    const damageImmune = staticImmunities.some((x) => x.damage);
+    const debuffImmune = staticImmunities.some((x) => x.debuffs);
+    const purgeImmune = staticImmunities.some((x) => x.purge);
     const alwaysLandsDebuffs = getShipSkillRows(ship).some((row) => parseInfiniteHacking(row.text));
     const alwaysCrits = getShipSkillRows(ship).some((row) => parseAlwaysCrits(row.text));
 
@@ -4518,6 +4588,9 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
         ...(controlImmune ? { controlImmune: true } : {}),
         ...(dotImmune ? { dotImmune: true } : {}),
+        ...(damageImmune ? { damageImmune: true } : {}),
+        ...(debuffImmune ? { debuffImmune: true } : {}),
+        ...(purgeImmune ? { purgeImmune: true } : {}),
         ...(alwaysLandsDebuffs ? { alwaysLandsDebuffs: true } : {}),
         ...(alwaysCrits ? { alwaysCrits: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),

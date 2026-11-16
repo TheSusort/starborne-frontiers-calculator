@@ -53,6 +53,7 @@ export function formatCombatLogText(
         // ` -> target` reads backwards here, so it gets its own "killed by" phrasing instead.
         if (e.kind === 'death') {
             text = `${indent}death ${label(e.actorId)}`;
+            if (e.note === 'self-destruct') text += ' self-destructs';
             if (e.targets.length > 0) {
                 text += ` killed by ${e.targets.map((t) => label(t.targetId)).join(', ')}`;
             }

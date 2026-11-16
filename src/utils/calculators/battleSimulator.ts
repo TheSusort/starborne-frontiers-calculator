@@ -228,7 +228,12 @@ export interface ShipRoundState {
      *  only for hand-built event streams that emit no snapshot. */
     hpPct: number;
     shieldPct: number;
+    /** Alive at the END of this round: its latest `ship-destroyed` / `ship-revived` up to this
+     *  round is a revive, or it has neither. */
     alive: boolean;
+    /** How many times this actor has been destroyed up to the end of this round. A summon can
+     *  re-arm a destroyed bounty add (`ship-revived`), so an actor can die more than once. */
+    deaths: number;
     activeBuffs: string[];
     /**
      * The debuffs (including DoT/bomb families, one chip per family) this actor still carries at
@@ -386,6 +391,7 @@ export const ASSEMBLED_EVENT_TYPES = [
     // no snapshot.
     'hp-snapshot',
     'ship-destroyed',
+    'ship-revived',
     'shield-stripped',
     'buff-applied',
     'buff-expired',
@@ -447,6 +453,7 @@ export const LOG_EVENT_TYPES = [
     'purge-performed',
     'steal-performed',
     'ship-destroyed',
+    'ship-revived',
     // Log-only reactive procs (drain-time damage/heal/cleanse that emit no
     // ability-performed/heal-performed/cleanse-performed). Every LOG-ONLY twin MUST be listed
     // here: `buildCombatLog` has a handler keyed on the type, but the bus only subscribes from
@@ -529,14 +536,19 @@ export function assembleBattleResult(args: {
         initialCharge = new Map<string, { charge: number; max: number }>(),
     } = args;
 
-    // Round of first destruction per actor (earliest ship-destroyed).
-    const destroyedAt = new Map<string, number>();
+    // Each actor's deaths and revives, in event order: `dead` is the state the event leaves.
+    const lifeEvents = new Map<string, { round: number; dead: boolean }[]>();
     for (const e of events) {
-        if (e.type === 'ship-destroyed') {
-            const prev = destroyedAt.get(e.actorId);
-            if (prev === undefined || e.round < prev) destroyedAt.set(e.actorId, e.round);
-        }
+        if (e.type !== 'ship-destroyed' && e.type !== 'ship-revived') continue;
+        const list = lifeEvents.get(e.actorId) ?? [];
+        list.push({ round: e.round, dead: e.type === 'ship-destroyed' });
+        lifeEvents.set(e.actorId, list);
     }
+    /** Dead at the end of `round`: the latest death or revive up to it is a death. */
+    const deadAtEndOf = (actorId: string, round: number): boolean =>
+        (lifeEvents.get(actorId) ?? []).filter((x) => x.round <= round).at(-1)?.dead === true;
+    const deathsThrough = (actorId: string, round: number): number =>
+        (lifeEvents.get(actorId) ?? []).filter((x) => x.dead && x.round <= round).length;
 
     // Running buff/debuff sets per actor, mutated as we walk rounds in order.
     const activeBuffs = new Map<string, Set<string>>();
@@ -721,8 +733,7 @@ export function assembleBattleResult(args: {
             const cumulativeRaw = (cumulativeTaken.get(entry.actorId) ?? 0) + taken;
             cumulativeTaken.set(entry.actorId, cumulativeRaw);
 
-            const destroyRound = destroyedAt.get(entry.actorId);
-            const alive = destroyRound === undefined || round < destroyRound;
+            const alive = !deadAtEndOf(entry.actorId, round);
 
             const shield = shieldThisRound[entry.actorId];
             const incoming = incomingThisRound[entry.actorId];
@@ -785,6 +796,7 @@ export function assembleBattleResult(args: {
                 shieldPct:
                     shield?.pool > 0 ? clampPct((100 * (shield?.pool ?? 0)) / entry.maxHp) : 0,
                 alive,
+                deaths: deathsThrough(entry.actorId, round),
                 activeBuffs: [...(activeBuffs.get(entry.actorId) ?? [])],
                 activeDebuffs: [...(activeDebuffs.get(entry.actorId) ?? [])],
             };
@@ -811,10 +823,7 @@ export function assembleBattleResult(args: {
         // boss actors is. A side counts as defeated only if it has >=1 member
         // ([].every(...) === true). Both sides are fielded (checked above), so this guard is
         // belt-and-braces. The engine's `sideIsWiped` applies the same rule.
-        const destroyedBy = (r: RosterEntry): boolean => {
-            const d = destroyedAt.get(r.actorId);
-            return d !== undefined && d <= round;
-        };
+        const destroyedBy = (r: RosterEntry): boolean => deadAtEndOf(r.actorId, round);
         const lostBoss = (side: 'player' | 'enemy'): boolean =>
             roster.some((r) => r.side === side && r.isBoss === true && destroyedBy(r));
         const isWiped = (side: 'player' | 'enemy'): boolean => {
@@ -1034,6 +1043,8 @@ interface PlacementPlan {
     position: Position;
     footprint: readonly Position[] | undefined;
     isBoss: boolean;
+    /** `Ship.id` — the engine's `CombatActor.shipId`. */
+    shipId: string;
     /** Raw `Ship.faction` — drives the pre-fight squad-leader aura's faction gating.
      *  Narrowed to the real union via `asFactionName` only at the engine-input boundary
      *  (`EnemyActorInput.faction` etc.), not here. */
@@ -1086,6 +1097,7 @@ function planPlacement(
         position: p.position,
         footprint: p.footprint,
         isBoss: p.isBoss === true,
+        shipId: p.ship.id,
         faction: p.ship.faction,
         role: p.ship.type,
         stats: resolveStats(p),
@@ -1260,6 +1272,7 @@ export function simulateBattle(
             position: plan.position,
             footprint: plan.footprint,
             isBoss: plan.isBoss,
+            shipId: plan.shipId,
             target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
             pattern: plan.targeting?.pattern,
             chargedPattern: plan.chargedTargeting?.pattern,
@@ -1339,6 +1352,7 @@ export function simulateBattle(
                 position: plan.position,
                 footprint: plan.footprint,
                 isBoss: plan.isBoss,
+                shipId: plan.shipId,
                 target: withStealthBypass(plan.targeting?.target, plan.activeIgnoresStealth),
                 pattern: plan.targeting?.pattern,
                 chargedPattern: plan.chargedTargeting?.pattern,
@@ -1403,6 +1417,7 @@ export function simulateBattle(
         position: focus.position,
         footprint: focus.footprint,
         isBoss: focus.isBoss,
+        shipId: focus.shipId,
         target: withStealthBypass(focus.targeting?.target, focus.activeIgnoresStealth),
         pattern: focus.targeting?.pattern,
         chargedPattern: focus.chargedTargeting?.pattern,

@@ -27,6 +27,9 @@ export type AbilityType =
     // (never a status). See AbilityConfig's 'stat-gain' variant.
     | 'stat-gain'
     | 'extra-action'
+    // A bounty boss's "summons two torpedoes in the top row" (Abyssal Fenri). See AbilityConfig's
+    // 'summon' variant.
+    | 'summon'
     | 'heal'
     | 'shield'
     | 'cleanse'
@@ -116,10 +119,17 @@ export type AbilityTarget =
     | 'enemy-most-buffs'
     | 'enemy-highest-attack' // D-PR14 Doomsayer: living opposing actor with the greatest
     //                           live effective attack (global selector, resolved at drain).
-    | 'enemy-highest-speed'; // SP-M M1 Task 6 Chakara: living opposing actor with the greatest
-//                           live effective speed (global selector, resolved LIVE at drain — no
-//                           memo needed, Chakara's co-located clause is a self-buff that never
-//                           changes an enemy's speed).
+    | 'enemy-highest-speed' // Chakara: living opposing actor with the greatest
+    //                           live effective speed (global selector, resolved LIVE at drain — no
+    //                           memo needed, Chakara's co-located clause is a self-buff that never
+    //                           changes an enemy's speed).
+    | 'enemy-highest-defense' // living opposing actor with the greatest live effective defence
+    //                           (global selector, resolved LIVE at drain; ties → board position).
+    | 'own-row-front-enemy'; // a row attack on the OWNER's own row (Torpedo): the front-most living
+//                           opposing actor in that row is the primary (full damage), every other
+//                           living opposing actor in the row takes 50%. An empty row is nobody —
+//                           it never falls through to another row. Read live at drain
+//                           (`IntentExecContext.ownRowEnemiesFor`).
 
 /** #363: the ally-scoped targets a recipient `factionFilter` can meaningfully narrow — the
  *  plural ally scopes plus plain `'ally'` (which resolves to the caster's whole footprint on the
@@ -548,6 +558,10 @@ export type ConditionSubject =
     // derivable:true — a derivable:false condition would always be met (evaluateConditions.ts:30).
     // Infrastructure for the Last Stand implant (wired in a later task).
     | 'last-standing'
+    // Binary gate: the owner is the front-most living unit of its own side in its row
+    // (Torpedo's "if this Unit is the first in the row"). Live-derived at drain
+    // (ConditionContext.isFrontOfRow); absent board → not met. derivable:true.
+    | 'self-front-of-row'
     // Binary periodic gate: met when the owner's own-turn counter satisfies
     // turnsTaken % period === (offset ?? 0). period/offset live on Condition.
     // Used by Chrono Reaver (every other/third turn). Always derivable:true.
@@ -756,6 +770,8 @@ export interface IncomingHitContext {
     /** True for a detonation: a Bomb or Echoing Burst burst, or a detonate-DoT burst. Only
      *  `scope: 'detonation'` reductions apply to it. Absent → a direct hit or a DoT tick. */
     detonation?: boolean;
+    /** True when the detonation is a Bomb (burst or splash). Only a `bombOnly` reduction needs it. */
+    bombDetonation?: boolean;
 }
 
 /**
@@ -883,6 +899,15 @@ export type AbilityConfig =
            *  (active vs charged slot) from this and the positional resolver skips the stealth
            *  filter. Absent → normal stealth filtering. */
           ignoresStealth?: boolean;
+          /** "ignores all targeting changing effects": this attack's target choice ignores Taunt
+           *  and Provoke. Set together with `ignoresStealth` and `ignoresConcentrateFire`. */
+          ignoresForcedTargeting?: boolean;
+          /** See `ignoresForcedTargeting`: this attack's target choice ignores Concentrate Fire. */
+          ignoresConcentrateFire?: boolean;
+          /** "it destroys itself" (Torpedo): after the hit resolves, the owner destroys itself
+           *  (`SELF_DESTRUCT_MAX_HP_MULTIPLE`, engine.ts), even when the hit found no victim.
+           *  Reactive damage executor only. */
+          selfDestruct?: boolean;
       }
     | {
           type: 'counter';
@@ -1081,6 +1106,11 @@ export type AbilityConfig =
            *  every living same-side ship except the granter, one turn each. */
           recipients?: 'self' | 'other-allies';
       }
+    /** "summons two torpedoes in the top row" (Abyssal Fenri's charged). The combat roster is
+     *  fixed for the run, so a summon does not add units: it re-arms every DEAD actor on the
+     *  caster's own side that is the bounty add `addId` (`BOUNTY_ADDS`), in its own cell, after
+     *  the cast resolves (engine.ts `processSummons`). A living one is left alone. */
+    | { type: 'summon'; addId: string }
     | {
           type: 'heal' | 'shield';
           pct: number;
@@ -1136,6 +1166,10 @@ export type AbilityConfig =
            *  `durationTurns` off one random debuff (Warpstrike), or off every debuff with
            *  `count: 'all'` (Heliodor, Pestilence). cleanse-only. */
           mode?: 'remove' | 'reduce-duration';
+          /** cleanse-only, with `count: 'all'` ("cleanses all but 5 debuffs"): removes the newest
+           *  removable debuffs until the holder carries at most this many, counting debuffs that
+           *  cannot be removed. Absent → remove `count`. */
+          keep?: number;
           /** Turns to reduce in 'reduce-duration' mode (default 1). cleanse-only. */
           durationTurns?: number;
           /** Epic PR5 finding 3: a TYPED cleanse restricts removal to one debuff category
@@ -1199,6 +1233,9 @@ export type AbilityConfig =
           /** Which incoming damage the reduction applies to: a direct hit, a DoT tick, or a
            *  detonation (a Bomb or Echoing Burst detonation, or a detonate-DoT burst). */
           scope: 'direct' | 'dot' | 'detonation';
+          /** A `'detonation'` entry that applies to Bomb detonations only, not to Echoing Burst or
+           *  detonate-DoT bursts (Abyssal Fenri: "from damage over time effects and Bombs"). */
+          bombOnly?: true;
           condition: IncomingCondition;
           /** Positive magnitude (percentage points); folded as a reduction into the incoming channel.
            *  IGNORED when `hpScaling` is set (Tormenter) — the effective reduction is computed
@@ -1683,6 +1720,16 @@ export interface ShipSkills {
     /** True when the ship's passive text declares immunity to damage over time effects (General
      *  Colosso). Read onto `CombatActor.dotImmune`, whose doc holds what the immunity does. */
     dotImmune?: boolean;
+    /** True when the ship's passive text declares immunity to damage (Torpedo). Read onto
+     *  `CombatActor.damageImmune`, whose doc holds what the immunity does. */
+    damageImmune?: boolean;
+    /** True when the ship's passive text declares immunity to debuffs, ALL of them (Torpedo).
+     *  Control-only immunity is `controlImmune`, never this. Read onto
+     *  `CombatActor.debuffImmune`, whose doc holds what the immunity does. */
+    debuffImmune?: boolean;
+    /** True when the ship's passive text declares immunity to purge (Torpedo). Read onto
+     *  `CombatActor.purgeImmune`, whose doc holds what the immunity does. */
+    purgeImmune?: boolean;
     /** True when the ship's passive text says it "has infinite Hacking" (Mamma Maglienza, #519):
      *  every debuff it inflicts lands, with no landing roll, whatever the victim's security or
      *  affinity (owner ruling 2026-11-11). */
