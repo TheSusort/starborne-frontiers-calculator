@@ -133,6 +133,11 @@ const destroyed = (r: Run, unitId: string) =>
 
 const taken = (r: Run, u: BoardUnit) => (u.hp ?? 1e9) - r.hp[r.id(u)];
 
+const heldBuff = (r: Run, u: BoardUnit, buffName: string) =>
+    r.events.some(
+        (e) => e.type === 'buff-applied' && e.actorId === r.id(u) && e.buffName === buffName
+    );
+
 // ── parse ───────────────────────────────────────────────────────────────────────────────────
 
 describe('torpedo blast parse', () => {
@@ -233,6 +238,7 @@ describe.each(SIDES)('torpedoes on the %s side', (placement) => {
         const taunter = dummy('decoy', 'B4', { kit: kitWith(selfBuff('taunt', 'Taunt')) });
         const b = board();
         const r = run(placement, b.own, [taunter, b.front, b.back, b.middle], 1);
+        expect(heldBuff(r, taunter, 'Taunt')).toBe(true);
         expect(taken(r, taunter)).toBe(0);
         expect(taken(r, b.front)).toBe(PRIMARY);
     });
@@ -241,6 +247,7 @@ describe.each(SIDES)('torpedoes on the %s side', (placement) => {
         const stealthed = dummy('front', 'T4', { kit: kitWith(selfBuff('stealth', 'Stealth')) });
         const b = board();
         const r = run(placement, b.own, [b.decoy, stealthed, b.back, b.middle], 1);
+        expect(heldBuff(r, stealthed, 'Stealth')).toBe(true);
         expect(taken(r, stealthed)).toBe(PRIMARY);
     });
 
