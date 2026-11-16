@@ -78,6 +78,25 @@ const selfBuff = (
     },
 });
 
+const torpedoWith = (...extra: Ability[]): ShipSkills => {
+    const kit = torpedoKit();
+    return {
+        ...kit,
+        slots: kit.slots.map((sl) =>
+            sl.slot === 'passive' ? { ...sl, abilities: [...sl.abilities, ...extra] } : sl
+        ),
+    };
+};
+
+const preCombatShield = (pct: number): Ability => ({
+    id: 'pre-shield',
+    type: 'shield',
+    target: 'self',
+    trigger: 'pre-combat',
+    conditions: [],
+    config: { type: 'shield', pct, basis: 'hp' },
+});
+
 const kitWith = (...passives: Ability[]): ShipSkills => ({
     slots: [
         { slot: 'active', abilities: [] },
@@ -92,6 +111,7 @@ const RECORDED: CombatEventType[] = [
     'buff-applied',
     'turn-started',
     'attacked',
+    'debuff-applied',
 ];
 
 interface Run {
@@ -399,5 +419,40 @@ describe.each(SIDES)('torpedoes on the %s side', (placement) => {
         const loud = run(placement, [b.t4, b.t2, fenri], [b.decoy, frail, b.back], 1);
         expect(destroyed(loud, loud.id(frail))).toHaveLength(1);
         expect(attackUps(loud)).toBe(1);
+    });
+
+    it('destroys itself even behind a shield far larger than the self-hit', () => {
+        const b = board({ t4: { kit: torpedoWith(preCombatShield(5000)) } });
+        const r = run(placement, b.own, b.opponents, 1);
+        expect(destroyed(r, r.id(b.t4)).map((e) => e.round)).toEqual([1]);
+        expect(r.hp[r.id(b.t4)]).toBe(0);
+    });
+
+    it.each(['Cheat Death', 'Barrier'])('destroys itself despite holding %s', (buff) => {
+        const b = board({ t4: { kit: torpedoWith(selfBuff('guard', buff)) } });
+        const r = run(placement, b.own, b.opponents, 1);
+        expect(heldBuff(r, b.t4, buff)).toBe(true);
+        expect(destroyed(r, r.id(b.t4)).map((e) => e.round)).toEqual([1]);
+        expect(r.hp[r.id(b.t4)]).toBe(0);
+    });
+
+    it("Fenri's end-of-round Stasis (speed 130) resolves before the torpedo's blast (speed 93)", () => {
+        const fenri = dummy('anchor', 'B1', {
+            speed: 130,
+            attack: 1e6,
+            hacking: 1e6,
+            kit: buildShipAbilities(bossShip('fenri', 33)!),
+        });
+        const b = board();
+        const r = run(placement, [b.t4, b.t2, fenri], b.opponents, 1);
+        const stasisAt = r.events.findIndex(
+            (e) => e.type === 'debuff-applied' && e.buffName === 'Stasis'
+        );
+        const blastAt = r.events.findIndex(
+            (e) => e.type === 'reactive-damage-performed' && e.sourceId === r.id(b.t4)
+        );
+        expect(stasisAt).toBeGreaterThanOrEqual(0);
+        expect(blastAt).toBeGreaterThanOrEqual(0);
+        expect(stasisAt).toBeLessThan(blastAt);
     });
 });

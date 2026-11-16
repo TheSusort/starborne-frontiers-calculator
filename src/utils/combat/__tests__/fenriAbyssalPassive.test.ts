@@ -161,7 +161,8 @@ describe.each(SIDES)('Fenri threshold cleanse, carrier on the %s side', (placeme
             whitePhosphorus(),
             ...probes(5).slice(2),
         ]);
-        // 2 WP + 5 named = 7 held; the cleanse takes the 2 newest removable (Probe E, Probe D).
+        // 2 WP + 5 named = 7 held. The cleanse fires on the 6th and 7th landings, one newest
+        // removable each (Probe D, then Probe E), leaving five.
         expect(after.count).toBe(5);
         expect(after.debuffNames.sort()).toEqual(['Probe A', 'Probe B', 'Probe C']);
     });

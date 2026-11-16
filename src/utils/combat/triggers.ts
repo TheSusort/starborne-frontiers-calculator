@@ -5479,7 +5479,7 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     'enemy-highest-attack': selectorChargeKind('enemy-highest-attack'),
     'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
     'enemy-highest-defense': selectorChargeKind('enemy-highest-defense'),
-    // Only the Torpedo's blast carries this target; no charge clause names it.
+    // A charge clause never targets the owner's own row: the target exists for the blast alone.
     'own-row-front-enemy': 'owner-gain',
 };
 

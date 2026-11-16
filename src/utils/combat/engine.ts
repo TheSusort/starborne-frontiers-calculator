@@ -270,8 +270,9 @@ export const MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND = 20;
 export const SENTINEL_ENEMY_ACTOR_ID = 'enemy';
 
 /** A self-destruct ("it destroys itself", Torpedo) hits its owner for this many times its max HP,
- *  through its own damage immunity, credited to no one and not as direct damage (owner ruling
- *  2026-11-16): "when an enemy is destroyed" passives fire on it, kill-owned ones do not. */
+ *  credited to no one and not as direct damage (owner ruling 2026-11-16): "when an enemy is
+ *  destroyed" passives fire on it, kill-owned ones do not. The owner always dies: its shield,
+ *  Barrier, damage immunity and Cheat Death do not stop the self-hit (`selfDestruct` delegate). */
 const SELF_DESTRUCT_MAX_HP_MULTIPLE = 10;
 
 /** #396: the two channels `victimIncomingModifiers` combines across the self/enemy store boundary.
@@ -6801,7 +6802,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  true — the non-positional cast sites, which bind one victim. */
                 isPrimaryTarget?: boolean;
                 /** True only for a unit's own destruction (a self-destruct hit on itself): it
-                 *  gets through the victim's `damageImmune`. No other damage path sets it. */
+                 *  gets through the victim's `damageImmune` and Barrier. No other damage path
+                 *  sets it. */
                 bypassDamageImmunity?: boolean;
             }
             // AppliedVictimDamage, not VictimDamageOutcome: this funnel always sets
@@ -6856,8 +6858,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             const damageImmuneHit =
                 victim.damageImmune === true && cause?.bypassDamageImmunity !== true;
             const carriesBarrier =
-                damageImmuneHit ||
-                selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) => BARRIER_BUFFS.has(n));
+                cause?.bypassDamageImmunity !== true &&
+                (damageImmuneHit ||
+                    selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
+                        BARRIER_BUFFS.has(n)
+                    ));
             // The victim-side factors in `damage`, as the Protection cascade reads them: the
             // caller's `cause.redirectBasis`, with a partial block folded into `incomingFactor`.
             let redirectBasis = cause?.redirectBasis;
@@ -12151,6 +12156,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 selfDestruct: (ownerId) => {
                     const owner = allActorsById.get(ownerId);
                     if (!owner || owner.destroyedRound !== undefined) return;
+                    // The self-hit must kill: no shield pool to soak it, no Cheat Death to
+                    // intercept it (marked spent, so the lethal resolution records the destroy).
+                    owner.shieldPool = 0;
+                    cheatDeathConsumed.add(ownerId);
                     applyVictimDamage(
                         SELF_DESTRUCT_MAX_HP_MULTIPLE * maxHpOf(ownerId),
                         owner,
@@ -12160,6 +12169,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             bypassDamageImmunity: true,
                         }
                     );
+                    if (owner.destroyedRound === undefined) {
+                        throw new Error(`self-destruct: ${ownerId} survived its own self-hit`);
+                    }
                 },
                 oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
                 perRoundFireCounts: sideCtx.perRoundFireCounts,
