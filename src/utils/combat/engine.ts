@@ -11920,6 +11920,10 @@ export function runCombat(rawInput: CombatEngineInput): {
          *    runs (`seedPassiveTimedStatuses`, `seedPreCombatShields`).
          * It is not a repair: no heal event, no repair reaction. Nothing re-arms on a cast that
          * ended the fight.
+         * A revive resets exactly the state listed above. Per-fight engine maps keyed by actor id
+         * (once-per-fight latches, next-crit-power, the Prophet bonus) are NOT reset, and
+         * ally-directed pre-combat grants are NOT re-granted to the revived actor, so a summon of
+         * anything with those mechanics must revisit them here.
          */
         const processSummons = (summoner: CombatActor, addIds: readonly string[]): void => {
             if (addIds.length === 0 || sideIsWiped()) return;

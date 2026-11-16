@@ -331,7 +331,7 @@ describe.each(SIDES)('summoner on the %s side', (placement) => {
         expect(r.hp[r.id(b.t4)]).toBe(0);
     });
 
-    it('a re-armed torpedo takes turns from the round after its summon', () => {
+    it('ASSUMPTION (re-arm turn timing): a re-armed torpedo takes turns from the round after its summon', () => {
         const b = board();
         const r = run(placement, [b.t4, b.t2, chargedSummoner()], b.opponents, 4);
         // T2: alive round 1-2 (dies at the end of round 2), re-armed in round 3 by a faster
@@ -339,7 +339,9 @@ describe.each(SIDES)('summoner on the %s side', (placement) => {
         expect(turnRounds(r, b.t2)).toEqual([1, 2, 4]);
     });
 
-    it('a torpedo FASTER than its summoner also first acts in the round after the summon', () => {
+    // A pin, not a discriminator: the revived torpedo is already past its slot in this round, so
+    // this passes with or without the emptied turn pool.
+    it('ASSUMPTION (re-arm turn timing): a torpedo FASTER than its summoner also first acts in the round after the summon (pin)', () => {
         const fastT2 = torpedo('torpedoT2', 'T2', { speed: 200 });
         const b = board();
         const r = run(placement, [b.t4, fastT2, chargedSummoner()], b.opponents, 4);
@@ -528,7 +530,7 @@ describe('Abyssal Fenri encounter (simulateBattle)', () => {
     const torpedoAt = (res: ReturnType<typeof fight>, pos: string) =>
         res.roster.find((r) => r.position === pos && r.actorId.includes(TORPEDO_ID))!.actorId;
 
-    it("Fenri's charged re-arms both torpedoes; the report counts each death", () => {
+    it("ASSUMPTION (re-arm turn timing): Fenri's charged re-arms both torpedoes; the report counts each death and T2 first acts in round 4", () => {
         const res = fight();
         const t4 = torpedoAt(res, 'T4');
         const t2 = torpedoAt(res, 'T2');
