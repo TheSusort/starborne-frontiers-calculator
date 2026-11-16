@@ -66,10 +66,20 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
         statsByLevel: {
             33: {
                 hp: 499108,
-                // Starting values carried from level 32; fitted in the replay test.
-                attack: 26390,
-                defence: 14675,
-                // Placeholders carried from level 32.
+                // Attack and defence are fitted to the owner's fights (#519, replayed in
+                // bountyBossReplay.integration.test.ts). Attack is proven by agreement: one value
+                // fits his round-1 active on Judge (primary) and Thresh (splash), his round-2 hit
+                // on Grif (Pressing Onslaught x2, Attack Up II) and his round-3 charged on Hayyan
+                // (x3), each within 0.02%. Defence is proven by agreement between Judge (27%
+                // penetration) and Thresh (7% plus Intrusion) in one fight, both within 0.01%;
+                // Asphyxiator's and Thresh's crits under Defense Down III in another fight agree
+                // too, but only under an assumed board layout, and Judge's hit in that fight reads
+                // 5% low (unexplained).
+                attack: 29295,
+                defence: 15950,
+                // Placeholders carried from level 32. A crit repair at crit power 72 would match
+                // the 103,016 the game showed after his round-1 kills (59,893 x 1.72); 71 is kept
+                // until a second source confirms it.
                 hacking: 270,
                 security: 160,
                 crit: 22,
@@ -256,8 +266,9 @@ export const BOUNTY_ADDS: readonly BountyAdd[] = [
             'This Unit is immune to damage, debuffs, and purge.<br />At the start of combat, it gains <unit-skill>Stealth</unit-skill> for 10 turns.<br />At the end of a round, if this Unit is the first in the row, it destroys itself to deal <unit-damage>150% damage</unit-damage> that cannot critically hit, bypasses enemy Defense, and ignores all targeting changing effects.<br />This Unit deals 100% more direct damage to Defenders.',
         stats: {
             hp: 38160,
-            // Starting value: the measured 43,623 primary blast divided by its 150% multiplier;
-            // refined in the replay test.
+            // Single-source fit: the 43,623 primary blast on a non-Defender at 150%, defence
+            // bypassed, no crit. The 21,812 splash on a second ship agrees, but it is the same
+            // number halved, not an independent check.
             attack: 29082,
             // It takes no damage, so defence never reaches a hit.
             defence: 0,
