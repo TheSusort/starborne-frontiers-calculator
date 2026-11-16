@@ -154,15 +154,16 @@ describe.each(SIDES)('Fenri threshold cleanse, carrier on the %s side', (placeme
     });
 
     // ASSUMPTION UNREMOVABLE-DEBUFFS-COUNT
-    it('UNREMOVABLE-DEBUFFS-COUNT: with two unremovable and four removable, a seventh lands and the newest removable go until five are held', () => {
+    it('UNREMOVABLE-DEBUFFS-COUNT: with two unremovable and five removable landing in turn, the newest removable go until five are held', () => {
         const after = heldAfterRound1(placement, [
             whitePhosphorus(),
             ...probes(2),
             whitePhosphorus(),
             ...probes(5).slice(2),
         ]);
-        // 2 WP + 5 named = 7 held. The cleanse fires on the 6th and 7th landings, one newest
-        // removable each (Probe D, then Probe E), leaving five.
+        // 2 WP + 5 named = 7 landed. The cleanse fires on the 6th and 7th landings, one newest
+        // removable each (Probe D, then Probe E), so never more than six are held at once and
+        // five remain.
         expect(after.count).toBe(5);
         expect(after.debuffNames.sort()).toEqual(['Probe A', 'Probe B', 'Probe C']);
     });

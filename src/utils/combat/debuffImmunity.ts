@@ -15,8 +15,9 @@ export const BLOCK_DEBUFF_BUFFS: ReadonlySet<string> = new Set(['Block Debuff'])
 export const isBlockDebuff = (name: string): boolean => BLOCK_DEBUFF_BUFFS.has(name);
 
 /** True if `targetId` currently carries a Block Debuff buff (reads its self-buff names), or is
- *  itself `debuffImmune` (pass the actor as `target`). Sites that already skip a `debuffImmune`
- *  target silently (`immuneToEnemyStatus`, `immuneToDot`) never reach this for it. */
+ *  itself `debuffImmune` (pass the actor as `target`), so it is also true for a `debuffImmune`
+ *  target. Most landing sites skip such a target earlier via `immuneToEnemyStatus` /
+ *  `immuneToDot`. */
 export function targetCarriesBlockDebuff(
     statusEngine: StatusEngine,
     targetId: string,

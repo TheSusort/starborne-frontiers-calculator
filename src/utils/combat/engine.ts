@@ -7533,9 +7533,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Shield Converter review) — no re-fetch needed here.
             // Barrier branch (carriesBarrier computed above the block step). HP does not move → the
             // emit below is a no-op crossing (oldPct === newPct), still fired once for emission
-            // consistency. The damage still "arrives" (the victim's .incoming already incremented)
-            // but its effect is nullified; the blocked amount is tracked as .barrierAbsorbed (NOT
-            // .shieldAbsorbed — Barrier never touches the shield).
+            // consistency. A Barrier nullifies the hit's effect but not its record: the victim's
+            // .incoming is incremented and the blocked amount is tracked as .barrierAbsorbed (NOT
+            // .shieldAbsorbed — Barrier never touches the shield). Damage immunity is different:
+            // nothing is booked at all (`incomingRecorded` is 0, no barrierAbsorbed).
             if (carriesBarrier) {
                 if (!damageImmuneHit) sink.addBarrierAbsorbed(damage, victim.id);
                 // Hit-counted Barrier: this absorb spends one charge. "for 1 hit" means a DIRECT
@@ -7588,10 +7589,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     barriered: true,
                     ...(damageImmuneHit ? { damageImmune: true } : {}),
                     converted: false,
-                    // Barrier nullifies the hit's EFFECT but does not un-record it: `.incoming` holds
-                    // the amount and an equal `.barrierAbsorbed` nets it back out downstream. So the
-                    // display channels book it, exactly as they do for any other barriered hit —
-                    // unlike `immediateDamage`, which is 0 here (nothing landed).
+                    // A Barrier hit is recorded: `.incoming` holds the amount and an equal
+                    // `.barrierAbsorbed` nets it back out, so `incomingRecorded` is the amount and
+                    // the display channels book it. A damage-immune hit records nothing:
+                    // `incomingRecorded` is 0, so nothing is booked. `immediateDamage` is 0 either way.
                     incomingBooked: incomingRecorded,
                     // Provably always 0 here: this branch is `carriesBarrier === true`, but the
                     // cascade that populates `protectionRedirected` is gated on
@@ -10307,9 +10308,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             victim: CombatActor,
             sink: DamageAccountingSink,
             sourceId: string,
-            damage: number
+            damage: number,
+            bomb: boolean
         ): void => {
-            const intake = damage * incomingDetonationReductionFor(victim.id, true);
+            // `bomb` is true only for a real Bomb; an Echoing Burst forced to 0 takes the
+            // detonation factor without a `bombOnly` reduction.
+            const intake = damage * incomingDetonationReductionFor(victim.id, bomb);
             const outcome = applyVictimDamage(intake, victim, sink, {
                 killerId: sourceId,
                 byDirectDamage: true,
@@ -10869,8 +10873,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Forced bomb-detonation sink (Lingshe's countdown-reduce-to-0). `sink` serves
                 // both directions — ids are globally unique across sides — so no per-side
                 // selection is needed.
-                forceDetonateBomb: (victim: CombatActor, sourceId: string, damage: number) =>
-                    forceDetonateBombOnVictim(victim, sink, sourceId, damage),
+                forceDetonateBomb: (
+                    victim: CombatActor,
+                    sourceId: string,
+                    damage: number,
+                    bomb: boolean
+                ) => forceDetonateBombOnVictim(victim, sink, sourceId, damage, bomb),
                 // Positional detonation hint: when the engine will take the positional apply path
                 // (same predicate that computes aoeVictimIds — pattern + target + position all set),
                 // runPlayerTurn SKIPS the anchor detonation (no consume/credit/emit) and instead
@@ -12176,8 +12184,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 },
                 // Same shared sink the cast-path forced detonation uses — a
                 // reduce-duration shrink can drive a bomb to 0 on EITHER side's actor.
-                forceDetonateBomb: (victim, sourceId, damage) =>
-                    forceDetonateBombOnVictim(victim, sink, sourceId, damage),
+                forceDetonateBomb: (victim, sourceId, damage, bomb) =>
+                    forceDetonateBombOnVictim(victim, sink, sourceId, damage, bomb),
                 // Side-agnostic ship-role lookup (the SAME
                 // roleByActorId map Meatshield's defense-substitution and Graphite's
                 // roleFilter already consume) — feeds the reactive `purge` branch's

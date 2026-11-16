@@ -38,12 +38,13 @@ const ofType = <T extends CombatEvent['type']>(events: CombatEvent[], type: T): 
     events.filter((e): e is Ev<T> => e.type === type);
 
 /** A carrier holding Fenri's own incoming reductions, or none. */
-const carrier = (reductions: boolean): BoardUnit => {
+const carrier = (reductions: boolean, extra: Ability[] = []): BoardUnit => {
     const abilities = reductions
         ? buildShipAbilities(bossShip('fenri', 33)!)
               .slots.find((s) => s.slot === 'passive')!
               .abilities.filter((a) => a.config.type === 'incoming-reduction')
         : [];
+    abilities.push(...extra);
     return {
         id: 'fenri',
         kit: {
@@ -90,8 +91,13 @@ describe('Abyssal Fenri incoming reductions', () => {
 });
 
 describe.each(SIDES)('Abyssal Fenri reductions, carrier on the %s side', (placement) => {
-    const lossOf = (reductions: boolean, opponent: BoardUnit, rounds: number) => {
-        const c = carrier(reductions);
+    const lossOf = (
+        reductions: boolean,
+        opponent: BoardUnit,
+        rounds: number,
+        extra: Ability[] = []
+    ) => {
+        const c = carrier(reductions, extra);
         const { input, id } = boardInput(placement, c, [], [opponent], rounds);
         const events = runEvents(input);
         const last = ofType(events, 'hp-snapshot')
@@ -146,6 +152,46 @@ describe.each(SIDES)('Abyssal Fenri reductions, carrier on the %s side', (placem
         );
         expect(burst).toBeGreaterThan(0);
         expect(reduced.lost).toBe(none.lost);
+    });
+
+    // The carrier shortens its own debuffs when attacked (Heliodor's shape), which drives a
+    // Bomb or Echoing Burst on it to 0.
+    const shortenBy = (durationTurns: number): Ability => ({
+        ...clause(
+            { type: 'cleanse', count: 'all', mode: 'reduce-duration', durationTurns },
+            'shorten'
+        ),
+        target: 'self',
+        trigger: 'on-attacked',
+    });
+    const shortenAll = shortenBy(10);
+
+    it('does not reduce an Echoing Burst driven to 0 by a duration cut', () => {
+        const burster = opponentWith([
+            clause({ type: 'accumulate-detonate', turns: 4, pct: 100 }, 'echo'),
+            ...hitKit(100).slots[0].abilities,
+        ]);
+        // The first cut leaves the accumulator holding the first round's hit; the second takes it
+        // to 0.
+        const none = lossOf(false, burster, 2, [shortenBy(2)]);
+        const reduced = lossOf(true, burster, 2, [shortenBy(2)]);
+        const burst = ofType(none.events, 'accumulator-detonated').reduce(
+            (sum, e) => sum + e.damage,
+            0
+        );
+        expect(burst).toBeGreaterThan(0);
+        expect(reduced.lost).toBe(none.lost);
+    });
+
+    it('halves a Bomb driven to 0 by a duration cut (control)', () => {
+        const bomber = opponentWith([
+            ...hitKit(1).slots[0].abilities,
+            clause({ type: 'dot', dotType: 'bomb', tier: 100, stacks: 1, duration: 9 }, 'bomb'),
+        ]);
+        const none = lossOf(false, bomber, 1, [shortenAll]);
+        const burst = ofType(none.events, 'bomb-detonated').reduce((sum, e) => sum + e.damage, 0);
+        expect(burst).toBeGreaterThan(0);
+        expect(none.lost - lossOf(true, bomber, 1, [shortenAll]).lost).toBe(Math.round(burst) / 2);
     });
 });
 

@@ -119,7 +119,7 @@ export type AbilityTarget =
     | 'enemy-most-buffs'
     | 'enemy-highest-attack' // D-PR14 Doomsayer: living opposing actor with the greatest
     //                           live effective attack (global selector, resolved at drain).
-    | 'enemy-highest-speed' // SP-M M1 Task 6 Chakara: living opposing actor with the greatest
+    | 'enemy-highest-speed' // Chakara: living opposing actor with the greatest
     //                           live effective speed (global selector, resolved LIVE at drain — no
     //                           memo needed, Chakara's co-located clause is a self-buff that never
     //                           changes an enemy's speed).

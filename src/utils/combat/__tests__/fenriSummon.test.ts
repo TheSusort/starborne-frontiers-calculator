@@ -324,7 +324,7 @@ describe.each(SIDES)('summoner on the %s side', (placement) => {
         expect(of(r, 'ship-revived')).toEqual([]);
     });
 
-    it('a re-armed torpedo blasts again at a later round end and dies again', () => {
+    it('ASSUMPTION (re-arm turn timing): a re-armed torpedo blasts again at a later round end and dies again', () => {
         const b = board();
         const r = run(placement, [b.t4, b.t2, chargedSummoner()], b.opponents, 3);
         expect(blastRounds(r, b.t4)).toEqual([1, 3]);

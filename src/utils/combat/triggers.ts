@@ -3143,7 +3143,12 @@ export interface IntentExecContext {
      *  statusEngine debuffs (both are debuffs; one driven to 0 bursts — owner ruling R113).
      *  Absent (unit-test ctxs) → the Bomb / Echoing Burst cut helpers (bombCountdown.ts) fall
      *  back to a bare shield-then-HP debit. */
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    forceDetonateBomb?: (
+        victim: CombatActor,
+        sourceId: string,
+        damage: number,
+        bomb: boolean
+    ) => void;
     /** Resolve ANY actor's ship role (Ship.type) by id, either side — the SAME `roleByActorId` map
      *  (side-agnostic by key) Meatshield's defense-substitution and Graphite's `roleFilter`
      *  reaction-time check already consume. Used by the reactive `purge` branch to re-check an
@@ -5435,7 +5440,7 @@ function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext)
 type SelectorChargeKind = `selector-${EnemySelectorKind}`;
 
 type ChargeTargetKind =
-    SelectorChargeKind | 'enemy-bulk' | 'lowest-hp-ally' | 'ally-bulk' | 'owner-gain';
+    SelectorChargeKind | 'enemy-bulk' | 'lowest-hp-ally' | 'ally-bulk' | 'owner-gain' | 'none';
 
 /**
  * #407: the VALUE side of the same derivation — the map's three selector entries are computed from
@@ -5479,8 +5484,9 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     'enemy-highest-attack': selectorChargeKind('enemy-highest-attack'),
     'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
     'enemy-highest-defense': selectorChargeKind('enemy-highest-defense'),
-    // A charge clause never targets the owner's own row: the target exists for the blast alone.
-    'own-row-front-enemy': 'owner-gain',
+    // The target exists for the blast alone; a charge clause on it is a no-op, never an
+    // owner-only gain.
+    'own-row-front-enemy': 'none',
 };
 
 /** `Intent.eventSeq` bookkeeping: the number each emitted event object got, the next number to
@@ -5837,6 +5843,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // `CHARGE_TARGET_KIND` doc comment for why these fall to the owner-only gain below.
             case 'owner-gain':
                 break;
+            case 'none':
+                return;
             default: {
                 const exhaustive: never = chargeKind;
                 throw new Error(

@@ -1323,7 +1323,12 @@ export interface PlayerTurnArgs {
      *  shield-then-HP debit with NO Barrier/Cheat-Death/destroyed handling — `reduceEnemyBombs` is
      *  itself inert without a resolved `targetId`, which only a positional/engine-scoped caller ever
      *  supplies in production, so the fallback is exercised only by tests that hand-build args. */
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    forceDetonateBomb?: (
+        victim: CombatActor,
+        sourceId: string,
+        damage: number,
+        bomb: boolean
+    ) => void;
     /** #363 (Fuying): actor id → faction, for the recipient FACTION intersection applied to a
      *  `factionFilter`'d ally scope ("grants Tianchen allies Stealth"). Supplied by engine.ts's
      *  `buildTurnArgs` from the side-agnostic `factionByActorId` map, so an ENEMY-side caster
@@ -2133,7 +2138,12 @@ function reduceEnemyBombs(args: {
     detonatorId: string;
     /** One 'inflict' landing roll against `victim` — DRAWS, so call it once per recipient. */
     landsReductionOn: (victim: CombatActor) => boolean;
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    forceDetonateBomb?: (
+        victim: CombatActor,
+        sourceId: string,
+        damage: number,
+        bomb: boolean
+    ) => void;
     /** #407: the board-neighbour fan-out and the SELECTOR delegate, threaded so this loop resolves
      *  recipients by exactly the same rules as the debuff-clause path. */
     adjacentEnemyIdsFor?: (anchorId: string) => string[];

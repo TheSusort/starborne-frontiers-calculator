@@ -64,7 +64,12 @@ function cutBomb(
     round: number,
     bus: CombatEventBus,
     detonatorId: string,
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void
+    forceDetonateBomb?: (
+        victim: CombatActor,
+        sourceId: string,
+        damage: number,
+        bomb: boolean
+    ) => void
 ): void {
     bomb.countdown -= turns;
     if (bomb.countdown > 0) return;
@@ -79,7 +84,7 @@ function cutBomb(
         damage: burst,
     });
     if (forceDetonateBomb) {
-        forceDetonateBomb(victim, bomb.sourceId, burst);
+        forceDetonateBomb(victim, bomb.sourceId, burst, true);
     } else {
         if (victim.damageImmune !== true) {
             const shieldDrain = Math.min(victim.shieldPool, burst);
@@ -101,7 +106,7 @@ function cutAccumulator(
     turns: number,
     round: number,
     bus: CombatEventBus,
-    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void
+    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number, bomb: boolean) => void
 ): void {
     acc.roundsRemaining -= turns;
     if (acc.roundsRemaining > 0) return;
@@ -114,7 +119,7 @@ function cutAccumulator(
         damage,
     });
     if (forceDetonate) {
-        forceDetonate(victim, acc.sourceId, damage);
+        forceDetonate(victim, acc.sourceId, damage, false);
     } else {
         if (victim.damageImmune !== true) {
             const shieldDrain = Math.min(victim.shieldPool, damage);
@@ -159,7 +164,12 @@ export function reduceBombsOnVictim(
     // event's `detonatorId` so Lingshe's on-self-bomb-detonated Stealth grant fires for a burst SHE
     // caused even on bombs another ship applied.
     detonatorId: string,
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void,
+    forceDetonateBomb?: (
+        victim: CombatActor,
+        sourceId: string,
+        damage: number,
+        bomb: boolean
+    ) => void,
     // Shrink this one bomb only (a single random duration cut, `bombDurationCutCandidates`);
     // absent → every bomb on the victim.
     only?: PendingBomb
@@ -187,7 +197,12 @@ export function bombDurationCutCandidates(
     round: number,
     bus: CombatEventBus,
     detonatorId: string,
-    forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void
+    forceDetonateBomb?: (
+        victim: CombatActor,
+        sourceId: string,
+        damage: number,
+        bomb: boolean
+    ) => void
 ): DurationCutCandidate[] {
     const bombs = victim.pendingBombs;
     const out: DurationCutCandidate[] = [];
@@ -238,7 +253,7 @@ export function reduceAccumulatorsOnVictim(
     turns: number,
     round: number,
     bus: CombatEventBus,
-    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void,
+    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number, bomb: boolean) => void,
     // Shrink this one accumulator only (`accumulatorDurationCutCandidates`); absent → all.
     only?: PendingAccumulator
 ): number {
@@ -269,7 +284,7 @@ export function shortenTimedBurstsOnVictim(
     round: number,
     bus: CombatEventBus,
     detonatorId: string,
-    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void
+    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number, bomb: boolean) => void
 ): number {
     const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
     if (delta <= 0) return 0;
@@ -297,7 +312,7 @@ export function accumulatorDurationCutCandidates(
     victim: CombatActor,
     round: number,
     bus: CombatEventBus,
-    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number) => void
+    forceDetonate?: (victim: CombatActor, sourceId: string, damage: number, bomb: boolean) => void
 ): DurationCutCandidate[] {
     return victim.pendingAccumulators.map((acc) => ({
         seq: acc.appliedSeq ?? 0,
