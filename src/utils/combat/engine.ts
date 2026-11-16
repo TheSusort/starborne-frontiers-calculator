@@ -55,10 +55,11 @@ import {
 import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
 import { composeDotDamageFactor } from '../damageComposition';
 import { ONE_SHOT_PERSISTENT_BUFFS } from '../../constants/oneShotPersistentBuffs';
+import { rowOf } from '../targeting/board';
 import { dotResistLabel, isBlockDebuff, targetCarriesBlockDebuff } from './debuffImmunity';
 import { immuneToDot } from './dotImmunity';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
-import { aliveTargetsOf, type AliveRoster } from './targetableActors';
+import { aliveTargetsOf, isAliveTarget, type AliveRoster } from './targetableActors';
 import {
     foldActorBuffTotals,
     effectiveStatsOf,
@@ -107,7 +108,7 @@ import {
     resolvesPositionalVictim,
     type PositionalActing,
 } from './positionalBinding';
-import { aimCellOf, type CellOccupant } from './cellIndex';
+import { aimCellOf, unitsInRowFrontToBack, type CellOccupant } from './cellIndex';
 import {
     applyPositionalDamage,
     damagedVictim,
@@ -225,6 +226,7 @@ import {
     victimIncomingDotDamagePct,
     victimOwnEnemyFamilies,
     victimSelfBuffs,
+    type ReactiveDamageOpts,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { allyHpFraction, lowestHpAllyRecipients, narrowByFaction } from './supportRecipients';
@@ -266,6 +268,11 @@ export const MAX_CHAINED_EXTRA_ACTIONS_PER_ROUND = 20;
  *  Fenced in BOTH directions by `sentinelActorIdReservation.test.ts` — no actor may carry it,
  *  and no caller may claim it. */
 export const SENTINEL_ENEMY_ACTOR_ID = 'enemy';
+
+/** A self-destruct ("it destroys itself", Torpedo) hits its owner for this many times its max HP,
+ *  through its own damage immunity, credited to no one and not as direct damage (owner ruling
+ *  2026-11-16): "when an enemy is destroyed" passives fire on it, kill-owned ones do not. */
+const SELF_DESTRUCT_MAX_HP_MULTIPLE = 10;
 
 /** #396: the two channels `victimIncomingModifiers` combines across the self/enemy store boundary.
  *  Module-level so the array is not rebuilt per victim per hit. */
@@ -3730,6 +3737,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             bombStacks: 0,
             effectiveCritRate: 0,
             enemyDebuffNames: enemyDebuffNamesForTarget(victim),
+            enemyType: roleClassOf(victim),
             ...(liveCountsMeasurable
                 ? {
                       enemyDestroyedCount: [...allActorsById.values()].filter(
@@ -3750,6 +3758,29 @@ export function runCombat(rawInput: CombatEngineInput): {
      * (a DPS run defaults `hp` to 0).
      */
     const maxHpOf = (id: string): number => allActorsById.get(id)?.stats.hp ?? 0;
+
+    /**
+     * A victim's `enemy-type` class: its own role's class (`roleBaseClass`, so a Defender sub-role
+     * reads 'Defender'); for a role-less victim, the class the caster's own turn falls back to —
+     * the fight-wide `input.enemyType` when the victim is on the enemy side (the DPS calculator's
+     * configured enemy), none for a player-side victim (an enemy caster's turn carries no
+     * fight-wide class). Mirrors `RecipientGateReading.role` + the `TurnBindings.enemyTypeArg`
+     * fallback the bound target's turn reads.
+     */
+    const roleClassOf = (victim: CombatActor): EnemyBaseClass | undefined => {
+        const role = roleByActorId.get(victim.id);
+        if (role) return roleBaseClass(role);
+        return victim.side === 'enemy' ? enemyType : undefined;
+    };
+
+    /** Every actor fighting on `side`, dead or alive. */
+    const rosterOfSide = (side: CombatActor['side']): CombatActor[] =>
+        side === 'player' ? allPlayerActors : enemyAttackerActors;
+    /** The board row a unit stands in for "its row": the row of the cell it casts from. */
+    const ownRowOf = (a: CombatActor) => {
+        const cell = aimCellOf(a);
+        return cell === undefined ? undefined : rowOf(cell);
+    };
 
     // ── Side-context bundle ────────────────────────────────────────────────────
     // ONE side-parameterized SideContext instead of hand-paired per-side closures.
@@ -8635,8 +8666,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // affinity). `ignoresDefense` (without `flatBasis`): the normal attack-basis/crit walk
             // still runs, but the victim's Defense term is bypassed (defence: 0) — kept minimal,
             // for generality beyond Demolisher's own (flat) path. Both absent ⟹ the plain
-            // attack-basis walk below.
-            opts?: { ignoresDefense?: boolean; flatBasis?: number }
+            // attack-basis walk below. `splash`: see `ReactiveDamageOpts`.
+            opts?: ReactiveDamageOpts
         ): { dealt: number; didCrit: boolean } | void => {
             const owner = allActorsById.get(ownerId);
             const victim = allActorsById.get(victimId);
@@ -8765,7 +8796,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // term entirely (defence: 0) instead of the normal substituted defence.
                     opts?.ignoresDefense ? { ...profile, defence: 0 } : profile,
                     didCrit,
-                    1, // roleScale: a reactive proc is a single full hit
+                    // roleScale: a reactive proc is one full hit, a covered row victim half of one.
+                    opts?.splash ? 0.5 : 1,
                     procReduction.parts,
                     procReduction.attackerCritPenaltyPct
                 );
@@ -8814,6 +8846,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 !splashCopy && attackBreaksStasis(owner) && isStasised(victim.id);
             // A Bomb splash copy is not a direct hit, so it is aimed at no one.
             const procAim = splashCopy ? undefined : aimReactiveHit(victim.id);
+            // A covered victim of a row proc is not the hit's primary target.
+            if (procAim && opts?.splash) procAim.isPrimary = false;
             // A splash copy is Bomb damage, so the victim's detonation reductions apply to it.
             const procIntake = splashCopy
                 ? raw * incomingDetonationReductionFor(victim.id, true)
@@ -9143,19 +9177,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     ];
                 })
             );
-        /**
-         * A struck victim's `enemy-type` class for the per-victim refolds below: its own role's
-         * class; for a role-less victim, the class the caster's own turn falls back to — the
-         * fight-wide `input.enemyType` when the victim is on the enemy side (the DPS
-         * calculator's configured enemy), none for a player-side victim (an enemy caster's
-         * turn carries no fight-wide class). Mirrors `RecipientGateReading.role` + the
-         * `TurnBindings.enemyTypeArg` fallback the bound target's turn reads.
-         */
-        const victimEnemyType = (victim: CombatActor): EnemyBaseClass | undefined => {
-            const role = roleByActorId.get(victim.id);
-            if (role) return roleBaseClass(role);
-            return victim.side === 'enemy' ? enemyType : undefined;
-        };
+        /** A struck victim's `enemy-type` class for the per-victim refolds below (`roleClassOf`). */
+        const victimEnemyType = roleClassOf;
         /**
          * `primaryCtx` with every subject that describes THE ENEMY re-pointed at `victim`: its
          * buffs (count and names), debuffs (count and names), DoT entries, adjacent units, HP and
@@ -9736,6 +9759,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 case 'enemy-highest-attack':
                 case 'enemy-highest-speed':
                 case 'enemy-highest-defense':
+                case 'own-row-front-enemy':
                 case 'adjacent-enemies':
                 case 'target-and-adjacent-enemies':
                 case 'self':
@@ -12107,6 +12131,36 @@ export function runCombat(rawInput: CombatEngineInput): {
                 recipientMaxHpFor: maxHpOf,
                 firstActivatorId: sideCtx.firstActivatorId,
                 lastStandingId: sideCtx.lastStandingId,
+                // Row geometry is side-agnostic: each reads the owner's own side off the actor.
+                isFrontOfRowFor: (ownerId) => {
+                    const owner = allActorsById.get(ownerId);
+                    const row = owner && isAliveTarget(owner) ? ownRowOf(owner) : undefined;
+                    if (!owner || row === undefined) return false;
+                    return (
+                        unitsInRowFrontToBack(aliveTargetsOf(rosterOfSide(owner.side)), row)[0] ===
+                        owner
+                    );
+                },
+                ownRowEnemiesFor: (ownerId) => {
+                    const owner = allActorsById.get(ownerId);
+                    const row = owner ? ownRowOf(owner) : undefined;
+                    if (!owner || row === undefined) return [];
+                    const opposing = rosterOfSide(owner.side === 'player' ? 'enemy' : 'player');
+                    return unitsInRowFrontToBack(aliveTargetsOf(opposing), row).map((a) => a.id);
+                },
+                selfDestruct: (ownerId) => {
+                    const owner = allActorsById.get(ownerId);
+                    if (!owner || owner.destroyedRound !== undefined) return;
+                    applyVictimDamage(
+                        SELF_DESTRUCT_MAX_HP_MULTIPLE * maxHpOf(ownerId),
+                        owner,
+                        sink,
+                        {
+                            byDirectDamage: false,
+                            bypassDamageImmunity: true,
+                        }
+                    );
+                },
                 oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
                 perRoundFireCounts: sideCtx.perRoundFireCounts,
                 // Live not-hit-this-round gate (Alacrity). hitThisRound is a single

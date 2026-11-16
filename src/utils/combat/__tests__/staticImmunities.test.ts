@@ -20,7 +20,7 @@ import {
 import { bossShip, npcShip } from '../../../constants/bountyBosses';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
-import { parsePattern } from '../../targetingParser';
+import { parsePattern, parseTarget } from '../../targetingParser';
 import { createActor, type CombatActor } from '../state';
 import { reduceBombsOnVictim } from '../bombCountdown';
 import { boardInput, hitKit, type BoardUnit, type Placement } from '../__testutils__/realKitBoard';
@@ -151,6 +151,7 @@ const RECORDED: CombatEventType[] = [
     'debuff-resisted',
     'dot-applied',
     'purge-performed',
+    'steal-performed',
     'turn-started',
     'skill-fired',
     'ability-performed',
@@ -433,30 +434,94 @@ describe.each(SIDES)('purge immunity, carrier on the %s side', (placement) => {
     );
 });
 
+describe.each(SIDES)('steal on a purge-immune unit, carrier on the %s side', (placement) => {
+    /** `generic`: "steals 1 buff"; `named`: Meatshield's Protection top-up. */
+    const stolen = (immune: boolean, kind: 'generic' | 'named'): number => {
+        const carrier = unit('carrier', 'M4', {
+            kit: {
+                slots: [
+                    { slot: 'active', abilities: [] },
+                    {
+                        slot: 'passive',
+                        abilities: [heldBuff(kind === 'named' ? 'Protection' : 'Stealth')],
+                    },
+                ],
+                ...(immune ? { purgeImmune: true } : {}),
+            },
+        });
+        const thief: BoardUnit = {
+            id: 'thief',
+            kit: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'steal',
+                                type: 'buff-steal',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: {
+                                    type: 'buff-steal',
+                                    count: 1,
+                                    ...(kind === 'named'
+                                        ? { buffName: 'Protection', upToStacks: 3 }
+                                        : {}),
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+            position: 'M4',
+            speed: 500,
+            hacking: 1e6,
+            hp: 1e9,
+            // Stealth hides the carrier from a normal target pick.
+            target: { ...parseTarget('front'), ignoresStealth: true },
+        };
+        const { id } = boardInput(placement, carrier, [], [thief], 1);
+        const r = run(placement, carrier, [], [thief], 1);
+        return r.events.filter((e) => e.type === 'steal-performed' && e.targetId === id(carrier))
+            .length;
+    };
+
+    it.each(['generic', 'named'] as const)(
+        'control: a %s steal takes the buff without the flag',
+        (kind) => {
+            expect(stolen(false, kind)).toBeGreaterThan(0);
+        }
+    );
+
+    it.each(['generic', 'named'] as const)(
+        'a %s steal takes nothing from the immune unit',
+        (kind) => {
+            expect(stolen(true, kind)).toBe(0);
+        }
+    );
+});
+
+const NO_TURN_KIT: ShipSkills = { slots: [{ slot: 'active', abilities: [] }] };
+
 describe.each(SIDES)('a unit with empty active and charged, on the %s side', (placement) => {
     it('takes every turn and casts nothing, and its Stealth ticks down on its own turns', () => {
-        const kit = buildShipAbilities(npcShip('torpedo', 135)!);
-        // The blast clause rides its own trigger; the turn itself must cast nothing.
-        const idle: ShipSkills = {
-            ...kit,
-            slots: kit.slots.map((s) => ({
-                ...s,
-                abilities: s.abilities.filter((a) => a.type !== 'damage'),
-            })),
-        };
+        // The real, unmodified kit. A durable ally in front of it in its row keeps its
+        // end-of-round blast gated off, so every damage the opponent could take would be its turn's.
         const torpedo: BoardUnit = {
             id: 'torpedo',
-            kit: idle,
-            position: 'T4',
+            kit: buildShipAbilities(npcShip('torpedo', 135)!),
+            position: 'T2',
             speed: 93,
             hp: 38160,
             attack: 1000,
         };
+        const shield = unit('shield', 'T4', { kit: NO_TURN_KIT });
         const rounds = 12;
         const foe = aoeAttacker({ attack: 0 });
-        const { id } = boardInput(placement, torpedo, [], [foe], rounds);
+        const { id } = boardInput(placement, torpedo, [shield], [foe], rounds);
         const tid = id(torpedo);
-        const { events, hp } = run(placement, torpedo, [], [foe], rounds);
+        const { events, hp } = run(placement, torpedo, [shield], [foe], rounds);
         const turns = events.filter((e) => e.type === 'turn-started' && e.actorId === tid);
         expect(turns).toHaveLength(rounds);
         // The turn lands no hit: no `attacked`, and the opponent keeps all its HP.

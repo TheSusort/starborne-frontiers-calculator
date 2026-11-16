@@ -11,7 +11,13 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
 import { describe, it, expect } from 'vitest';
-import { buildCellIndex, cellsOf, hitCellOf, representativeCells } from '../cellIndex';
+import {
+    buildCellIndex,
+    cellsOf,
+    hitCellOf,
+    representativeCells,
+    unitsInRowFrontToBack,
+} from '../cellIndex';
 import type { Position } from '../../../types/encounters';
 
 const unit = (id: string, position: Position, footprint?: Position[]) => ({
@@ -41,6 +47,28 @@ describe('buildCellIndex', () => {
         expect(index.get('M2')).toBe(boss);
         expect(index.get('T3')).toBe(add);
         expect(index.size).toBe(3);
+    });
+});
+
+describe('unitsInRowFrontToBack', () => {
+    it('orders the units in the row front-most first and leaves out the other rows', () => {
+        const a = unit('a', 'T1');
+        const b = unit('b', 'T4');
+        const c = unit('c', 'M4');
+        expect(unitsInRowFrontToBack([a, b, c], 'T').map((u) => u.id)).toEqual(['b', 'a']);
+    });
+    it('ranks a multi-hex unit at its front-most cell in that row', () => {
+        const boss = unit('boss', 'M1', ['M1', 'M3']);
+        const add = unit('add', 'M2');
+        expect(unitsInRowFrontToBack([add, boss], 'M').map((u) => u.id)).toEqual(['boss', 'add']);
+    });
+    it('counts a multi-hex unit in every row it covers', () => {
+        const tall = unit('tall', 'T2', ['T2', 'M2']);
+        const add = unit('add', 'M1');
+        expect(unitsInRowFrontToBack([add, tall], 'M').map((u) => u.id)).toEqual(['tall', 'add']);
+    });
+    it('an empty row is nobody', () => {
+        expect(unitsInRowFrontToBack([unit('a', 'T1')], 'B')).toEqual([]);
     });
 });
 

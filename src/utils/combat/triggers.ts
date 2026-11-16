@@ -3036,7 +3036,7 @@ export interface IntentExecContext {
          *  CURRENT SHIELD instead of max HP. Mutually exclusive with hpBasisPct in the corpus. */
         shieldBasisPct?: number,
         allowDeadOwner?: boolean,
-        opts?: { ignoresDefense?: boolean; flatBasis?: number }
+        opts?: ReactiveDamageOpts
         // Returns the mitigated/credited amount + crit flag so the caller can surface the proc in
         // the combat log (reactive-damage-performed); void/0 when the proc was guarded (dead
         // victim, non-positive) or the delegate is absent (unit fixtures).
@@ -3176,6 +3176,15 @@ export interface IntentExecContext {
     /** Id of the sole living actor on the drain owner's side (recomputed each drain),
      *  or undefined when !=1 actor is alive. Drives the `last-standing` gate (Last Stand). */
     lastStandingId?: string;
+    /** Whether `ownerId` is the front-most living unit of its own side in its row, read live
+     *  (`self-front-of-row`). Absent → the gate is not met. */
+    isFrontOfRowFor?: (ownerId: string) => boolean;
+    /** The living opposing actors in `ownerId`'s row, front-most first (`own-row-front-enemy`).
+     *  Empty when the row holds none. */
+    ownRowEnemiesFor?: (ownerId: string) => string[];
+    /** "it destroys itself" (`selfDestruct` on a damage config): the owner's lethal self-hit,
+     *  read the rule at `SELF_DESTRUCT_MAX_HP_MULTIPLE` (engine.ts). */
+    selfDestruct?: (ownerId: string) => void;
     /** Doomsayer: living opposing actor with the greatest live effective attack. */
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
     /** Chakara: living opposing actor with the greatest live effective speed.
@@ -3333,6 +3342,9 @@ export function buildActorConditionContext(
         /** Owner is the sole living actor on its side. Default false. Populated by
          *  buildDrainContext. */
         lastStanding?: boolean;
+        /** The owner is the front-most living unit of its side in its row. Default false.
+         *  Populated by buildDrainContext. */
+        frontOfRow?: boolean;
         /** Owner's own-turn counter (CombatActor.turnsTaken). Default 0 (DPS-assumption).
          *  Populated by buildDrainContext. */
         turnsTaken?: number;
@@ -3397,6 +3409,7 @@ export function buildActorConditionContext(
         wasHitThisRound: shared.wasHitThisRound,
         firstActivator: shared.firstActivator,
         lastStanding: shared.lastStanding,
+        frontOfRow: shared.frontOfRow,
         turnsTaken: shared.turnsTaken,
         enemiesHitThisCast: shared.enemiesHitThisCast,
         allyTeamNames: shared.allyTeamNames,
@@ -3699,6 +3712,8 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string, intent?: Int
         // Live last-standing gate (Last Stand). lastStandingId is undefined unless EXACTLY
         // one same-side actor is alive → DPS / no-delegate paths read "not alone" ⇒ not met.
         lastStanding: ctx.lastStandingId === ownerId,
+        // Live "first in the row" gate (Torpedo). No delegate → not met.
+        frontOfRow: ctx.isFrontOfRowFor?.(ownerId) ?? false,
         // Every-n-turns gate (Chrono Reaver). Default 0 → DPS / no-delegate
         // paths read 0 (the evaluator's t<=0 guard blocks ALL periods at turn 0, so
         // every-n-turns is never met).
@@ -5185,6 +5200,51 @@ function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): Co
     };
 }
 
+/**
+ * A row attack on the owner's own row (`own-row-front-enemy`, the Torpedo's blast): the front-most
+ * living opposing actor there takes the full hit, every other one in the row half of it. With
+ * `selfDestruct` the owner then destroys itself, whether or not the row held anyone.
+ */
+function resolveOwnRowBlast(
+    intent: Intent,
+    ctx: IntentExecContext,
+    cfg: Extract<Ability['config'], { type: 'damage' }>,
+    allowDeadOwner: boolean
+): void {
+    const [primary, ...covered] = ctx.ownRowEnemiesFor?.(intent.ownerId) ?? [];
+    const victims = primary === undefined ? [] : [primary, ...covered];
+    for (const victimId of victims) {
+        const outcome = ctx.applyReactiveDamage?.(
+            intent.ownerId,
+            victimId,
+            intent.ability.id,
+            cfg.multiplier,
+            cfg.hits ?? 1,
+            cfg.noCrit ?? false,
+            undefined,
+            undefined,
+            allowDeadOwner,
+            {
+                ignoresDefense: cfg.ignoresDefense === true,
+                ...(victimId === primary ? {} : { splash: true }),
+            }
+        );
+        emitReactiveDamageLog(ctx, intent.ownerId, victimId, outcome);
+    }
+    if (cfg.selfDestruct) ctx.selfDestruct?.(intent.ownerId);
+}
+
+/** How a reactive damage proc is thrown, beyond its multiplier (`applyReactiveDamage`).
+ *  `flatBasis`: a flat copy of an already-resolved figure (Demolisher's Bomb splash).
+ *  `ignoresDefense`: the victim's Defense term is bypassed. `splash`: the victim is covered by a
+ *  row/AoE footprint rather than its anchor, so the hit lands at half damage and is not a
+ *  primary-target hit (`roleScaleFor` in positionalApply.ts is the cast-path rule). */
+export interface ReactiveDamageOpts {
+    ignoresDefense?: boolean;
+    flatBasis?: number;
+    splash?: boolean;
+}
+
 /** What a reactive damage hit reports back: the hit as thrown (`dealt`) and what its victim took
  *  (`taken` — after its incoming-block proc and any Protection split). The log row reads `taken`
  *  when present. */
@@ -5419,6 +5479,8 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     'enemy-highest-attack': selectorChargeKind('enemy-highest-attack'),
     'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
     'enemy-highest-defense': selectorChargeKind('enemy-highest-defense'),
+    // Only the Torpedo's blast carries this target; no charge clause names it.
+    'own-row-front-enemy': 'owner-gain',
 };
 
 /** `Intent.eventSeq` bookkeeping: the number each emitted event object got, the next number to
@@ -7469,6 +7531,10 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // a future ability combines them, extract the selector chain into a pure resolver and gate on
         // it before these two lines — and re-pin the golden boards, since that moves an RNG draw.
         if (!passesOncePerRoundGate(intent, ctx)) return;
+        if (intent.ability.target === 'own-row-front-enemy') {
+            resolveOwnRowBlast(intent, ctx, cfg, deadOwnerMayResolve(owner.actor, intent));
+            return;
+        }
         // Reactive direct-damage proc (Grif's on-enemy-cleansed 75% no-crit, FrontLine's
         // on-enemy-charged-cast 80%, Judge/Chakara/Incinerator/Rhodium's
         // start-of-round/end-of-round passives) runs the SAME defense-mitigated,

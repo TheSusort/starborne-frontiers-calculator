@@ -3078,7 +3078,26 @@ export function detectAllyDebuffedTrigger(
 
 // "at the end of the round, … purges …" — Rhodium end-of-round purge. Position-scoped.
 // Verified against RAW CSV: 'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs …'
-const END_OF_ROUND_RE = /\bat\s+the\s+end\s+of\s+the\s+round\b/i;
+// "of a round" is the Torpedo's wording of the same trigger.
+const END_OF_ROUND_RE = /\bat\s+the\s+end\s+of\s+(?:the|a)\s+round\b/i;
+
+// The Torpedo's "if this Unit is the first in the row" gate and its "it destroys itself" rider.
+const FIRST_IN_ROW_RE = /\bif\s+this\s+unit\s+is\s+the\s+first\s+in\s+the\s+row\b/i;
+const DESTROYS_ITSELF_RE = /\bdestroys\s+itself\b/i;
+
+/** True when `anchorPos` sits in a sentence gated on the owner being first in its row. */
+export function parseFirstInRowGate(text: string | null | undefined, anchorPos: number): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && FIRST_IN_ROW_RE.test(sentence);
+}
+
+/** True when `anchorPos` sits in a sentence where the owner "destroys itself" to deal it. */
+export function parseSelfDestruct(text: string | null | undefined, anchorPos: number): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && DESTROYS_ITSELF_RE.test(sentence);
+}
 
 /**
  * Returns 'end-of-round' when `anchorPos` falls inside the sentence carrying the

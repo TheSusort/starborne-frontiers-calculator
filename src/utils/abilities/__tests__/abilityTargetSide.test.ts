@@ -34,6 +34,7 @@ describe('ABILITY_TARGET_SIDE', () => {
         'enemy-highest-attack',
         'enemy-highest-speed',
         'enemy-highest-defense',
+        'own-row-front-enemy',
     ];
 
     it.each(SELF)('%s is self-side', (t) => {

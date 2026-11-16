@@ -95,6 +95,8 @@ import {
     detectPurgeEnemyTypeCondition,
     detectMostBuffsTarget,
     parseHighestSpeedEnemyTarget,
+    parseFirstInRowGate,
+    parseSelfDestruct,
     parseHighestAttackEnemyTarget,
     parseHighestDefenseEnemyTarget,
     parseWhenDebuffedHavingGate,
@@ -1530,6 +1532,16 @@ function abilitiesFromText(
         // unaffected. out[0] is safe to mutate here: it is the base branch pushed first (see above).
         if (damageTrigger === 'start-of-round' && parseHighestSpeedEnemyTarget(text, damagePos)) {
             out[0].ability.target = 'enemy-highest-speed';
+        }
+        // The Torpedo's end-of-round blast: "if this Unit is the first in the row, it destroys
+        // itself to deal …" is a row attack on its own row, gated live on standing first in it.
+        if (damageTrigger === 'end-of-round' && parseFirstInRowGate(text, damagePos)) {
+            const blast = out[0].ability;
+            blast.target = 'own-row-front-enemy';
+            blast.conditions = [{ subject: 'self-front-of-row', derivable: true }];
+            if (parseSelfDestruct(text, damagePos) && blast.config.type === 'damage') {
+                blast.config.selfDestruct = true;
+            }
         }
         // Ship-kit W5 (Demolisher bomb-splash): the reactive bomb-detonated damage clause
         // ("... deals 100% of the Bomb's damage to all adjacent enemies") re-targets from the

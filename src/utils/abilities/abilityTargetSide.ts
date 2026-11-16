@@ -37,6 +37,8 @@ export const ABILITY_TARGET_SIDE: Record<AbilityTarget, 'self' | 'enemy'> = {
     'enemy-highest-attack': 'enemy',
     'enemy-highest-speed': 'enemy',
     'enemy-highest-defense': 'enemy',
+    // The owner's own row on the opposing board (Torpedo blast).
+    'own-row-front-enemy': 'enemy',
 };
 
 export function isEnemyTarget(target: AbilityTarget): boolean {
@@ -82,6 +84,8 @@ export const ABILITY_TARGET_ENEMY_SCOPE: Record<AbilityTarget, 'all' | 'subset' 
     'enemy-highest-attack': 'subset',
     'enemy-highest-speed': 'subset',
     'enemy-highest-defense': 'subset',
+    // One row of the opposing board.
+    'own-row-front-enemy': 'subset',
 };
 
 /**
@@ -134,6 +138,8 @@ export const ABILITY_TARGET_SELECTOR: Record<AbilityTarget, EnemySelectorKind | 
     'enemy-highest-attack': 'highest-attack',
     'enemy-highest-speed': 'highest-speed',
     'enemy-highest-defense': 'highest-defense',
+    // Positional (the owner's row), not a global selection.
+    'own-row-front-enemy': null,
 };
 
 /**

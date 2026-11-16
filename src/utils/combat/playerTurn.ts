@@ -818,6 +818,7 @@ const CONDITION_CONTEXT_SUBJECT = {
     wasHitThisRound: 'caster',
     firstActivator: 'caster',
     isLastStanding: 'caster',
+    isFrontOfRow: 'caster',
     turnsTaken: 'caster',
     stealthedEnemyCount: 'caster',
     shieldedAllyCount: 'caster',
@@ -2782,6 +2783,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             vid === undefined || vid === enemy?.id ? enemy : opposingVictimById?.get(vid);
         return getAffinityMatchup(attackerAff, victim?.affinity) === 'disadvantage';
     };
+    /** A purge-immune ship (`CombatActor.purgeImmune`) loses no buff to a purge or a steal. */
+    const purgeImmuneVictim = (vid: string | undefined): boolean => {
+        const victim =
+            vid === undefined || vid === enemy?.id ? enemy : opposingVictimById?.get(vid);
+        return victim?.purgeImmune === true;
+    };
 
     // Applies one passed timed self status to its recipients. The status lives on each recipient
     // (decrements at the recipient's Post Turn; family + persistent rules run per recipient side
@@ -2945,7 +2952,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             const source =
                 opposingVictimById?.get(sourceId) ??
                 (hasVictim && sourceId === enemy.id ? enemy : undefined);
-            if (extensionImmune(sourceId)) continue;
+            if (extensionImmune(sourceId) || purgeImmuneVictim(sourceId)) continue;
             // How many stacks of each STACK-STEALABLE status the source holds right now.
             // Computed HERE and passed in, rather than inside statusEngine.steal: the count
             // has to aggregate all four status stores AND evaluate aura conditions against a
@@ -6702,7 +6709,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         selfBuffStacksForOwner(statusEngine, targetId, buffName) > 0
                             ? targetId
                             : buffHolderIdByPosition?.(buffName);
-                    if (sourceId !== undefined && !extensionImmune(sourceId)) {
+                    if (
+                        sourceId !== undefined &&
+                        !extensionImmune(sourceId) &&
+                        !purgeImmuneVictim(sourceId)
+                    ) {
                         const availableAtSource = selfBuffStacksForOwner(
                             statusEngine,
                             sourceId,

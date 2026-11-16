@@ -62,6 +62,7 @@ describe('#407: CHARGE_TARGET_KIND cannot drift from ABILITY_TARGET_SELECTOR', (
             'enemy-highest-attack': 'selector-highest-attack',
             'enemy-highest-speed': 'selector-highest-speed',
             'enemy-highest-defense': 'selector-highest-defense',
+            'own-row-front-enemy': 'owner-gain',
         });
     });
 });

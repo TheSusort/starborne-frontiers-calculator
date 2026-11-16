@@ -120,8 +120,13 @@ export type AbilityTarget =
     //                           live effective speed (global selector, resolved LIVE at drain — no
     //                           memo needed, Chakara's co-located clause is a self-buff that never
     //                           changes an enemy's speed).
-    | 'enemy-highest-defense'; // living opposing actor with the greatest live effective defence
-//                           (global selector, resolved LIVE at drain; ties → board position).
+    | 'enemy-highest-defense' // living opposing actor with the greatest live effective defence
+    //                           (global selector, resolved LIVE at drain; ties → board position).
+    | 'own-row-front-enemy'; // a row attack on the OWNER's own row (Torpedo): the front-most living
+//                           opposing actor in that row is the primary (full damage), every other
+//                           living opposing actor in the row takes 50%. An empty row is nobody —
+//                           it never falls through to another row. Read live at drain
+//                           (`IntentExecContext.ownRowEnemiesFor`).
 
 /** #363: the ally-scoped targets a recipient `factionFilter` can meaningfully narrow — the
  *  plural ally scopes plus plain `'ally'` (which resolves to the caster's whole footprint on the
@@ -550,6 +555,10 @@ export type ConditionSubject =
     // derivable:true — a derivable:false condition would always be met (evaluateConditions.ts:30).
     // Infrastructure for the Last Stand implant (wired in a later task).
     | 'last-standing'
+    // Binary gate: the owner is the front-most living unit of its own side in its row
+    // (Torpedo's "if this Unit is the first in the row"). Live-derived at drain
+    // (ConditionContext.isFrontOfRow); absent board → not met. derivable:true.
+    | 'self-front-of-row'
     // Binary periodic gate: met when the owner's own-turn counter satisfies
     // turnsTaken % period === (offset ?? 0). period/offset live on Condition.
     // Used by Chrono Reaver (every other/third turn). Always derivable:true.
@@ -892,6 +901,10 @@ export type AbilityConfig =
           ignoresForcedTargeting?: boolean;
           /** See `ignoresForcedTargeting`: this attack's target choice ignores Concentrate Fire. */
           ignoresConcentrateFire?: boolean;
+          /** "it destroys itself" (Torpedo): after the hit resolves, the owner destroys itself
+           *  (`SELF_DESTRUCT_MAX_HP_MULTIPLE`, engine.ts), even when the hit found no victim.
+           *  Reactive damage executor only. */
+          selfDestruct?: boolean;
       }
     | {
           type: 'counter';

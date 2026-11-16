@@ -125,6 +125,9 @@ export interface ConditionContext {
     /** D-PR16: this owner is the SOLE living actor on its own side. Live-derived by the engine
      *  each drain; defaults false. Infrastructure for the Last Stand implant. */
     isLastStanding?: boolean;
+    /** The owner is the front-most living unit of its own side in its row (`self-front-of-row`).
+     *  Live-derived by the engine drain context; absent → false. */
+    isFrontOfRow?: boolean;
     /** The condition owner's own-turn counter (CombatActor.turnsTaken). Live-derived by
      *  the engine drain context; defaults 0 (DPS / no-delegate → period>=2 never met). */
     turnsTaken?: number;
@@ -403,6 +406,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.firstActivator ? 1 : 0;
         case 'last-standing':
             return ctx.isLastStanding ? 1 : 0;
+        case 'self-front-of-row':
+            return ctx.isFrontOfRow ? 1 : 0;
         case 'every-n-turns': {
             const period = cond.period ?? 1;
             const offset = cond.offset ?? 0;

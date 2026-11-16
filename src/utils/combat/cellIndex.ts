@@ -1,6 +1,6 @@
 import type { Position } from '../../types/encounters';
 import type { TargetSelection } from '../targetingParser';
-import { colOf, footprintLabelCell, rowOf } from '../targeting/board';
+import { colOf, footprintLabelCell, rowOf, type BoardRow } from '../targeting/board';
 import { rowScanOrder } from '../targeting/selectTargets';
 
 /** The board-placement slice of an actor: its anchor cell and, for a multi-hex unit (a bounty
@@ -39,6 +39,23 @@ export function buildCellIndex<T extends CellOccupant>(actors: readonly T[]): Ma
 /** Front-most first (column 4 = front). */
 const frontToBack = (cells: readonly Position[]): Position[] =>
     [...cells].sort((a, b) => colOf(b) - colOf(a));
+
+/**
+ * The units with a cell in `row`, front-most first, each ranked by its front-most cell in that
+ * row — a multi-hex unit counts in every row it covers. Units outside the row are left out. Two
+ * units never share a cell, so the order has no ties.
+ */
+export function unitsInRowFrontToBack<T extends CellOccupant>(
+    units: readonly T[],
+    row: BoardRow
+): T[] {
+    const ranked: { unit: T; col: number }[] = [];
+    for (const unit of units) {
+        const [front] = frontToBack(cellsOf(unit).filter((c) => rowOf(c) === row));
+        if (front !== undefined) ranked.push({ unit, col: colOf(front) });
+    }
+    return ranked.sort((a, b) => b.col - a.col).map((r) => r.unit);
+}
 
 /**
  * The cell an attacker hits on a unit it has already chosen: the first row of the attacker's row

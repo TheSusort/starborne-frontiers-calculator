@@ -507,13 +507,15 @@ export function effectiveDamageStatsOf(args: {
 
 /** Whether a reactive proc can answer `cond` for its owner's passive damage modifiers: the
  *  engine supplies each reading live at the hit (`reactivePassiveOutgoingPct`) — the
- *  destroyed-enemy count, and the VICTIM's debuff names for a name-gated `enemy-debuff`
- *  ("to enemies afflicted with Inferno"). A modifier gated on anything else is left out, never
+ *  destroyed-enemy count, the VICTIM's debuff names for a name-gated `enemy-debuff`
+ *  ("to enemies afflicted with Inferno"), and the VICTIM's role class for `enemy-type`
+ *  ("100% more direct damage to Defenders"). A modifier gated on anything else is left out, never
  *  folded against a guessed reading; `reactiveOutgoingModifierSubjects.test.ts` lists the corpus
  *  ships this leaves out. */
 export function reactiveHitAnswers(cond: Ability['conditions'][number]): boolean {
     return (
         cond.subject === 'enemy-destroyed' ||
+        cond.subject === 'enemy-type' ||
         (cond.subject === 'enemy-debuff' && cond.buffName !== undefined)
     );
 }
