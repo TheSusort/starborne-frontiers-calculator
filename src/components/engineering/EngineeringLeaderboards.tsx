@@ -67,22 +67,18 @@ const CustomYAxisTick: React.FC<CustomYAxisTickProps> = ({ x, y, payload }) => {
         return '#9ca3af';
     };
 
+    // Labels are right-aligned against a fixed icon column next to the axis, so a
+    // trophy never shifts the text into the bar.
     return (
         <g transform={`translate(${x},${y})`}>
-            {showTrophy ? (
-                <>
-                    <foreignObject x={-35} y={-8} width={20} height={20}>
-                        <TrophyIcon className="w-4 h-4" style={{ color: medalColor }} />
-                    </foreignObject>
-                    <text x={-17} y={4} textAnchor="start" fill={getLabelColor()} fontSize={12}>
-                        {label}
-                    </text>
-                </>
-            ) : (
-                <text x={-5} y={4} textAnchor="end" fill={getLabelColor()} fontSize={12}>
-                    {label}
-                </text>
+            {showTrophy && (
+                <foreignObject x={-21} y={-8} width={16} height={16}>
+                    <TrophyIcon className="w-4 h-4" style={{ color: medalColor }} />
+                </foreignObject>
             )}
+            <text x={-25} y={4} textAnchor="end" fill={getLabelColor()} fontSize={12}>
+                {label}
+            </text>
         </g>
     );
 };
@@ -206,7 +202,7 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
                                 dataKey="name"
                                 type="category"
                                 stroke={themeColors.axisStroke}
-                                width={120}
+                                width={160}
                                 interval={0}
                                 tick={<CustomYAxisTick />}
                             />
@@ -261,7 +257,7 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
                                 dataKey="name"
                                 type="category"
                                 stroke={themeColors.axisStroke}
-                                width={120}
+                                width={160}
                                 interval={0}
                                 tick={<CustomYAxisTick />}
                             />

@@ -9,6 +9,12 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { EngineeringSnapshot } from '../../types/statisticsSnapshot';
 import { mergeDistributions } from '../../utils/statistics/mergeDistributions';
 import { ENGINEERING_CUMULATIVE_COSTS } from '../../constants/engineeringStats';
+import { SHIP_TYPES, isShipTypeName } from '../../constants';
+import { STATS } from '../../constants/stats';
+
+const getRoleLabel = (role: string) => (isShipTypeName(role) ? SHIP_TYPES[role].name : role);
+const getStatLabel = (stat: string) =>
+    stat in STATS ? STATS[stat as keyof typeof STATS].label : stat;
 
 interface EngineeringStatsTabProps {
     engineeringStats: EngineeringStat[];
@@ -52,12 +58,12 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
     // Prepare data for points by role chart
     const roleChartData = useMemo(() => {
         const current = stats.byRole.map((role) => ({
-            name: role.role,
+            name: getRoleLabel(role.role),
             value: role.totalPoints,
         }));
         if (previousStats) {
             const previous = previousStats.byRole.map((role) => ({
-                name: role.role,
+                name: getRoleLabel(role.role),
                 value: role.totalPoints,
             }));
             return mergeDistributions(current, previous);
@@ -67,7 +73,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
 
     // Prepare data for stacked bar chart (points by stat type per role)
     const stackedChartData = stats.byRole.map((role) => {
-        const data: Record<string, string | number> = { name: role.role };
+        const data: Record<string, string | number> = { name: getRoleLabel(role.role) };
         role.byStatType.forEach((stat) => {
             data[stat.statName] = stat.points;
         });
@@ -114,7 +120,9 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
                 />
                 <StatCard
                     title="Most Invested"
-                    value={stats.mostInvestedRole?.role || 'N/A'}
+                    value={
+                        stats.mostInvestedRole ? getRoleLabel(stats.mostInvestedRole.role) : 'N/A'
+                    }
                     subtitle={`${stats.mostInvestedRole?.points || 0} points`}
                     color="yellow"
                 />
@@ -164,6 +172,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
                                 <Bar
                                     key={statName}
                                     dataKey={statName}
+                                    name={getStatLabel(statName)}
                                     stackId="a"
                                     fill={CHART_COLORS[index % CHART_COLORS.length]}
                                 />
@@ -189,7 +198,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
                                         key={statName}
                                         className="text-right py-2 px-2 text-theme-text-secondary"
                                     >
-                                        {statName}
+                                        {getStatLabel(statName)}
                                     </th>
                                 ))}
                                 <th className="text-right py-2 text-theme-text-secondary font-bold">
@@ -204,7 +213,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
                                 );
                                 return (
                                     <tr key={role.role} className="border-b border-dark-border">
-                                        <td className="py-2">{role.role}</td>
+                                        <td className="py-2">{getRoleLabel(role.role)}</td>
                                         {allStatNames.map((statName) => (
                                             <td key={statName} className="text-right py-2 px-2">
                                                 {statMap.get(statName) || 0}
@@ -226,7 +235,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
                 <div className="bg-red-900/20 border border-red-700 p-4">
                     <h4 className="text-red-400 font-semibold mb-2">Roles with No Investment</h4>
                     <div className="text-theme-text">
-                        {stats.rolesWithZeroInvestment.join(', ')}
+                        {stats.rolesWithZeroInvestment.map(getRoleLabel).join(', ')}
                     </div>
                 </div>
             )}
