@@ -96,6 +96,7 @@ import {
     detectMostBuffsTarget,
     parseHighestSpeedEnemyTarget,
     parseFirstInRowGate,
+    parseSummon,
     parseSelfDestruct,
     parseHighestAttackEnemyTarget,
     parseHighestDefenseEnemyTarget,
@@ -3256,6 +3257,22 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: extraPos >= 0 ? extraPos : MAX_POS,
+        });
+    }
+
+    const summon = parseSummon(text);
+    if (summon) {
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'summon',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'summon', addId: summon.addId },
+                autoFilled: true,
+            },
+            pos: summon.pos,
         });
     }
 

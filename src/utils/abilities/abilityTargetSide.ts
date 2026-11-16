@@ -208,6 +208,8 @@ export const ABILITY_TYPE_TARGET_SIDES: Record<AbilityType, 'self' | 'enemy' | '
     // #591 (Prophet): always self-target — the owner's own permanent stat bonus.
     'stat-gain': 'self',
     'extra-action': 'self',
+    // Re-arms the caster's own side.
+    summon: 'self',
     heal: 'self',
     shield: 'self',
     cleanse: 'self',

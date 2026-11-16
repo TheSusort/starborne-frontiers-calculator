@@ -53,6 +53,7 @@ import {
     type EnemySelectorKind,
 } from '../abilities/abilityTargetSide';
 import { TITANITE_PLATING } from '../../constants/persistentStackingBuffs';
+import { parseNpcShipId } from '../../constants/bountyBosses';
 import { composeDotDamageFactor } from '../damageComposition';
 import { ONE_SHOT_PERSISTENT_BUFFS } from '../../constants/oneShotPersistentBuffs';
 import { rowOf } from '../targeting/board';
@@ -78,6 +79,7 @@ import {
     PendingAccumulator,
     PendingBomb,
     createActor,
+    reviveActor,
     selectNextBySpeed,
     orderByTurnPriority,
     positionTurnRank,
@@ -941,6 +943,8 @@ export interface EnemyActorInput {
     footprint?: readonly Position[];
     /** A bounty boss: its destruction defeats its whole side. */
     isBoss?: boolean;
+    /** The ship this actor fields (`CombatActor.shipId`). */
+    shipId?: string;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1094,6 +1098,7 @@ export function buildEnemyPlayerActorRuntime(
         position: e.position,
         footprint: e.footprint,
         isBoss: e.isBoss,
+        shipId: e.shipId,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
         ignoresStealth: e.ignoresStealth,
         doesntBreakStasis: e.doesntBreakStasis,
@@ -1599,6 +1604,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     footprint?: readonly Position[];
     /** A bounty boss: its destruction defeats its whole side. */
     isBoss?: boolean;
+    /** The ship this actor fields (`CombatActor.shipId`). */
+    shipId?: string;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1743,6 +1750,8 @@ export interface CombatEngineInput {
         footprint?: readonly Position[];
         /** A bounty boss: its destruction defeats its whole side. */
         isBoss?: boolean;
+        /** The ship this actor fields (`CombatActor.shipId`). */
+        shipId?: string;
         /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
          *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
          *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -1801,6 +1810,8 @@ export interface CombatEngineInput {
     footprint?: readonly Position[];
     /** A bounty boss: its destruction defeats its whole side. */
     isBoss?: boolean;
+    /** The ship this actor fields (`CombatActor.shipId`). */
+    shipId?: string;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
      *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
      *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
@@ -2555,6 +2566,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         position: input.position,
         footprint: input.footprint,
         isBoss: input.isBoss,
+        shipId: input.shipId,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
         ignoresStealth: input.ignoresStealth,
         doesntBreakStasis: input.doesntBreakStasis,
@@ -2684,6 +2696,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             position: t.position,
             footprint: t.footprint,
             isBoss: t.isBoss,
+            shipId: t.shipId,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
             ignoresStealth: t.ignoresStealth,
             doesntBreakStasis: t.doesntBreakStasis,
@@ -3345,17 +3358,19 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Read LIVE (`a.corrosionEntries`, not a cached array) because the Cheat-Death
     // wipe REASSIGNS these properties rather than splicing them.
     //
-    // A plain array, not a getter: `enemyAttackerActors` is never mutated after construction
-    // (verified — no push/splice anywhere), so the MEMBERSHIP is fixed for the run while each
-    // member's containers are still read live at reporting time. A future PR that summons an
-    // enemy mid-run must revisit this line.
+    // A plain array, not a getter: `enemyAttackerActors` is never mutated after construction, so
+    // the MEMBERSHIP is fixed for the run while each member's containers are still read live at
+    // reporting time. A summon does not add actors: it re-arms a destroyed member in place
+    // (`processSummons`), whose containers `reviveActor` replaces with empty ones, and which
+    // `dotCarrierReports` reads as live again because its `destroyedRound` is cleared.
     const dotCarrierActors: CombatActor[] = [...enemyAttackerActors];
 
     /**
      * Is this carrier's DoT container still LIVE state, or a corpse's frozen leftovers?
      *
      * Nothing clears a DoT container on death (`recordDestroyed` in state.ts only stamps
-     * `destroyedRound` and emits), so a killed carrier keeps whatever stood on it. Whether that
+     * `destroyedRound` and emits), so a killed carrier keeps whatever stood on it until a summon
+     * re-arms it (`reviveActor` empties them). Whether that
      * is real depends on ONE thing: does the carrier still take its turn and TICK?
      *
      * This predicate is therefore the enemy-side restriction of the ROUND LOOP'S OWN dead-skip —
@@ -3405,8 +3420,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Squad-leader "+X% attack for each other alive <faction> ally" is LIVE. Each such actor's
     // `preFight` becomes an engine-owned copy whose `attackPct` includes the per-ally term for the
     // same-side allies of its own faction alive now (`liveLeaderAttackPct`), set here and redone
-    // on every death. Every `preFight.attackPct` reader therefore sees the live count; the
-    // caller's input block is never mutated.
+    // on every death and every revive. Every `preFight.attackPct` reader therefore sees the live
+    // count; the caller's input block is never mutated.
     const leaderAllyAttackBase = new Map<string, PreFightCombatModifiers>();
     for (const a of allActors) {
         if (a.preFight && a.preFight.attackPctPerOtherFactionAlly !== 0) {
@@ -3435,6 +3450,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     if (leaderAllyAttackBase.size > 0) {
         refreshLeaderAllyAttack();
         bus.on('ship-destroyed', refreshLeaderAllyAttack);
+        bus.on('ship-revived', refreshLeaderAllyAttack);
     }
 
     /** Prophet (#591): each actor's LIVE, per-fight shield-penetration bonus — permanent and
@@ -11748,7 +11764,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // act). Returns true when the actor is the dead heal target and the caller must `continue`.
         const handleDeadTargetSkip = (actor: CombatActor): boolean => {
             // A DESTROYED focus does not act, in ANY mode — independent of `healReportActive`.
-            // `destroyedRound` is the canonical death signal (state.ts, stamped once by
+            // `destroyedRound` is the canonical death signal (state.ts, stamped by
             // `recordDestroyed`); `currentHp <= 0` is NOT, because a never-alive actor (DPS's
             // `hp`-defaults-to-0 focus, see the gate below) also satisfies it
             // (normalizeRoster.ts). Before #415 this case was covered incidentally by the
@@ -11815,6 +11831,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 conditionalDamage: 0,
                 detonationDamage: 0,
                 extraActionGrants: [],
+                summons: [],
                 // Synthesized skip turn fires no positional attack (no positionalScalars) → this
                 // resolver is never invoked; a no-op keeps the required-field shape.
                 rollVictimCrit: () => false,
@@ -11884,6 +11901,60 @@ export function runCombat(rawInput: CombatEngineInput): {
                         pending.set(recipient.id, pendingOf(recipient.id) + 1);
                     }
                 }
+            }
+        };
+
+        /**
+         * A cast's summons ("summons two torpedoes in the top row"), run once the cast has
+         * resolved. The roster is fixed for the run, so a summon re-arms instead of adding: every
+         * DEAD actor on the summoner's side whose ship is the bounty add `addId` comes back in its
+         * own cell as a fresh combatant (owner ruling 2026-11-16: a living one is left alone):
+         *  - `reviveActor` (state.ts): alive, full HP, its starting shield pool, no charges, no
+         *    DoTs/Bombs/accumulators;
+         *  - every status it carried is wiped (`StatusEngine.clearAll`) and its Cheat Death is
+         *    unspent again;
+         *  - its turn pool for the rest of THIS round is emptied, whatever the summoner's speed
+         *    relative to it: a unit entering mid-round has missed the round's seeding (every
+         *    actor's pool is seeded at round start), so its first turn is next round's;
+         *  - its combat-start gains are granted again through the same seeding the fight start
+         *    runs (`seedPassiveTimedStatuses`, `seedPreCombatShields`).
+         * It is not a repair: no heal event, no repair reaction. Nothing re-arms on a cast that
+         * ended the fight.
+         */
+        const processSummons = (summoner: CombatActor, addIds: readonly string[]): void => {
+            if (addIds.length === 0 || sideIsWiped()) return;
+            for (const actor of actorsBySide(summoner.side)) {
+                if (actor.destroyedRound === undefined || actor.shipId === undefined) continue;
+                const add = parseNpcShipId(actor.shipId);
+                if (!add || !addIds.includes(add.id)) continue;
+                const rt = allRuntimesById.get(actor.id);
+                if (!rt) continue;
+                reviveActor(actor, maxHpOf(actor.id));
+                statusEngine.clearAll(actor.id);
+                cheatDeathConsumed.delete(actor.id);
+                cheatDeathConsumedRound.delete(actor.id);
+                // The round's row needs a focus turn: a focus re-armed before its slot came up
+                // gets the no-action turn its emptied pool no longer produces.
+                if (actor.id === focusActorId && pendingOf(actor.id) > 0) {
+                    pushSynthesizedFocusSkipTurn();
+                }
+                pending.set(actor.id, 0);
+                endOfRoundPending.set(actor.id, 0);
+                bus.emit({
+                    type: 'ship-revived',
+                    actorId: actor.id,
+                    round: r,
+                    summonerId: summoner.id,
+                });
+                seedPassiveTimedStatuses(
+                    [rt],
+                    statusEngine,
+                    bus,
+                    actor.side === 'player' ? enemyType : undefined,
+                    r,
+                    factionOf
+                );
+                seedPreCombatShields([rt]);
             }
         };
 
@@ -12816,6 +12887,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // is the one intake that runs in this same turn yet passes byDirectDamage:false,
                 // so it never uses this value as a killer.
                 actingActorId = actor.id;
+                // The bounty adds this turn's cast summons (`processSummons`).
+                let castSummons: readonly string[] = [];
                 // This turn's cast opens a new reaction chain per sub-attack (`castHitRoot`).
                 castRootBase = `cast:${++castRootSeq}`;
                 setHitRoot(castHitRoot(0), 0);
@@ -13544,6 +13617,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // re-applying timed buffs, adding persistent stacks, and ticking
                             // accumulators are all correct for a real second turn.
                             processExtraActionGrants(actor, turn.extraActionGrants);
+                            castSummons = turn.summons;
                         } else if (actor.id === focusActorId) {
                             // The focus killed itself with its own timed burst → synthesize a
                             // no-action focus turn so the post-round focusTurns.length guard does
@@ -13809,6 +13883,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }
 
                             processExtraActionGrants(actor, teamTurn.extraActionGrants);
+                            castSummons = teamTurn.summons;
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } // end stasis gate (walked-team branch)
                 } else if (actor.kind === 'enemy') {
@@ -14081,6 +14156,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // processExtraActionGrants absorb any runaway grants. grantAllyCharges stays
                             // undefined (enemy's "allies" are enemy-side, not the player team).
                             processExtraActionGrants(actor, enemyTurn.extraActionGrants);
+                            castSummons = enemyTurn.summons;
                             // The enemy's passive-slot instance is staged on the positional gate
                             // alone, like the two player-side sites: it is not the firing hit's
                             // rider, so it lands whether or not the firing hit is applied
@@ -14241,6 +14317,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     } // end stasis gate (real-enemy branch)
                 }
 
+                processSummons(actor, castSummons);
                 // Drain point (b): follow-ups triggered by this actor's turn body run as
                 // "consecutive actions" within the turn — BEFORE the owner Post Turn. A status
                 // they land on this actor takes the own-turn reprieve (R123); one they land on

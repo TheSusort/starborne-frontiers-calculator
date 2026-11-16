@@ -387,6 +387,12 @@ export interface StatusEngine {
      *  Calling on an unknown id (lazy-empty maps) is a safe no-op. Pure: mutates only this
      *  engine's own stores. */
     clearRemovable(id: string): void;
+    /** Wipe EVERY status this id carries — removable or not, timed, permanent or persistent, buff
+     *  or debuff — and zero its accumulating stacks and stack adjustments: the clean slate of a
+     *  combatant that just entered the fight (a summon re-arming a dead unit). Registrations stay:
+     *  accumulating entries keep their granter shares (they accrue again from 0) and auras keep
+     *  re-deriving from ship data. Unknown id → safe no-op. */
+    clearAll(id: string): void;
     /** Remove a SINGLE named timed enemy status from `targetId`'s per-actor enemy store.
      *  Targeted — unlike clearRemovable's broad sweep, deletes ONLY the named family, preserving
      *  co-applied debuffs on the same victim. Used by §4.5 direct-damage Stasis break.
@@ -1873,6 +1879,20 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         }
     };
 
+    const clearAll = (id: string): void => {
+        selfMaps.delete(id);
+        enemyMaps.delete(id);
+        persistentSelfMaps.delete(id);
+        persistentEnemyMaps.delete(id);
+        for (const map of [accumSelfMaps.get(id), accumEnemyMaps.get(id)]) {
+            for (const s of map?.values() ?? []) {
+                s.stacks = 0;
+                s.appliedSeq = undefined;
+            }
+        }
+        stackAdjustments.delete(id);
+    };
+
     /** Remove a SINGLE named timed enemy status from `targetId`'s per-actor enemy store (the
      *  channel applyTimedAbilityStatus writes, keyed by familyKey). Targeted — unlike
      *  clearRemovable's broad sweep, deletes ONLY the named family, preserving co-applied
@@ -2851,6 +2871,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         beginTurn,
         decrementEnemy,
         clearRemovable,
+        clearAll,
         removeTimedEnemyStatus,
         reduceTimedEnemyStatus,
         consumeTimedEnemyStatusStack,

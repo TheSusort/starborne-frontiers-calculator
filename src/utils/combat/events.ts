@@ -916,6 +916,12 @@ export type CombatEvent =
           byDirectDamage?: boolean;
           byDetonation?: boolean;
       } & ReactiveStamp)
+    /** A destroyed actor is back on the board: a summon re-armed it (`processSummons`, engine.ts)
+     *  in its own cell with full HP, no statuses and its combat-start gains granted again. It is
+     *  not a repair — no heal event accompanies it — and it undoes no death: the earlier
+     *  `ship-destroyed` stands, and the actor can be destroyed again. `summonerId` is the caster
+     *  whose summon re-armed it. */
+    | { type: 'ship-revived'; actorId: string; round: number; summonerId: string }
     /** Emitted when a Cheat Death passive intercepts what would have been a lethal
      *  hit, keeping the actor alive at 1 HP. `actorId` is the surviving actor. */
     | ({ type: 'cheat-death-activated'; actorId: string; round: number } & ReactiveStamp)

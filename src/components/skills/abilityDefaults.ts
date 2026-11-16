@@ -48,6 +48,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'stat-gain', stat: 'shieldPenetration', pct: 1 };
         case 'extra-action':
             return { type: 'extra-action', oncePerRound: false };
+        case 'summon':
+            return { type: 'summon', addId: 'torpedo' };
         case 'heal':
             return { type: 'heal', pct: 10, basis: 'hp' };
         case 'shield':
@@ -137,6 +139,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     charge: 'self',
     'stat-gain': 'self',
     'extra-action': 'self',
+    summon: 'self',
     heal: 'ally',
     shield: 'ally',
     cleanse: 'ally',

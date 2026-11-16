@@ -25,6 +25,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     // category (mirrors convert-dot/defense-substitution above).
     'stat-gain': 'Stat Gain',
     'extra-action': 'Extra Action',
+    summon: 'Summon',
     heal: 'Heal',
     shield: 'Shield',
     cleanse: 'Cleanse',

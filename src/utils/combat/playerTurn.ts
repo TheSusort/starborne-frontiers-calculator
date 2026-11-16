@@ -34,6 +34,7 @@ import {
     gateFiringAbilities,
     gateConditions,
     extraActionsFromSkill,
+    summonsFromSkill,
     partitionDotDamageAbilities,
     type ExtraActionGrant,
 } from '../abilities/applyAbilities';
@@ -564,6 +565,9 @@ export interface PlayerTurnResult {
     /** Extra-action grants this turn fired (pre-gated). The ENGINE owns queue
      *  re-insertion + the oncePerRound/backstop bookkeeping. */
     extraActionGrants: ExtraActionGrant[];
+    /** Bounty-add ids this turn's firing skill summons (pre-gated). The ENGINE re-arms them once
+     *  the cast has resolved (`processSummons`). */
+    summons: string[];
     /** Per-cast attacker-side damage scalars for the positional apply path.
      *  Populated from the SAME locals that feed the aggregate `directDamage`, so feeding
      *  these + `hitCrits` through `victimHitDamage` for the bound victim's defense profile
@@ -5973,7 +5977,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // died, and an actor that was NEVER ALIVE, both read the same way. Gating on it silences
         // the focus's whole event stream from the moment cumulative damage crosses `enemyHp`
         // (reproduced in `multiHitInlineEmitGuards.test.ts`'s runCombat-level block).
-        // `destroyedRound` is the canonical aliveness signal (state.ts, stamped once by
+        // `destroyedRound` is the canonical aliveness signal (state.ts, stamped by
         // `recordDestroyed` — the same signal the dead-owner gate in triggers.ts reads), so the
         // guard fires only on a genuinely destroyed bound target.
         //
@@ -8172,6 +8176,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         conditionalDamage,
         detonationDamage,
         extraActionGrants,
+        summons: summonsFromSkill(gatedSkill),
         positionalScalars,
         passiveSlotHit,
         perVictimOutgoing,

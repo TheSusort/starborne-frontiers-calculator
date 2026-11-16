@@ -51,6 +51,8 @@ export interface BoardUnit {
     preFight?: PreFightCombatModifiers;
     /** Ship role (`Ship.type`). Omitted → unknown role. */
     role?: ShipTypeName;
+    /** `Ship.id` (e.g. a bounty add's `npc:<id>:<level>`), carried onto the engine actor. */
+    shipId?: string;
 }
 
 export const NO_KIT: ShipSkills = { slots: [{ slot: 'active', abilities: [] }] };
@@ -99,6 +101,7 @@ export function boardInput(
     // the slots — thread them as battleSimulator does. Control immunity is read off the kit by
     // the engine itself.
     const actorFlags = (u: BoardUnit) => ({
+        ...(u.shipId ? { shipId: u.shipId } : {}),
         doesntBreakStasis: u.kit.doesntBreakStasis,
         stasisBreakExemptWhen: u.kit.stasisBreakExemptWhen,
         chargeLossImmune: u.kit.chargeLossImmune,

@@ -209,6 +209,20 @@ export function buildFightBeats(
                 });
             }
         }
+        if (entry.kind === 'revived') {
+            for (const target of entry.targets) {
+                const seat = seats.get(target.targetId);
+                if (seat) {
+                    Object.assign(stateOf(seat), {
+                        hpPct: 100,
+                        shieldPct: 0,
+                        alive: true,
+                        buffs: [],
+                        debuffs: [],
+                    });
+                }
+            }
+        }
         for (const target of entry.targets) {
             const seat = seats.get(target.targetId);
             if (!seat) continue;

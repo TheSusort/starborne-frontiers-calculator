@@ -383,6 +383,16 @@ export function extraActionsFromSkill(skill: Skill | undefined): ExtraActionGran
     return out;
 }
 
+/** The bounty-add ids the skill's on-cast `summon` abilities re-arm, in ability order. */
+export function summonsFromSkill(skill: Skill | undefined): string[] {
+    if (!skill) return [];
+    return skill.abilities.flatMap((ability) =>
+        ability.config.type === 'summon' && ability.trigger === 'on-cast'
+            ? [ability.config.addId]
+            : []
+    );
+}
+
 /** `accumulate-detonate` abilities on the skill, as {turns, pct} pairs (e.g. Echoing Burst). */
 export function accumulatorsFromSkill(skill: Skill | undefined): { turns: number; pct: number }[] {
     if (!skill) return [];

@@ -61,6 +61,8 @@ const ENTRY_DISPLAY_RANK: Record<CombatLogEntryKind, number> = {
     bomb: 0,
     'shield-stripped': 0,
     'duration-changed': 0,
+    // A summon is the last clause of the cast that re-arms.
+    revived: 0,
     // 1 — charge bookkeeping for the turn.
     'charge-changed': 1,
     // 2 — consequences: what the skill (or the round) caused.
@@ -1228,6 +1230,19 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             reactions: [],
         };
         ctx.attachEntry(entry);
+    },
+
+    'ship-revived': (e, ctx) => {
+        // Back on the board at full HP; a later death records again.
+        ctx.destroyedActors.delete(e.actorId);
+        ctx.setHp(e.actorId, 100);
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        ctx.attachEntry({
+            kind: 'revived',
+            actorId: e.summonerId,
+            targets: [{ targetId: e.actorId, resultingHpPct: 100 }],
+            reactions: [],
+        });
     },
 };
 

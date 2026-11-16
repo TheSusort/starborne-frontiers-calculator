@@ -51,6 +51,8 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
             return 'text-purple-400';
         case 'death':
             return 'text-theme-text-secondary';
+        case 'revived':
+            return 'text-green-400';
         case 'cleanse':
         case 'purge':
         case 'steal':
@@ -262,6 +264,13 @@ const formatters: Record<
     },
     'shield-destroyed': (entry, ctx) => `${ctx.nameOf(entry.actorId)}'s shield destroyed`,
     'cheat-death': (entry, ctx) => `${ctx.nameOf(entry.actorId)} cheats death!`,
+    revived: (entry, ctx) => {
+        const revivedId = entry.targets[0]?.targetId;
+        const actor = ctx.nameOf(entry.actorId);
+        return revivedId !== undefined
+            ? `${actor}: summons ${ctx.nameOf(revivedId)}`
+            : `${actor}: summons`;
+    },
     death: (entry, ctx) => {
         const actor = ctx.nameOf(entry.actorId);
         // The killer (when known) is carried as the entry's single target so we resolve it to a

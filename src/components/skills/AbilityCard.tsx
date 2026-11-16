@@ -59,6 +59,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     charge: 'Charge',
     'stat-gain': 'Stat Gain',
     'extra-action': 'Extra Action',
+    summon: 'Summon',
     heal: 'Heal',
     shield: 'Shield',
     cleanse: 'Cleanse',

@@ -27,6 +27,9 @@ export type AbilityType =
     // (never a status). See AbilityConfig's 'stat-gain' variant.
     | 'stat-gain'
     | 'extra-action'
+    // A bounty boss's "summons two torpedoes in the top row" (Abyssal Fenri). See AbilityConfig's
+    // 'summon' variant.
+    | 'summon'
     | 'heal'
     | 'shield'
     | 'cleanse'
@@ -1103,6 +1106,11 @@ export type AbilityConfig =
            *  every living same-side ship except the granter, one turn each. */
           recipients?: 'self' | 'other-allies';
       }
+    /** "summons two torpedoes in the top row" (Abyssal Fenri's charged). The combat roster is
+     *  fixed for the run, so a summon does not add units: it re-arms every DEAD actor on the
+     *  caster's own side that is the bounty add `addId` (`BOUNTY_ADDS`), in its own cell, after
+     *  the cast resolves (engine.ts `processSummons`). A living one is left alone. */
+    | { type: 'summon'; addId: string }
     | {
           type: 'heal' | 'shield';
           pct: number;

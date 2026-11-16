@@ -26,35 +26,28 @@ function hpBounds(result: BattleResult): InvariantViolation[] {
 }
 
 /**
- * `ShipRoundState.alive` is an end-of-round snapshot (battleSimulator.ts: `alive =
- * destroyRound === undefined || round < destroyRound`), and `turnOrder` is built from
+ * `ShipRoundState.alive` is an end-of-round snapshot, and `turnOrder` is built from
  * `turn-started` emission order regardless of `alive` — so a ship that starts its turn in
  * round R and then dies in round R (e.g. a start-of-turn DoT/bomb tick, before it acts) is
- * legitimately `alive:false` AND present in `turnOrder` for round R. That is NOT a bug: no
- * revival mechanic exists (cheat-death prevents destruction, never reverses it, and a ship's
- * destroy round is the earliest round it was destroyed), so once an actor is dead in round R
- * it stays dead for every later round. The real invariant is: a corpse must never appear in
- * turnOrder for any round AFTER the round it died in.
+ * legitimately `alive:false` AND present in `turnOrder` for round R. The real invariant is: a
+ * ship dead at the END of round R-1 never appears in round R's turnOrder. A summon re-arming it
+ * during round R does not change that — a re-armed ship's first turn is round R+1
+ * (`processSummons`, engine.ts).
  */
 function noDeadActs(result: BattleResult): InvariantViolation[] {
     const out: InvariantViolation[] = [];
-    const firstDeadRound = new Map<string, number>();
+    const deadAtEnd = new Map<number, Set<string>>();
     for (const r of result.rounds) {
-        for (const s of r.ships) {
-            if (!s.alive && !firstDeadRound.has(s.actorId)) {
-                firstDeadRound.set(s.actorId, r.round);
-            }
-        }
+        deadAtEnd.set(r.round, new Set(r.ships.filter((s) => !s.alive).map((s) => s.actorId)));
     }
     for (const r of result.rounds) {
         for (const actorId of r.turnOrder) {
-            const deadRound = firstDeadRound.get(actorId);
-            if (deadRound !== undefined && r.round > deadRound) {
+            if (deadAtEnd.get(r.round - 1)?.has(actorId)) {
                 out.push({
                     invariant: 'no-dead-acts',
                     round: r.round,
                     actorId,
-                    detail: `actor ${actorId} died in round ${deadRound} but appears in turnOrder for round ${r.round}`,
+                    detail: `actor ${actorId} was dead at the end of round ${r.round - 1} but appears in turnOrder for round ${r.round}`,
                 });
             }
         }
@@ -271,8 +264,9 @@ function flatten(entries: CombatLogEntry[], into: CombatLogEntry[] = []): Combat
 /**
  * The combat-log walk behind the corpse and wipe invariants. A ship counts as dead from the END
  * of the log block (a start-of-round drain, one turn, or an end-of-round drain) that holds its
- * `death` row: the engine stamps `destroyedRound` at cast completion, so the rest of the killing
- * cast still sees its victim alive, and the killing hit itself is nested under the `death` row.
+ * `death` row, until a `revived` row (a summon re-arming it) names it. The engine stamps
+ * `destroyedRound` at cast completion, so the rest of the killing cast still sees its victim
+ * alive, and the killing hit itself is nested under the `death` row.
  *
  *  - `corpse-hostile-target` / `corpse-ally-grant`: an entry aims at a ship that died in an
  *    earlier block. Dead ships are untargetable (the selector gate is `isAliveTarget` in
@@ -317,6 +311,9 @@ function logWalk(result: BattleResult): InvariantViolation[] {
             }
         }
         for (const e of entries) {
+            // A ship a summon re-arms is alive from its `revived` row on: the rows after it in
+            // the same block (its re-granted combat-start gains) are a living ship's.
+            if (e.kind === 'revived') for (const t of e.targets) dead.delete(t.targetId);
             if (dead.has(e.actorId) && !NON_ACTION_KINDS.has(e.kind)) {
                 out.push({
                     invariant: 'corpse-acts',
@@ -349,7 +346,11 @@ function logWalk(result: BattleResult): InvariantViolation[] {
                 });
             }
         }
-        for (const e of entries) if (e.kind === 'death') dead.add(e.actorId);
+        // The block's deaths and revives, in row order, decide who is dead for later blocks.
+        for (const e of entries) {
+            if (e.kind === 'death') dead.add(e.actorId);
+            if (e.kind === 'revived') for (const t of e.targets) dead.delete(t.targetId);
+        }
         if (wipedSide === undefined) {
             wipedSide = sides.find((side) => {
                 const ids = members.get(side) ?? [];

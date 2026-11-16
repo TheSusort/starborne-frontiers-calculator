@@ -3081,6 +3081,19 @@ export function detectAllyDebuffedTrigger(
 // "of a round" is the Torpedo's wording of the same trigger.
 const END_OF_ROUND_RE = /\bat\s+the\s+end\s+of\s+(?:the|a)\s+round\b/i;
 
+// Abyssal Fenri's charged "… and summons two torpedoes in the top row". Narrow to that wording:
+// no ship in docs/ship-skills.csv summons anything.
+const SUMMON_TORPEDOES_RE = /\bsummons\s+two\s+torpedoes\s+in\s+the\s+top\s+row\b/i;
+
+/** The bounty add a skill text summons and where the clause starts, or `null`. */
+export function parseSummon(
+    text: string | null | undefined
+): { addId: 'torpedo'; pos: number } | null {
+    if (!text) return null;
+    const m = SUMMON_TORPEDOES_RE.exec(text);
+    return m ? { addId: 'torpedo', pos: m.index } : null;
+}
+
 // The Torpedo's "if this Unit is the first in the row" gate and its "it destroys itself" rider.
 const FIRST_IN_ROW_RE = /\bif\s+this\s+unit\s+is\s+the\s+first\s+in\s+the\s+row\b/i;
 const DESTROYS_ITSELF_RE = /\bdestroys\s+itself\b/i;

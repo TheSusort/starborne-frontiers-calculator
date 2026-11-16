@@ -29,6 +29,7 @@ const state: ShipRoundState = {
     hpPct: 65,
     shieldPct: 0,
     alive: true,
+    deaths: 0,
     activeBuffs: ['Attack Up'],
     activeDebuffs: ['Defense Shred'],
 };
