@@ -36,6 +36,7 @@ export const ABILITY_TARGET_SIDE: Record<AbilityTarget, 'self' | 'enemy'> = {
     'enemy-most-buffs': 'enemy',
     'enemy-highest-attack': 'enemy',
     'enemy-highest-speed': 'enemy',
+    'enemy-highest-defense': 'enemy',
 };
 
 export function isEnemyTarget(target: AbilityTarget): boolean {
@@ -80,6 +81,7 @@ export const ABILITY_TARGET_ENEMY_SCOPE: Record<AbilityTarget, 'all' | 'subset' 
     'enemy-most-buffs': 'subset',
     'enemy-highest-attack': 'subset',
     'enemy-highest-speed': 'subset',
+    'enemy-highest-defense': 'subset',
 };
 
 /**
@@ -96,7 +98,8 @@ export function isAllEnemiesTarget(target: AbilityTarget): boolean {
 }
 
 /** Which of the three global enemy SELECTORS a target names, or `null` for every other target. */
-export type EnemySelectorKind = 'most-buffs' | 'highest-attack' | 'highest-speed';
+export type EnemySelectorKind =
+    'most-buffs' | 'highest-attack' | 'highest-speed' | 'highest-defense';
 
 /**
  * THE one answer to "does this ability target name a single SELECTED opposing actor, and which
@@ -130,6 +133,7 @@ export const ABILITY_TARGET_SELECTOR: Record<AbilityTarget, EnemySelectorKind | 
     'enemy-most-buffs': 'most-buffs',
     'enemy-highest-attack': 'highest-attack',
     'enemy-highest-speed': 'highest-speed',
+    'enemy-highest-defense': 'highest-defense',
 };
 
 /**

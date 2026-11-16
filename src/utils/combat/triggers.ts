@@ -3182,6 +3182,9 @@ export interface IntentExecContext {
      *  Resolved LIVE per owner (unlike enemyWithMostBuffs, no purge co-occurs with it, so no
      *  onceByOwner memo is needed). Optional — absent in unit-test ctxs that don't drive it. */
     enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
+    /** Fenri: living opposing actor with the greatest live effective defence (ties → board
+     *  position). Resolved LIVE per owner. Optional — absent in unit-test ctxs that don't drive it. */
+    enemyWithHighestDefense?: (ownerId: string) => string | undefined;
     /** Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
      *  DAMAGE proc. The executor enumerates these and re-checks the ability's per-victim enemy
      *  conditions (hp-threshold / enemy-debuff) against EACH victim's own live state. Optional —
@@ -4058,17 +4061,31 @@ export function actorDebuffCount(statusEngine: StatusEngine, actor: CombatActor)
  * debuffs: `'bomb'` draws on Bomb stacks and Echoing Burst accumulators, `'dot'` on Corrosion,
  * Inferno and generic DoT stacks only (owner ruling R112), then takes the newest. `actor` absent
  * (a hand-built ctx without an actor reader) → named debuffs only. Returns how many were removed.
+ *
+ * `keep` ("cleanses all but 5 debuffs") turns the amount into `held - keep`, where `held` counts
+ * every debuff the holder carries, unremovable ones included; the pool still offers removable
+ * debuffs only, so an unremovable debuff stays and the holder may end above `keep`.
  */
 export function cleanseDebuffs(
     statusEngine: StatusEngine,
     actorId: string,
     actor: CombatActor | undefined,
     count: number | 'all',
-    debuffType?: 'bomb' | 'dot'
+    debuffType?: 'bomb' | 'dot',
+    keep?: number
 ): number {
+    const amount =
+        keep === undefined
+            ? count
+            : Math.max(
+                  0,
+                  (actor
+                      ? actorDebuffCount(statusEngine, actor)
+                      : ownerDebuffCount(statusEngine, actorId)) - keep
+              );
     return statusEngine.cleanse(
         actorId,
-        count,
+        amount,
         actor ? dotCleanseCandidates(actor, debuffType) : [],
         debuffType === undefined
     );
@@ -5401,6 +5418,7 @@ export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     'enemy-most-buffs': selectorChargeKind('enemy-most-buffs'),
     'enemy-highest-attack': selectorChargeKind('enemy-highest-attack'),
     'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
+    'enemy-highest-defense': selectorChargeKind('enemy-highest-defense'),
 };
 
 /** `Intent.eventSeq` bookkeeping: the number each emitted event object got, the next number to
@@ -5676,13 +5694,16 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // text reaches this arm today.
             case 'selector-most-buffs':
             case 'selector-highest-attack':
-            case 'selector-highest-speed': {
+            case 'selector-highest-speed':
+            case 'selector-highest-defense': {
                 const selectedId =
                     chargeKind === 'selector-most-buffs'
                         ? ctx.enemyWithMostBuffs?.(intent.ownerId)
                         : chargeKind === 'selector-highest-attack'
                           ? ctx.enemyWithHighestAttack?.(intent.ownerId)
-                          : ctx.enemyWithHighestSpeed?.(intent.ownerId);
+                          : chargeKind === 'selector-highest-defense'
+                            ? ctx.enemyWithHighestDefense?.(intent.ownerId)
+                            : ctx.enemyWithHighestSpeed?.(intent.ownerId);
                 // Unresolved (no living candidate, or the delegate is absent) → NO-OP, matching
                 // the purge branch. It must NEVER fall through to the
                 // owner-gain arm below: that would turn "remove a charge from one enemy" into "give
@@ -6112,13 +6133,17 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // without it Warden's "when this Unit inflicts a Debuff, it inflicts Out. Damage Down II"
         // never reaches the real enemy. Same priority order the reactive `damage` branch uses:
         // counterTargetId first, debuffVictimId second.
+        const selectsOwnTarget =
+            intent.ability.target === 'enemy-highest-attack' ||
+            intent.ability.target === 'enemy-highest-defense';
         const counterTargetId =
             intent.ability.target === 'enemy-highest-attack'
                 ? ctx.enemyWithHighestAttack?.(intent.ownerId)
-                : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.debuffVictimId);
-        // No living highest-attack enemy → no-op (don't fall back to the default enemy).
-        if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined)
-            return;
+                : intent.ability.target === 'enemy-highest-defense'
+                  ? ctx.enemyWithHighestDefense?.(intent.ownerId)
+                  : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.debuffVictimId);
+        // No living selected enemy → no-op (don't fall back to the default enemy).
+        if (selectsOwnTarget && counterTargetId === undefined) return;
         // Amartya's recipient-targeted repair reaction fans the debuff out to
         // EVERY repaired enemy from the triggering heal-performed event ("that defender"
         // distributes across a multi-target heal) — mirrors the buff branch's repairedRecipientIds
@@ -6146,8 +6171,7 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                   ? intent.eventCtx?.victimId !== undefined
                       ? (ctx.adjacentOpposingIdsFor?.(intent.eventCtx.victimId) ?? [])
                       : []
-                  : intent.ability.target !== 'enemy-highest-attack' &&
-                      intent.eventCtx?.critVictimIds !== undefined
+                  : !selectsOwnTarget && intent.eventCtx?.critVictimIds !== undefined
                     ? intent.eventCtx.critVictimIds
                     : [counterTargetId];
         // The recipient's role, lifted off the global gate by `liftsEnemyRoleGate` (Amartya's
@@ -7257,7 +7281,8 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 rid,
                 ctx.actorById?.(rid),
                 count,
-                cfg.debuffType
+                cfg.debuffType,
+                cfg.keep
             );
             if (n > 0) cleansePerTarget.push({ targetId: rid, count: n });
             removed += n;

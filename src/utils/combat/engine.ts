@@ -1969,6 +1969,9 @@ interface ReactiveSideCtx {
      *  IntentExecContext. Resolved LIVE (no onceByOwner memo) — unlike enemyWithMostBuffs,
      *  Chakara's co-located clause is a SELF-buff that never changes an enemy's speed. */
     enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
+    /** Fenri: per-side highest-defence opposing-actor resolver, resolved LIVE. See
+     *  IntentExecContext. */
+    enemyWithHighestDefense?: (ownerId: string) => string | undefined;
     /** Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
      *  DAMAGE proc (per-victim-conditional AoE). Player side → living enemy attackers; enemy side
      *  → living player actors. See IntentExecContext. Resolved LIVE per drain (no memo). */
@@ -9714,6 +9717,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 case 'enemy-most-buffs':
                 case 'enemy-highest-attack':
                 case 'enemy-highest-speed':
+                case 'enemy-highest-defense':
                 case 'adjacent-enemies':
                 case 'target-and-adjacent-enemies':
                 case 'self':
@@ -10620,6 +10624,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             return highestAttackInRoster(aliveOpposing());
                         case 'highest-speed':
                             return highestSpeedInRoster(aliveOpposing());
+                        case 'highest-defense':
+                            return highestDefenseInRoster(aliveOpposing());
                         default: {
                             const exhaustive: never = kind;
                             throw new Error(
@@ -12065,6 +12071,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
                 // Chakara's live highest-speed opposing-actor resolver.
                 enemyWithHighestSpeed: sideCtx.enemyWithHighestSpeed,
+                enemyWithHighestDefense: sideCtx.enemyWithHighestDefense,
                 // Living opposing roster for an 'all-enemies' reactive
                 // damage proc (Judge/Incinerator per-victim-conditional AoE).
                 livingOpposingActorIds: sideCtx.livingOpposingActorIds,
@@ -12196,6 +12203,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
             );
 
+        // Opposing actor with the greatest LIVE effective DEFENCE (Fenri's end-of-round Stasis).
+        // Ties go to the lowest `positionTurnRank`, then roster order. Pre-gated at the seam, same
+        // as its siblings above. Stealth does not exclude a ship: this is a selector, not a
+        // targeting skill.
+        const highestDefenseInRoster = (roster: AliveRoster): string | undefined =>
+            highestAttackAmong(
+                [...roster]
+                    .sort((x, y) => positionTurnRank(x.position) - positionTurnRank(y.position))
+                    .map((a) => a.id),
+                (id) => {
+                    const a = roster.find((x) => x.id === id);
+                    return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).defence : 0;
+                }
+            );
+
         // The id of the sole living actor in a roster, or undefined if !=1 alive.
         // Drives the `last-standing` condition (Last Stand). Recomputed each drain so it
         // reflects deaths recorded before the reactive drain.
@@ -12263,6 +12285,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Plain arrow, NOT onceByOwner — Chakara has no purge/damage race
             // (its co-located clause is a self-buff), so LIVE re-resolution per drain is correct.
             enemyWithHighestSpeed: () => highestSpeedInRoster(alivePlayerDrainOpposing()),
+            enemyWithHighestDefense: () => highestDefenseInRoster(alivePlayerDrainOpposing()),
             // Living opposing roster for an 'all-enemies' reactive damage proc
             // (Judge/Incinerator) — each resolved victim's own hp-threshold/enemy-debuff gates are
             // re-checked per victim downstream. #407: reads the shared gate instead of its own
@@ -12300,6 +12323,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyWithHighestAttack: () => highestAttackInRoster(aliveEnemyDrainOpposing()),
             // Plain arrow, NOT onceByOwner — see playerDrainCtx's comment.
             enemyWithHighestSpeed: () => highestSpeedInRoster(aliveEnemyDrainOpposing()),
+            enemyWithHighestDefense: () => highestDefenseInRoster(aliveEnemyDrainOpposing()),
             // Mirror — an enemy owner scans the living player roster. #407: same
             // shared gate as the player mirror above.
             livingOpposingActorIds: () => aliveEnemyDrainOpposing().map((a) => a.id),

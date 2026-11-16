@@ -96,6 +96,8 @@ import {
     detectMostBuffsTarget,
     parseHighestSpeedEnemyTarget,
     parseHighestAttackEnemyTarget,
+    parseHighestDefenseEnemyTarget,
+    parseWhenDebuffedHavingGate,
     detectRepairedThisRoundCondition,
     detectEnemyRepairedTrigger,
     detectReactionEnemyRole,
@@ -2794,7 +2796,10 @@ function abilitiesFromText(
         //  - self-death ("Upon dying, this Unit cleanses ...") -> on-destroyed, any cause.
         //  - a PASSIVE-slot cleanse whose sentence carries a direct-damage reaction phrase ->
         //    on-attacked. An active/charged cleanse is on-cast.
+        const debuffedGate =
+            slot === 'passive' ? parseWhenDebuffedHavingGate(text, cleansePos) : null;
         const reactiveTrigger =
+            (debuffedGate ? ('on-debuffed' as const) : undefined) ??
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??
             detectEveryTurnTrigger(text, cleansePos) ??
@@ -2821,12 +2826,13 @@ function abilitiesFromText(
                 type: 'cleanse',
                 target: cleanseTarget,
                 trigger: reactiveTrigger ?? 'on-cast',
-                conditions: [],
+                conditions: debuffedGate ? [debuffedGate] : [],
                 config: {
                     type: 'cleanse',
                     count: c.count,
                     ...(c.debuffType ? { debuffType: c.debuffType } : {}),
                     ...(c.countScaling ? { countScaling: c.countScaling } : {}),
+                    ...(c.keep !== undefined ? { keep: c.keep } : {}),
                 },
                 ...(cleanseOncePerRound ? { oncePerRound: true } : {}),
                 autoFilled: true,
@@ -4337,6 +4343,12 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
                 parseHighestAttackEnemyTarget(rowTextForThisBuff, buffPos)
             ) {
                 enemyTarget = 'enemy-highest-attack';
+            } else if (
+                rowTextForThisBuff &&
+                buffPos >= 0 &&
+                parseHighestDefenseEnemyTarget(rowTextForThisBuff, buffPos)
+            ) {
+                enemyTarget = 'enemy-highest-defense';
             }
         }
         mergeBuff(buff, enemyTarget);

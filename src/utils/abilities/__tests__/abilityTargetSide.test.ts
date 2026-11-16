@@ -33,6 +33,7 @@ describe('ABILITY_TARGET_SIDE', () => {
         'enemy-most-buffs',
         'enemy-highest-attack',
         'enemy-highest-speed',
+        'enemy-highest-defense',
     ];
 
     it.each(SELF)('%s is self-side', (t) => {
@@ -51,13 +52,14 @@ describe('ABILITY_TARGET_SIDE', () => {
 });
 
 describe('#403 ABILITY_TARGET_SELECTOR — the footprint axis', () => {
-    it('classifies exactly the three enemy selector targets and nothing else', () => {
+    it('classifies exactly the four enemy selector targets and nothing else', () => {
         const selectors = Object.entries(ABILITY_TARGET_SELECTOR)
             .filter(([, kind]) => kind !== null)
             .map(([target]) => target)
             .sort();
         expect(selectors).toEqual([
             'enemy-highest-attack',
+            'enemy-highest-defense',
             'enemy-highest-speed',
             'enemy-most-buffs',
         ]);
@@ -67,6 +69,7 @@ describe('#403 ABILITY_TARGET_SELECTOR — the footprint axis', () => {
         expect(enemySelectorKind('enemy-most-buffs')).toBe('most-buffs');
         expect(enemySelectorKind('enemy-highest-attack')).toBe('highest-attack');
         expect(enemySelectorKind('enemy-highest-speed')).toBe('highest-speed');
+        expect(enemySelectorKind('enemy-highest-defense')).toBe('highest-defense');
     });
 
     it('every non-selector target resolves to null (the tail must stay reachable)', () => {

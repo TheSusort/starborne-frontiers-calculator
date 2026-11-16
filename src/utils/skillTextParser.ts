@@ -3341,6 +3341,23 @@ export function parseHighestAttackEnemyTarget(
     return sentence !== undefined && HIGHEST_ATTACK_ENEMY_RE.test(sentence);
 }
 
+// "the enemy with the highest Defense" — the enemy-highest-defense target axis. Names the enemy and
+// the stat together, like HIGHEST_ATTACK_ENEMY_RE.
+const HIGHEST_DEFENSE_ENEMY_RE = /\benemy\s+with\s+the\s+highest\s+defen[cs]e\b/i;
+
+/**
+ * Returns true when `anchorPos` falls inside a sentence naming the highest-Defense enemy
+ * (HIGHEST_DEFENSE_ENEMY_RE); otherwise false. Position-scoped on the RAW text.
+ */
+export function parseHighestDefenseEnemyTarget(
+    text: string | null | undefined,
+    anchorPos: number
+): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && HIGHEST_DEFENSE_ENEMY_RE.test(sentence);
+}
+
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
 // and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
 // `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.
@@ -5906,6 +5923,7 @@ export function parseCleanse(text: string | null | undefined): {
     explicitTarget: boolean;
     debuffType?: 'bomb' | 'dot';
     countScaling?: { stat: 'critDamage'; per: number };
+    keep?: number;
 }[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -5915,6 +5933,7 @@ export function parseCleanse(text: string | null | undefined): {
         explicitTarget: boolean;
         debuffType?: 'bomb' | 'dot';
         countScaling?: { stat: 'critDamage'; per: number };
+        keep?: number;
     }[] = [];
     CLEANSE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -5947,15 +5966,42 @@ export function parseCleanse(text: string | null | undefined): {
             scaleMatch && typeof count === 'number'
                 ? { stat: 'critDamage' as const, per: parseInt(scaleMatch[1], 10) }
                 : undefined;
+        // "cleanses all but 5 debuffs": the cleanse leaves that many held rather than removing a
+        // fixed number.
+        const keepMatch = count === 'all' ? CLEANSE_KEEP_RE.exec(afterCount) : null;
         results.push({
             count,
             target,
             explicitTarget,
             ...(debuffType ? { debuffType } : {}),
             ...(countScaling ? { countScaling } : {}),
+            ...(keepMatch ? { keep: parseInt(keepMatch[1], 10) } : {}),
         });
     }
     return results;
+}
+
+// The "but N" that follows "cleanses all" (matched against the text after the count word).
+const CLEANSE_KEEP_RE = /^\s+but\s+(\d+)\b/i;
+
+// "When debuffed and having N or more debuffs" — a self reaction gated on the debuffs held after the
+// landing. Narrow to the two-part phrase so the bare "when debuffed" of other text is untouched.
+const WHEN_DEBUFFED_HAVING_RE = /\bwhen\s+debuffed\s+and\s+having\b/i;
+
+/**
+ * The count gate of a "When debuffed and having N or more debuffs, …" reaction whose sentence
+ * holds `anchorPos`, or null when the sentence is not that shape. The caller maps the reaction to
+ * the `on-debuffed` trigger and the returned condition (self-debuff gte N).
+ */
+export function parseWhenDebuffedHavingGate(
+    text: string | null | undefined,
+    anchorPos: number
+): Condition | null {
+    if (!text) return null;
+    const sentence = rawSentenceAround(text, anchorPos);
+    if (sentence === undefined || !WHEN_DEBUFFED_HAVING_RE.test(sentence)) return null;
+    const gate = countGateCondition(sentence);
+    return gate?.subject === 'self-debuff' ? gate : null;
 }
 
 /**

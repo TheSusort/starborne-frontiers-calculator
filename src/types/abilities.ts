@@ -116,10 +116,12 @@ export type AbilityTarget =
     | 'enemy-most-buffs'
     | 'enemy-highest-attack' // D-PR14 Doomsayer: living opposing actor with the greatest
     //                           live effective attack (global selector, resolved at drain).
-    | 'enemy-highest-speed'; // SP-M M1 Task 6 Chakara: living opposing actor with the greatest
-//                           live effective speed (global selector, resolved LIVE at drain — no
-//                           memo needed, Chakara's co-located clause is a self-buff that never
-//                           changes an enemy's speed).
+    | 'enemy-highest-speed' // SP-M M1 Task 6 Chakara: living opposing actor with the greatest
+    //                           live effective speed (global selector, resolved LIVE at drain — no
+    //                           memo needed, Chakara's co-located clause is a self-buff that never
+    //                           changes an enemy's speed).
+    | 'enemy-highest-defense'; // living opposing actor with the greatest live effective defence
+//                           (global selector, resolved LIVE at drain; ties → board position).
 
 /** #363: the ally-scoped targets a recipient `factionFilter` can meaningfully narrow — the
  *  plural ally scopes plus plain `'ally'` (which resolves to the caster's whole footprint on the
@@ -1138,6 +1140,10 @@ export type AbilityConfig =
            *  `durationTurns` off one random debuff (Warpstrike), or off every debuff with
            *  `count: 'all'` (Heliodor, Pestilence). cleanse-only. */
           mode?: 'remove' | 'reduce-duration';
+          /** cleanse-only, with `count: 'all'` ("cleanses all but 5 debuffs"): removes the newest
+           *  removable debuffs until the holder carries at most this many, counting debuffs that
+           *  cannot be removed. Absent → remove `count`. */
+          keep?: number;
           /** Turns to reduce in 'reduce-duration' mode (default 1). cleanse-only. */
           durationTurns?: number;
           /** Epic PR5 finding 3: a TYPED cleanse restricts removal to one debuff category

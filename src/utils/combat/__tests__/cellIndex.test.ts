@@ -223,6 +223,11 @@ const ANCHOR_ONLY_READERS: AnchorOnlyReader[] = [
     },
     {
         file: 'combat/engine.ts',
+        snippet: 'positionTurnRank(x.position) - positionTurnRank(y.position)',
+        reason: 'Highest-defence selector tiebreak: the position tiebreak ranks a unit by its anchor.',
+    },
+    {
+        file: 'combat/engine.ts',
         snippet: 'positionTurnRank(a.actor.position)',
         reason: 'Turn-order tiebreak on the anchor.',
     },
