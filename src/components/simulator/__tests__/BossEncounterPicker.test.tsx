@@ -67,4 +67,16 @@ describe('BossEncounterPicker', () => {
         expect(board.M3?.ship.id).toBe('npc:beleth:124');
         expect(board.M4?.ship.id).toBe('npc:corson:124');
     });
+
+    it('lists Abyssal Fenri by its own name and loads him with two torpedoes', () => {
+        const onChange = vi.fn();
+        render(<BossEncounterPicker board={{}} onChange={onChange} />);
+        fireEvent.click(trigger());
+        fireEvent.click(screen.getByRole('option', { name: 'Abyssal Fenri Khaliriz — Lv 33' }));
+        const board = onChange.mock.calls[0][0] as BoardState;
+        expect(Object.keys(board).sort()).toEqual(['M1', 'T2', 'T4']);
+        expect(board.M1?.ship.id).toBe('boss:fenri:33');
+        expect(board.T2?.ship.id).toBe('npc:torpedo:135');
+        expect(board.T4?.ship.id).toBe('npc:torpedo:135');
+    });
 });

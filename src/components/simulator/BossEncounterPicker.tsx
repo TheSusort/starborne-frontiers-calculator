@@ -3,6 +3,7 @@ import { Select } from '../ui/Select';
 import {
     BOUNTY_BOSSES,
     BOUNTY_ENCOUNTERS,
+    bossShip,
     bossShipId,
     parseBossShipId,
 } from '../../constants/bountyBosses';
@@ -30,7 +31,7 @@ const BossEncounterPicker: React.FC<Props> = ({ board, onChange, disabled, helpL
                     ? [
                           {
                               value: bossShipId(boss.id, encounter.level),
-                              label: `${boss.name} — Lv ${encounter.level}`,
+                              label: `${bossShip(boss.id, encounter.level)?.name ?? boss.name} — Lv ${encounter.level}`,
                           },
                       ]
                     : [];

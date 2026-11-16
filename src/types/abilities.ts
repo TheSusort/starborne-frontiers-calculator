@@ -756,6 +756,8 @@ export interface IncomingHitContext {
     /** True for a detonation: a Bomb or Echoing Burst burst, or a detonate-DoT burst. Only
      *  `scope: 'detonation'` reductions apply to it. Absent → a direct hit or a DoT tick. */
     detonation?: boolean;
+    /** True when the detonation is a Bomb (burst or splash). Only a `bombOnly` reduction needs it. */
+    bombDetonation?: boolean;
 }
 
 /**
@@ -1199,6 +1201,9 @@ export type AbilityConfig =
           /** Which incoming damage the reduction applies to: a direct hit, a DoT tick, or a
            *  detonation (a Bomb or Echoing Burst detonation, or a detonate-DoT burst). */
           scope: 'direct' | 'dot' | 'detonation';
+          /** A `'detonation'` entry that applies to Bomb detonations only, not to Echoing Burst or
+           *  detonate-DoT bursts (Abyssal Fenri: "from damage over time effects and Bombs"). */
+          bombOnly?: true;
           condition: IncomingCondition;
           /** Positive magnitude (percentage points); folded as a reduction into the incoming channel.
            *  IGNORED when `hpScaling` is set (Tormenter) — the effective reduction is computed

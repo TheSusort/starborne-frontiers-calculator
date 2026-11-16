@@ -880,6 +880,8 @@ interface ParsedIncomingDamageReduction {
     pct?: number;
     hpScaling?: { perUnit: number; cap: number };
     matchIndex: number;
+    /** The 'detonation' scope covers Bomb detonations only ("… and Bombs"). */
+    bombOnly?: true;
     /** #363 (Fuying): the reduction applies to ALLIES, not the carrier. Absent → 'self', which
      *  is what all six pre-existing phrasings (Iridium/Anemone/Panon/Wusheng/Tormenter/Voron)
      *  are. */
@@ -968,17 +970,19 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
 
     // "This Unit takes N% less damage from Damage over Time effects" (Voron) / "… from DoTs"
     // (Fenri) — a flat reduction against the unit's OWN incoming DoT ticks. "… from DoTs and
-    // Detonations" (Mamma Maglienza) adds the same reduction against detonations.
+    // Detonations" (Mamma Maglienza) adds the same reduction against detonations; "… and Bombs"
+    // (Abyssal Fenri) adds it against Bomb detonations only.
     const voronM =
-        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+(?:damage\s+over\s+time\s+effects|dots?\b)(\s+and\s+detonations\b)?/i.exec(
+        /takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+(?:damage\s+over\s+time\s+effects|dots?\b)(?:(\s+and\s+detonations\b)|(\s+and\s+bombs\b))?/i.exec(
             plain
         );
     if (voronM) {
         out.push({
-            scopes: voronM[2] ? ['dot', 'detonation'] : ['dot'],
+            scopes: voronM[2] || voronM[3] ? ['dot', 'detonation'] : ['dot'],
             condition: 'always',
             pct: parseFloat(voronM[1]),
             matchIndex: voronM.index,
+            ...(voronM[3] ? { bombOnly: true as const } : {}),
         });
     }
 
@@ -3339,6 +3343,9 @@ function abilitiesFromText(
                     config: {
                         type: 'incoming-reduction',
                         scope,
+                        ...(dir.bombOnly && scope === 'detonation'
+                            ? { bombOnly: true as const }
+                            : {}),
                         condition: dir.condition,
                         pct: dir.pct ?? 0,
                         critFamily: false,

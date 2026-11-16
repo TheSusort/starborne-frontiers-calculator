@@ -4091,7 +4091,9 @@ export function parseControlImmune(text: string | null | undefined): boolean {
 /** True iff this skill text declares the unit is immune to damage over time effects ("immune to
  *  Control, damage over time effects and Charge Loss effects", General Colosso). A reduction of DoT
  *  damage ("takes 50% less damage from DoTs") is not an immunity. */
-const DOT_IMMUNE_RE = /\bimmune to\b[^.]*?\bdamage over time effects\b/i;
+// The scan stops at "takes" so an immunity clause never reaches a following "takes N% less
+// damage from damage over time effects" clause.
+const DOT_IMMUNE_RE = /\bimmune to\b(?:(?!\btakes\b)[^.])*?\bdamage over time effects\b/i;
 export function parseDotImmune(text: string | null | undefined): boolean {
     return !!text && DOT_IMMUNE_RE.test(stripUnitTags(text));
 }

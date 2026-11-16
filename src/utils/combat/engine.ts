@@ -5407,8 +5407,9 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  (Mamma Maglienza, "50% less damage from DoTs and Detonations"). A Bomb or Echoing Burst
      *  burst and Bomb splash (a dying ship's splash, Demolisher's splash copy) take this factor; a
      *  detonate-DoT burst takes the stronger of it and the victim's DoT reduction for that family,
-     *  never both (`detonatedDotFactor`). */
-    const incomingDetonationReductionFor = (victimId: string): number =>
+     *  never both (`detonatedDotFactor`). `bomb` marks a Bomb burst or Bomb splash, the only
+     *  detonations a `bombOnly` reduction applies to. */
+    const incomingDetonationReductionFor = (victimId: string, bomb = false): number =>
         composeDotReductionFactor(
             incomingReductionPartsForHit(incomingAbilitiesOf(victimId), {
                 didCrit: false,
@@ -5422,6 +5423,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 selfHpPct: selfHpPctOf(victimId),
                 attackerTauntedOrProvoked: false,
                 detonation: true,
+                bombDetonation: bomb,
             })
         );
     /** A detonated DoT is both a DoT and a detonation; one "less damage from DoTs and
@@ -7677,7 +7679,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 const splash = splashDamageForBomb(bomb, bomb.splashModifier);
                                 if (splash <= 0) continue;
                                 const splashIntake =
-                                    splash * incomingDetonationReductionFor(ally.id);
+                                    splash * incomingDetonationReductionFor(ally.id, true);
                                 const splashOutcome = applyVictimDamage(splashIntake, ally, sink, {
                                     killerId: bomb.sourceId,
                                     byDirectDamage: true,
@@ -8792,7 +8794,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // A Bomb splash copy is not a direct hit, so it is aimed at no one.
             const procAim = splashCopy ? undefined : aimReactiveHit(victim.id);
             // A splash copy is Bomb damage, so the victim's detonation reductions apply to it.
-            const procIntake = splashCopy ? raw * incomingDetonationReductionFor(victim.id) : raw;
+            const procIntake = splashCopy
+                ? raw * incomingDetonationReductionFor(victim.id, true)
+                : raw;
             try {
                 procOutcome = applyVictimDamage(procIntake, victim, sink, {
                     killerId: ownerId,
@@ -10145,7 +10149,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // the bomb was worth, the same way `attacked` reports a hit's pre-transfer
                         // value. Only the numeric channels below move to the delivered amount.
                     });
-                    const bombIntake = result.bomb * incomingDetonationReductionFor(victim.id);
+                    const bombIntake =
+                        result.bomb * incomingDetonationReductionFor(victim.id, true);
                     const bombOutcome = applyVictimDamage(bombIntake, victim, sink, {
                         killerId: actorId,
                         byDirectDamage: true,
@@ -10226,7 +10231,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             sourceId: string,
             damage: number
         ): void => {
-            const intake = damage * incomingDetonationReductionFor(victim.id);
+            const intake = damage * incomingDetonationReductionFor(victim.id, true);
             const outcome = applyVictimDamage(intake, victim, sink, {
                 killerId: sourceId,
                 byDirectDamage: true,
@@ -10287,7 +10292,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 damage,
                             }),
                         creditDetonation: (sourceId, damage) => {
-                            const intake = damage * incomingDetonationReductionFor(actor.id);
+                            const intake = damage * incomingDetonationReductionFor(actor.id, true);
                             const outcome = applyVictimDamage(intake, actor, sink, {
                                 killerId: sourceId,
                                 byDirectDamage: true,

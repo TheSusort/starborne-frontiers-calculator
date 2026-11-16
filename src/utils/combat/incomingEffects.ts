@@ -162,8 +162,9 @@ export function incomingReductionPartsForHit(
     let critFamilyMax = 0;
     for (const a of victimAbilities) {
         if (a.config.type !== 'incoming-reduction') continue;
-        const { scope, condition, pct, hpScaling } = a.config;
+        const { scope, condition, pct, hpScaling, bombOnly } = a.config;
         if ((scope === 'detonation') !== (ctx.detonation === true)) continue;
+        if (bombOnly && ctx.bombDetonation !== true) continue;
         if (scope !== 'detonation' && (scope === 'dot') !== isDot) continue;
         if (!conditionMet(condition, ctx)) continue;
         // hpScaling REPLACES the flat pct with a continuous HP-proportional value (Tormenter).
