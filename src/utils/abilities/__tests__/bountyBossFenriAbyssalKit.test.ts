@@ -51,6 +51,19 @@ describe('Abyssal Fenri Khaliriz kit (Lv33)', () => {
     });
 });
 
+// "Whenever any enemy unit dies" repairs and buffs once per killing action (owner ruling
+// 2026-11-16: one 12% repair after his active killed two ships), at both levels.
+describe.each([32, 33])('Fenri Lv%i enemy-death repair', (level) => {
+    it('repairs and gains Attack Up II once per action that kills', () => {
+        const onDeath = abilitiesOf(
+            buildShipAbilities(bossShip('fenri', level)!),
+            'passive'
+        ).filter((a) => a.trigger === 'on-enemy-destroyed' && a.triggerKillerScope === undefined);
+        expect(onDeath.map((a) => a.config.type).sort()).toEqual(['buff', 'heal']);
+        for (const a of onDeath) expect(a.oncePerRootCast).toBe('cast');
+    });
+});
+
 describe('Fenri Lv32 kit', () => {
     it('keeps its own text and name', () => {
         const ship = bossShip('fenri', 32)!;

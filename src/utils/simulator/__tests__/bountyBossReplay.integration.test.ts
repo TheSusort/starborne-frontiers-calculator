@@ -975,21 +975,21 @@ describe('replay: Hayyan, Grif, Thresh and Judge against Abyssal Fenri Lv33 and 
         expect(killedBy(fenri, 1)).toEqual(['Judge', 'Thresh']);
     });
 
-    // The game showed one repair of 103,016 (12% of max HP at crit power 72). The sim repairs once
-    // per death; seed 1 crits the second at crit power 71.
-    it('each round-1 death repairs Fenri, at least 12% of his max HP, and grants Attack Up II', () => {
-        const repairs = inRound(1)
-            .filter(({ entry }) => entry.kind === 'heal' && entry.actorId === fenri)
-            .map(({ entry }) => grossHeal(entry, fenri)!)
-            .sort((a, b) => a - b);
-        expect(repairs).toHaveLength(2);
-        expect(repairs[0]).toBeCloseTo(0.12 * 499_108, 0);
-        expect(repairs[1]).toBeGreaterThan(repairs[0]);
+    // One action killing two ships repairs once (owner ruling 2026-11-16). The game showed it as a
+    // crit of 103,016 (12% of max HP at crit power 72); the sim's crit power is 71.
+    it("Fenri's double kill repairs him once, 12% of his max HP, and grants one Attack Up II", () => {
+        const repairs = inRound(1).filter(
+            ({ entry }) => entry.kind === 'heal' && entry.actorId === fenri
+        );
+        expect(repairs).toHaveLength(1);
+        const { entry } = repairs[0];
+        const crit = entry.targets[0]?.didCrit === true;
+        expect(grossHeal(entry, fenri)).toBeCloseTo(0.12 * 499_108 * (crit ? 1.71 : 1), 0);
         const attackUp = inRound(1).filter(
             ({ entry }) =>
                 entry.kind === 'buff' && entry.actorId === fenri && entry.note === 'Attack Up II'
         );
-        expect(attackUp).toHaveLength(2);
+        expect(attackUp).toHaveLength(1);
     });
 
     it('at the end of round 1 Fenri puts Stasis on Grif, then the T4 Torpedo blasts Grif 43,623 and Hayyan 21,812', () => {
@@ -1059,12 +1059,16 @@ describe('replay: Hayyan, Grif, Thresh and Judge against Abyssal Fenri Lv33 and 
         expectMeasured(hit?.amount, 97_442, TIGHT);
     });
 
-    // In game the charged re-arms both Torpedoes although it kills the last ship; the sim re-arms
-    // nothing on a cast that ends the fight.
-    it.todo('the round-3 charged re-arms both Torpedoes at T2 and T4 with Stealth');
-    // In game Hayyan's round-3 turn also shows a 10,738 crit repair: her 4% cleanse repair, so a
-    // debuff was still on her to cleanse. The sim cleanses nothing there.
-    it.todo("Hayyan's round-3 cleanse repairs her for 10,738");
+    // The charged kills Hayyan, the last ship, so the fight ends there and nothing is re-armed.
+    it('the round-3 charged kills Hayyan and ends the fight', () => {
+        expect(killedBy(fenri, 3)).toEqual(['Hayyan']);
+        expect(result.outcome).toMatchObject({ winner: 'enemy', lastRound: 3 });
+    });
+
+    // In game the T2 blast broke Hayyan's Stasis and she then repaired herself 10,738 before her
+    // round-3 turn: her 4% "cleanses a debuff from an ally" repair at crit (69,978.5 x 4% x 1.40
+    // x 2.74), as if the break were her cleanse. The owner suspects a game bug; not modelled.
+    it.todo("Hayyan's Stasis breaking repairs her for 10,738");
 });
 
 // Grif, Sentinel, Asphyxiator, Judge and Thresh under Colonel Lv2 (Legion: Judge and Sentinel get
@@ -1103,7 +1107,8 @@ describe('replay: Grif, Sentinel, Asphyxiator, Judge and Thresh against Abyssal 
         expect(result.outcome).toMatchObject({ winner: 'player', lastRound: 1 });
     });
 
-    // In this layout Judge's active reads 255,673, 5.2% low: about 5.4 more defence penetration
-    // than the sim gives him would close it.
+    // The turn order matches the game (Grif, Sentinel, Asphyxiator, Judge, Thresh, all in round
+    // 1), yet Judge's active reads 255,673, 5.2% low: about 5.4 more defence penetration than the
+    // sim gives him would close it.
     it.todo("Judge's crit on Fenri is 269,777");
 });

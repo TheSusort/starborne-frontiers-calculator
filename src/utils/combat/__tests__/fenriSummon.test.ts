@@ -395,8 +395,9 @@ describe.each(SIDES)('summoner on the %s side', (placement) => {
         expect(reviveRounds(r, b.t4)).toEqual([2]);
     });
 
-    it('ASSUMPTION (destroyed-enemy counts): a re-armed torpedo no longer counts for Judge', () => {
-        // "20% more direct damage for each destroyed enemy" reads the enemies dead NOW. Judge
+    it('a re-armed torpedo still counts as destroyed for Judge', () => {
+        // "20% more direct damage for each destroyed enemy" counts every destruction so far, a
+        // re-armed unit's included (owner ruling 2026-11-16). Judge
         // (speed 50) acts after the summoner (130) and both torpedoes (93) every round, and hits
         // the summoner, the only unit in its row. Round 1: none dead; round 2: T4 dead; round 3:
         // T2 dead too, then the charged re-arms both before Judge's turn.
@@ -413,7 +414,7 @@ describe.each(SIDES)('summoner on the %s side', (placement) => {
                 .reduce((sum, e) => sum + (e.damage ?? 0), 0);
         expect(hitIn(1)).toBeGreaterThan(0);
         expect(hitIn(2)).toBeCloseTo(hitIn(1) * 1.2, 6);
-        expect(hitIn(3)).toBeCloseTo(hitIn(1), 6);
+        expect(hitIn(3)).toBeCloseTo(hitIn(1) * 1.4, 6);
     });
 
     it('a summon on the cast that ends the fight re-arms nothing', () => {

@@ -80,6 +80,7 @@ import {
     PendingBomb,
     createActor,
     reviveActor,
+    destroyedCountOf,
     selectNextBySpeed,
     orderByTurnPriority,
     positionTurnRank,
@@ -3757,9 +3758,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyType: roleClassOf(victim),
             ...(liveCountsMeasurable
                 ? {
-                      enemyDestroyedCount: [...allActorsById.values()].filter(
-                          (a) => a.side !== owner.side && a.destroyedRound !== undefined
-                      ).length,
+                      enemyDestroyedCount: destroyedCountOf(
+                          [...allActorsById.values()].filter((a) => a.side !== owner.side)
+                      ),
                   }
                 : {}),
         });
@@ -10816,18 +10817,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                 shieldedAllyCount: tb.shieldedAllyCount(),
                 // Judge R2 ("20% more direct damage for each destroyed enemy, up to max of
                 // 100%"): opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed
-                // the kill and cumulative across rounds (owner ruling 2026-08-30). `destroyedRound`
-                // is the engine's canonical destroyed signal (same one adjacency.ts filters on),
-                // and `tb.opposingRoster` is built once and never pruned, so a corpse stays in the
-                // array and keeps being counted. Team-symmetric via `tb`: the player side tallies
+                // the kill and cumulative across rounds (owner ruling 2026-08-30); see
+                // `destroyedCountOf`. `tb.opposingRoster` is built once and never pruned, so a
+                // corpse stays in the array and keeps being counted. Team-symmetric via `tb`: the player side tallies
                 // the enemy roster, the enemy side tallies the player roster.
                 //
                 // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
                 ...(liveCountsMeasurable
                     ? {
-                          enemyDestroyedCount: tb.opposingRoster.filter(
-                              (x) => x.destroyedRound !== undefined
-                          ).length,
+                          enemyDestroyedCount: destroyedCountOf(tb.opposingRoster),
                           // General Colosso ("15% for each dead ally ship"): the same tally on
                           // the acting unit's own side, itself excluded, any cause of death.
                           allyDestroyedCount: [...allActorsById.values()].filter(

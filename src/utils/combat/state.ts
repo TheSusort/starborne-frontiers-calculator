@@ -579,6 +579,10 @@ export interface CombatActor {
     /** Round of this actor's current death (stamped by recordDestroyed). Undefined while alive,
      *  including after `reviveActor` brings it back. */
     destroyedRound?: number;
+    /** How many times this actor has been destroyed this battle. Stamped by recordDestroyed and
+     *  never reset, so a unit a summon re-arms still counts as a destroyed enemy (owner ruling
+     *  2026-11-16, #519); each later death adds one. */
+    timesDestroyed?: number;
     /** The reaction chain (`setHitRoot` in triggers.ts) in scope when this actor was destroyed, if
      *  any. "All reactions trigger before a ship dies" (R117): the ship's own reactions to the
      *  events of that chain still resolve after its death; reactions to any later chain do not.
@@ -769,7 +773,15 @@ export function reviveActor(actor: CombatActor, maxHp: number): void {
     actor.pendingAccumulators = [];
 }
 
-/** Record an actor's death: stamp `destroyedRound` and emit `ship-destroyed`. Once per life —
+/** Destructions among `actors` so far this battle: every death counts, including those of a unit
+ *  a summon has since re-armed (owner ruling 2026-11-16, #519). The live source for "for each
+ *  destroyed enemy" (Judge). */
+export function destroyedCountOf(actors: readonly CombatActor[]): number {
+    return actors.reduce((sum, a) => sum + (a.timesDestroyed ?? 0), 0);
+}
+
+/** Record an actor's death: stamp `destroyedRound`, count it in `timesDestroyed` and emit
+ *  `ship-destroyed`. Once per life —
  *  repeat calls while it is dead are no-ops, so the stamp doubles as the single-emit guard;
  *  after `reviveActor` the next death records again. Callers floor `currentHp` to 0
  *  themselves; this helper only owns the destroyed-round bookkeeping + the emission. */
@@ -784,6 +796,7 @@ export function recordDestroyed(
 ): void {
     if (actor.destroyedRound !== undefined) return;
     actor.destroyedRound = round;
+    actor.timesDestroyed = (actor.timesDestroyed ?? 0) + 1;
     bus.emit({
         type: 'ship-destroyed',
         actorId: actor.id,

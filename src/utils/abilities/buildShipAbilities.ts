@@ -1167,7 +1167,9 @@ function markCountGateBranches(positioned: PositionedAbility[], text: string): v
  * owner-scoped only when every kill sentence in it names this Unit as the killer.
  *
  * Also stamps `triggerRequiresDirectDeath` on a reaction whose own sentence says "on kill"
- * (`killSentenceRequiresDirectDeath`).
+ * (`killSentenceRequiresDirectDeath`), and `oncePerRootCast: 'cast'` on one whose own sentence
+ * says "Whenever any enemy unit dies": it resolves once per action that kills, however many
+ * enemies that action destroys (Fenri's repair; owner ruling 2026-11-16, #519).
  */
 function markKillerScope(positioned: PositionedAbility[], text: string): void {
     const onKill = positioned.filter((p) => p.ability.trigger === 'on-enemy-destroyed');
@@ -1191,8 +1193,18 @@ function markKillerScope(positioned: PositionedAbility[], text: string): void {
             killSentenceRequiresDirectDeath(sentenceContaining(masked, p.pos))
         )
             p.ability.triggerRequiresDirectDeath = true;
+        if (
+            p.pos >= 0 &&
+            p.pos < masked.length &&
+            p.ability.oncePerRound === undefined &&
+            p.ability.oncePerRootCast === undefined &&
+            ANY_ENEMY_DIES_RE.test(sentenceContaining(masked, p.pos))
+        )
+            p.ability.oncePerRootCast = 'cast';
     }
 }
+
+const ANY_ENEMY_DIES_RE = /\bwhenever\s+any\s+enemy(?:\s+unit)?\s+dies\b/i;
 
 /**
  * Maps an existing-detector ConditionalCondition into a model Condition. The

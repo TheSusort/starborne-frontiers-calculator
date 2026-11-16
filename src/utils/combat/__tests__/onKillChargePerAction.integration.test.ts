@@ -125,3 +125,43 @@ describe('on-kill all-allies charge: once per action that kills', () => {
         expect(grants).toBe(2);
     });
 });
+
+// "Whenever any enemy unit dies" (Abyssal Fenri) repairs once per action that kills, too (owner
+// ruling 2026-11-16, #519).
+const ON_DEATH_REPAIR: UnitSpec = {
+    ...GRANTER,
+    charged: undefined,
+    chargeCount: undefined,
+    passives: [
+        'Whenever any enemy unit dies, this Unit <unit-damage>repairs 12%</unit-damage> of its Max HP.',
+    ],
+};
+
+const repairs = (board: BoardSpec) => {
+    const run = runForcedBattle(board, true);
+    return {
+        deaths: entriesOf(run, 'death').length,
+        repairs: entriesOf(run, 'heal').filter((e) => e.actorId === run.id('L')).length,
+    };
+};
+
+describe('"whenever any enemy unit dies" repair: once per action that kills', () => {
+    const swap = (board: BoardSpec): BoardSpec => ({
+        ...board,
+        player: [ON_DEATH_REPAIR, ...board.player.slice(1)],
+    });
+
+    it.each([
+        ['player side', swap(oneActionThreeKills)],
+        ['enemy side', mirrorBoard(swap(oneActionThreeKills))],
+    ])('%s: one action destroying three enemies repairs once', (_, board) => {
+        expect(repairs(board)).toEqual({ deaths: 3, repairs: 1 });
+    });
+
+    it.each([
+        ['player side', swap(twoActionsOneKillEach)],
+        ['enemy side', mirrorBoard(swap(twoActionsOneKillEach))],
+    ])('%s: two actions that each kill repair twice', (_, board) => {
+        expect(repairs(board)).toEqual({ deaths: 2, repairs: 2 });
+    });
+});
