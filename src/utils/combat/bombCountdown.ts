@@ -81,9 +81,11 @@ function cutBomb(
     if (forceDetonateBomb) {
         forceDetonateBomb(victim, bomb.sourceId, burst);
     } else {
-        const shieldDrain = Math.min(victim.shieldPool, burst);
-        victim.shieldPool -= shieldDrain;
-        victim.currentHp = Math.max(0, victim.currentHp - (burst - shieldDrain));
+        if (victim.damageImmune !== true) {
+            const shieldDrain = Math.min(victim.shieldPool, burst);
+            victim.shieldPool -= shieldDrain;
+            victim.currentHp = Math.max(0, victim.currentHp - (burst - shieldDrain));
+        }
     }
     spliceOut(bombs, bomb);
 }
@@ -114,9 +116,11 @@ function cutAccumulator(
     if (forceDetonate) {
         forceDetonate(victim, acc.sourceId, damage);
     } else {
-        const shieldDrain = Math.min(victim.shieldPool, damage);
-        victim.shieldPool -= shieldDrain;
-        victim.currentHp = Math.max(0, victim.currentHp - (damage - shieldDrain));
+        if (victim.damageImmune !== true) {
+            const shieldDrain = Math.min(victim.shieldPool, damage);
+            victim.shieldPool -= shieldDrain;
+            victim.currentHp = Math.max(0, victim.currentHp - (damage - shieldDrain));
+        }
     }
     spliceOut(accs, acc);
 }

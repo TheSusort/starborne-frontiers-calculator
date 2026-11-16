@@ -2034,6 +2034,9 @@ function applyAccumulators(args: {
      *  this skill included (R149): the accumulator is a debuff (R112), so it is blocked before
      *  any landing roll is drawn. */
     blocked: () => boolean;
+    /** Whether the target is `debuffImmune`: the accumulator is never attempted, with nothing
+     *  rolled and nothing reported. */
+    immune: () => boolean;
     /** Reports an accumulator Block Debuff stopped (no landing roll). */
     emitBlocked: (turns: number) => void;
     /** One landing decision for one accumulator — DRAWS, so it is called once per accumulator. */
@@ -2043,6 +2046,7 @@ function applyAccumulators(args: {
 }): number {
     let landed = 0;
     for (const acc of args.accumulators) {
+        if (args.immune()) continue;
         if (args.blocked()) {
             args.emitBlocked(acc.turns);
             continue;
@@ -3032,10 +3036,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             opposingVictimById?.get(vid) ?? (hasVictim && vid === enemy.id ? enemy : undefined);
         // `blocked`: the affinity disadvantage alone stopped a purge that had buffs to take.
         const removals = recipients.map((vid) => {
+            const victim = victimOf(vid);
+            // A purge-immune ship is never purged: nothing removed, and no affinity row either.
+            if (victim?.purgeImmune === true) return { vid, victim, removed: 0, blocked: false };
             const immune = extensionImmune(vid) && !landsDespiteAffinity(actor);
             return {
                 vid,
-                victim: victimOf(vid),
+                victim,
                 removed: immune ? 0 : statusEngine.purge(vid, count),
                 blocked: immune && statusEngine.removableBuffCount(vid) > 0,
             };
@@ -3207,7 +3214,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // No victim ⇒ nobody is carrying Block Debuff against this cast, so `false`. This
     // also makes the Block-Debuff DoT branch further down provably unreachable on a no-victim turn.
     const targetImmuneToDebuffs = hasVictim
-        ? targetCarriesBlockDebuff(statusEngine, enemy.id)
+        ? targetCarriesBlockDebuff(statusEngine, enemy.id, enemy)
         : false;
     // Turn-local landing decision: an immune target auto-resists (return false WITHOUT drawing
     // the gate, so the existing resist branches record it); otherwise 'apply' (affinity) lands
@@ -3258,7 +3265,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // #413: same three arms, same `viaRoll` contract as the turn-scoped twin above — only the
         // final `debuffLandingGate` call draws, and only it can produce a proc-worthy resist.
         if (
-            targetCarriesBlockDebuff(statusEngine, victim.id) ||
+            targetCarriesBlockDebuff(statusEngine, victim.id, victim) ||
             blockDebuffPendingFor?.(victim.id) === true
         ) {
             return { landed: false, viaRoll: false };
@@ -6363,6 +6370,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             blocked: () =>
                 targetCarriesBlockDebuff(statusEngine, enemy.id) ||
                 blockDebuffPendingFor?.(enemy.id) === true,
+            immune: () => enemy.debuffImmune === true,
             emitBlocked: (turns) => {
                 resistedEnemyDebuffs.push({ buffName: 'Echoing Burst', turnsRemaining: turns });
                 deferredEnemyApplications.push({
@@ -6601,6 +6609,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             blocked: () =>
                 targetCarriesBlockDebuff(statusEngine, rid) ||
                 blockDebuffPendingFor?.(rid) === true,
+            immune: () => victim.debuffImmune === true,
             emitBlocked: () => {
                 deferredEnemyApplications.push({
                     applyState: () => {},

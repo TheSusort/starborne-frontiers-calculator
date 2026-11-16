@@ -1095,6 +1095,9 @@ export function buildEnemyPlayerActorRuntime(
         alwaysLandsDebuffs: e.shipSkills?.alwaysLandsDebuffs,
         controlImmune: e.shipSkills?.controlImmune,
         dotImmune: e.shipSkills?.dotImmune,
+        damageImmune: e.shipSkills?.damageImmune,
+        debuffImmune: e.shipSkills?.debuffImmune,
+        purgeImmune: e.shipSkills?.purgeImmune,
         affinity: e.affinity,
         preFight: e.preFight,
     });
@@ -2553,6 +2556,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         alwaysLandsDebuffs: input.shipSkills.alwaysLandsDebuffs,
         controlImmune: input.shipSkills.controlImmune,
         dotImmune: input.shipSkills.dotImmune,
+        damageImmune: input.shipSkills.damageImmune,
+        debuffImmune: input.shipSkills.debuffImmune,
+        purgeImmune: input.shipSkills.purgeImmune,
         affinity: input.affinity,
         preFight: input.preFight,
     });
@@ -2679,6 +2685,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             alwaysLandsDebuffs: t.walk?.shipSkills.alwaysLandsDebuffs,
             controlImmune: t.walk?.shipSkills.controlImmune,
             dotImmune: t.walk?.shipSkills.dotImmune,
+            damageImmune: t.walk?.shipSkills.damageImmune,
+            debuffImmune: t.walk?.shipSkills.debuffImmune,
+            purgeImmune: t.walk?.shipSkills.purgeImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
@@ -4338,7 +4347,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // upstream, so `raw` can already be negative by the time it reaches here,
                       // and a negative `raw` here would silently RAISE `currentHp`, uncapped by
                       // max HP, with no log row and no booked amount.
-                      const burn = Math.max(0, raw);
+                      const burn = victim.damageImmune === true ? 0 : Math.max(0, raw);
                       victim.currentHp = Math.max(0, victim.currentHp - burn);
                       // ── R7′ ATTRIBUTION: the APPLIER, never the healer ───────────────────────
                       // The damage AND the kill belong to the Zosimos that inflicted the status,
@@ -6760,6 +6769,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  footprint victim and for a later hit in the chain. Undefined reads as
                  *  true — the non-positional cast sites, which bind one victim. */
                 isPrimaryTarget?: boolean;
+                /** True only for a unit's own destruction (a self-destruct hit on itself): it
+                 *  gets through the victim's `damageImmune`. No other damage path sets it. */
+                bypassDamageImmunity?: boolean;
             }
             // AppliedVictimDamage, not VictimDamageOutcome: this funnel always sets
             // `incomingBooked`, so the booking sites below read it without a fallback.
@@ -6808,9 +6820,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             // never touches the shield).
             // Detection mirrors the Cheat-Death check in lethalHp.ts (selfBuffNamesForOwners
             // aggregates snapshot + timed + active ability self statuses).
-            const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
-                BARRIER_BUFFS.has(n)
-            );
+            // `CombatActor.damageImmune` rides the same branch as a Barrier that is never spent
+            // (`damageImmuneHit`): full immunity from every source that funnels here.
+            const damageImmuneHit =
+                victim.damageImmune === true && cause?.bypassDamageImmunity !== true;
+            const carriesBarrier =
+                damageImmuneHit ||
+                selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) => BARRIER_BUFFS.has(n));
             // The victim-side factors in `damage`, as the Protection cascade reads them: the
             // caller's `cause.redirectBasis`, with a partial block folded into `incomingFactor`.
             let redirectBasis = cause?.redirectBasis;
@@ -7480,6 +7496,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Every case still gets FULL immunity — the guard only decides whether the charge
                 // is spent. No-op (returns false) for a turn-duration Barrier.
                 if (
+                    !damageImmuneHit &&
                     cause?.byDirectDamage === true &&
                     (cause.bombPortion ?? 0) === 0 &&
                     damage > 0
@@ -7513,6 +7530,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     hpDamage: 0,
                     shieldAbsorbed: 0,
                     barriered: true,
+                    ...(damageImmuneHit ? { damageImmune: true } : {}),
                     converted: false,
                     // Barrier nullifies the hit's EFFECT but does not un-record it: `.incoming` holds
                     // the amount and an equal `.barrierAbsorbed` nets it back out downstream. So the

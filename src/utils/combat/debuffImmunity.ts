@@ -14,8 +14,15 @@ import type { CombatEventBus } from './events';
 export const BLOCK_DEBUFF_BUFFS: ReadonlySet<string> = new Set(['Block Debuff']);
 export const isBlockDebuff = (name: string): boolean => BLOCK_DEBUFF_BUFFS.has(name);
 
-/** True if `targetId` currently carries a Block Debuff buff (reads its self-buff names). */
-export function targetCarriesBlockDebuff(statusEngine: StatusEngine, targetId: string): boolean {
+/** True if `targetId` currently carries a Block Debuff buff (reads its self-buff names), or is
+ *  itself `debuffImmune` (pass the actor as `target`). Sites that already skip a `debuffImmune`
+ *  target silently (`immuneToEnemyStatus`, `immuneToDot`) never reach this for it. */
+export function targetCarriesBlockDebuff(
+    statusEngine: StatusEngine,
+    targetId: string,
+    target?: { debuffImmune?: boolean }
+): boolean {
+    if (target?.debuffImmune === true) return true;
     return selfBuffNamesForOwners(statusEngine, [targetId]).some(isBlockDebuff);
 }
 

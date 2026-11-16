@@ -112,6 +112,7 @@ import {
     detectAllyShieldDestroyedTrigger,
     detectCleanseOncePerRound,
     parseNoCrit,
+    parseIgnoresAllTargetingEffects,
     parseIgnoresDefense,
     parseIgnoresStealth,
     parseForceAffinityAdvantage,
@@ -119,6 +120,7 @@ import {
     parseChargeLossImmune,
     parseControlImmune,
     parseDotImmune,
+    parseStaticImmunities,
     parseInfiniteHacking,
     parseAlwaysCrits,
     detectIgnoresForcedTargeting,
@@ -1456,7 +1458,8 @@ function abilitiesFromText(
         // target's Defense mitigation term at the reactive damage executor (Task C3).
         const ignoresDefense = parseIgnoresDefense(text);
         // Ship-kit W6 (Lodolite/Rhodium/Selenite): "This attack can target Stealthed enemies".
-        const ignoresStealth = parseIgnoresStealth(text);
+        const ignoresAllTargeting = parseIgnoresAllTargetingEffects(text);
+        const ignoresStealth = parseIgnoresStealth(text) || ignoresAllTargeting;
         // Wusheng: "deals 220% damage with affinity advantage" forces this on-cast hit (and its
         // paired Stasis 'apply' landing) to affinity advantage at the engine seams.
         const forceAffinityAdvantage = parseForceAffinityAdvantage(text);
@@ -1498,6 +1501,9 @@ function abilitiesFromText(
                     ...(forceAffinityAdvantage ? { forceAffinityAdvantage: true } : {}),
                     ...(ignoresDefense ? { ignoresDefense: true } : {}),
                     ...(ignoresStealth ? { ignoresStealth: true } : {}),
+                    ...(ignoresAllTargeting
+                        ? { ignoresForcedTargeting: true, ignoresConcentrateFire: true }
+                        : {}),
                 },
                 autoFilled: true,
             },
@@ -4518,6 +4524,10 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
     const controlImmune = getShipSkillRows(ship).some((row) => parseControlImmune(row.text));
     const dotImmune = getShipSkillRows(ship).some((row) => parseDotImmune(row.text));
+    const staticImmunities = getShipSkillRows(ship).map((row) => parseStaticImmunities(row.text));
+    const damageImmune = staticImmunities.some((x) => x.damage);
+    const debuffImmune = staticImmunities.some((x) => x.debuffs);
+    const purgeImmune = staticImmunities.some((x) => x.purge);
     const alwaysLandsDebuffs = getShipSkillRows(ship).some((row) => parseInfiniteHacking(row.text));
     const alwaysCrits = getShipSkillRows(ship).some((row) => parseAlwaysCrits(row.text));
 
@@ -4537,6 +4547,9 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
         ...(controlImmune ? { controlImmune: true } : {}),
         ...(dotImmune ? { dotImmune: true } : {}),
+        ...(damageImmune ? { damageImmune: true } : {}),
+        ...(debuffImmune ? { debuffImmune: true } : {}),
+        ...(purgeImmune ? { purgeImmune: true } : {}),
         ...(alwaysLandsDebuffs ? { alwaysLandsDebuffs: true } : {}),
         ...(alwaysCrits ? { alwaysCrits: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),

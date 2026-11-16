@@ -6237,7 +6237,11 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             const blockDebuffPending = (): boolean =>
                 blockDebuffPendingOn(ctx.pendingBlockDebuffGrants, debuffTargetId);
             const blockedByImmunity =
-                targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId) || blockDebuffPending();
+                targetCarriesBlockDebuff(
+                    ctx.statusEngine,
+                    debuffTargetId,
+                    ctx.actorById?.(debuffTargetId)
+                ) || blockDebuffPending();
             // #413: `cfg.application` is the sole input `owner.landsTimedEnemyApplication` uses to
             // pick its arm: `'apply'` resolves on affinity and draws nothing, anything else calls
             // `debuffLandingGate`. So this reads the arm choice rather than re-deciding the
@@ -7667,6 +7671,11 @@ function resolveIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // As in the debuff branch — re-check against the real routed target.
             if (!perVictimOk(targetId)) continue;
             if (!victimRoleMatches(roleConditions, targetId, ctx)) continue;
+            // A purge-immune ship is never purged (`CombatActor.purgeImmune`).
+            if (ctx.actorById?.(targetId)?.purgeImmune === true) {
+                removals.push({ targetId, removed: 0, blocked: false });
+                continue;
+            }
             // A purge lands like an 'apply' debuff: nothing at an affinity disadvantage.
             // An `alwaysLandsDebuffs` owner purges whatever the matchup (`landsDespiteAffinity`).
             const purger = ctx.actorById?.(intent.ownerId);

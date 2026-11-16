@@ -642,6 +642,21 @@ export interface CombatActor {
      *  against this actor — the gate is `immuneToDot` (dotImmunity.ts). Bombs still land.
      *  Absent → false. */
     dotImmune?: boolean;
+    /** Immune to damage (ShipSkills.damageImmune): every damage source — direct hit, splash, DoT
+     *  tick, bomb burst, reactive damage, reflect — deals this actor 0 HP. `applyVictimDamage`
+     *  treats it as a Barrier that is never spent (see its `bypassDamageImmunity` for the one
+     *  caller that must get through), and the HP writes that skip the funnel read it too. The hit
+     *  is no direct damage on the actor (`directlyDamagesVictim`), so no "when directly damaged"
+     *  reaction fires. Absent → false. */
+    damageImmune?: boolean;
+    /** Immune to ALL debuffs (ShipSkills.debuffImmune): no debuff, DoT, Bomb or control is ever
+     *  attempted against this actor, with no roll, no resist and no reaction — the gates are
+     *  `immuneToEnemyStatus` and `immuneToDot`, and `targetCarriesBlockDebuff` for the sites that
+     *  have no silent skip. Control-only immunity is `controlImmune`. Absent → false. */
+    debuffImmune?: boolean;
+    /** Immune to purge (ShipSkills.purgeImmune): a purge never removes a buff from this actor
+     *  and reports nothing for it. Absent → false. */
+    purgeImmune?: boolean;
     /** Every attack of this actor crits at a 100% rate, whatever its affinity matchup or crit
      *  debuffs (ShipSkills.alwaysCrits). Absent → the ordinary capped crit rate. */
     alwaysCrits?: boolean;
@@ -675,6 +690,9 @@ export function createActor(
         chargeLossImmune?: boolean;
         controlImmune?: boolean;
         dotImmune?: boolean;
+        damageImmune?: boolean;
+        debuffImmune?: boolean;
+        purgeImmune?: boolean;
         alwaysCrits?: boolean;
         alwaysLandsDebuffs?: boolean;
         preFight?: PreFightCombatModifiers;

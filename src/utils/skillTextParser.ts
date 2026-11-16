@@ -4018,7 +4018,7 @@ export function parseNoCrit(text: string | null | undefined): boolean {
 // Ship-kit W5 (Demolisher bomb-splash): "This damage ignores Defense ..." — the splash damage
 // bypasses the target's Defense mitigation term entirely. Boolean only; the flag rides the
 // damage config (ignoresDefense) and is consumed by the REACTIVE damage executor (Task C3).
-const IGNORES_DEFENSE_RE = /ignores?\s+defense/i;
+const IGNORES_DEFENSE_RE = /(?:ignores?|bypass(?:es)?)\s+(?:enemy\s+)?defen[cs]e/i;
 /** Whether a skill's damage clause ignores the target's Defense (Demolisher bomb-splash).
  *  Reference data: docs/ship-skills.csv. */
 export function parseIgnoresDefense(text: string | null | undefined): boolean {
@@ -4113,6 +4113,36 @@ export function parseControlImmune(text: string | null | undefined): boolean {
 const DOT_IMMUNE_RE = /\bimmune to\b(?:(?!\btakes\b)[^.])*?\bdamage over time effects\b/i;
 export function parseDotImmune(text: string | null | undefined): boolean {
     return !!text && DOT_IMMUNE_RE.test(stripUnitTags(text));
+}
+
+/** Which of damage, debuffs and purge a skill text declares the unit immune to. Reads a list
+ *  right after "immune to" ("This Unit is immune to damage, debuffs, and purge."), so "immune to
+ *  Control debuffs" sets none of them: `debuffs` is every debuff, Control-only is
+ *  {@link parseControlImmune}. */
+const IMMUNITY_LIST_RE = /\bimmune to\s+([^.]*)/gi;
+export function parseStaticImmunities(text: string | null | undefined): {
+    damage: boolean;
+    debuffs: boolean;
+    purge: boolean;
+} {
+    const out = { damage: false, debuffs: false, purge: false };
+    if (!text) return out;
+    for (const m of stripUnitTags(text).matchAll(IMMUNITY_LIST_RE)) {
+        const items = m[1]
+            .split(/\s*,\s*(?:and\s+)?|\s+and\s+/i)
+            .map((x) => x.trim().toLowerCase());
+        if (items.includes('damage')) out.damage = true;
+        if (items.includes('debuffs')) out.debuffs = true;
+        if (items.includes('purge')) out.purge = true;
+    }
+    return out;
+}
+
+/** True iff this skill text says "ignores all targeting changing effects" (Torpedo's blast):
+ *  Taunt, Provoke, Stealth and Concentrate Fire all stop steering that attack. */
+const IGNORES_ALL_TARGETING_RE = /\bignores all targeting changing effects\b/i;
+export function parseIgnoresAllTargetingEffects(text: string | null | undefined): boolean {
+    return !!text && IGNORES_ALL_TARGETING_RE.test(stripUnitTags(text));
 }
 
 /** True iff this skill text says the unit "has infinite Hacking" (Mamma Maglienza): its debuffs

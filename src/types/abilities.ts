@@ -887,6 +887,11 @@ export type AbilityConfig =
            *  (active vs charged slot) from this and the positional resolver skips the stealth
            *  filter. Absent → normal stealth filtering. */
           ignoresStealth?: boolean;
+          /** "ignores all targeting changing effects": this attack's target choice ignores Taunt
+           *  and Provoke. Set together with `ignoresStealth` and `ignoresConcentrateFire`. */
+          ignoresForcedTargeting?: boolean;
+          /** See `ignoresForcedTargeting`: this attack's target choice ignores Concentrate Fire. */
+          ignoresConcentrateFire?: boolean;
       }
     | {
           type: 'counter';
@@ -1694,6 +1699,16 @@ export interface ShipSkills {
     /** True when the ship's passive text declares immunity to damage over time effects (General
      *  Colosso). Read onto `CombatActor.dotImmune`, whose doc holds what the immunity does. */
     dotImmune?: boolean;
+    /** True when the ship's passive text declares immunity to damage (Torpedo). Read onto
+     *  `CombatActor.damageImmune`, whose doc holds what the immunity does. */
+    damageImmune?: boolean;
+    /** True when the ship's passive text declares immunity to debuffs, ALL of them (Torpedo).
+     *  Control-only immunity is `controlImmune`, never this. Read onto
+     *  `CombatActor.debuffImmune`, whose doc holds what the immunity does. */
+    debuffImmune?: boolean;
+    /** True when the ship's passive text declares immunity to purge (Torpedo). Read onto
+     *  `CombatActor.purgeImmune`, whose doc holds what the immunity does. */
+    purgeImmune?: boolean;
     /** True when the ship's passive text says it "has infinite Hacking" (Mamma Maglienza, #519):
      *  every debuff it inflicts lands, with no landing roll, whatever the victim's security or
      *  affinity (owner ruling 2026-11-11). */
