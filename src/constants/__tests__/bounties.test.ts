@@ -25,6 +25,11 @@ describe('bounty portraits', () => {
     it('finds a bounty add portrait too', () => {
         expect(bountyImageKey('capo')).toBe('Capo');
     });
+
+    it('finds the portrait of a level whose kit renames the boss', () => {
+        expect(bountyImageKey('Abyssal Fenri Khaliriz')).toBe('Abyssal_Fenri_Khaliriz');
+        expect(bountyImageKey('Torpedo')).toBe('Torpedo');
+    });
 });
 
 describe('parseDrops', () => {

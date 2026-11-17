@@ -7,6 +7,8 @@ import type { ShipTypeName } from './shipTypes';
 /** A boss's skills at one level, for bosses whose kit changes between levels. */
 export interface BountyBossKit {
     name: string;
+    /** The portrait of a level whose kit renames the boss; looked up by `bountyImageKey`. */
+    imageKey?: string;
     activeSkillText: string;
     chargeSkillText: string;
     chargeSkillCharge: number;
@@ -54,6 +56,7 @@ export const BOUNTY_BOSSES: readonly BountyBoss[] = [
         kitByLevel: {
             33: {
                 name: 'Abyssal Fenri Khaliriz',
+                imageKey: 'Abyssal_Fenri_Khaliriz',
                 activeSkillText:
                     'The Boss deals <unit-damage>400% damage</unit-damage> and inflicts <unit-skill>White Phosphorus II</unit-skill> for 3 turns.',
                 chargeSkillText:
