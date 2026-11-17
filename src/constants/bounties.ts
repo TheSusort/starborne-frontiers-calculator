@@ -1,5 +1,5 @@
 import type { RarityName } from './rarities';
-import { BOUNTY_ADDS } from './bountyBosses';
+import { BOUNTY_ADDS, BOUNTY_BOSSES } from './bountyBosses';
 
 /**
  * Bounty reward data, transcribed from the in-game "Briefing - Rewards" screens (2026-10-16).
@@ -103,7 +103,10 @@ export const BOUNTIES: Bounty[] = [
  *  for any other unit. */
 export const bountyImageKey = (name: string): string | undefined => {
     const key = name.toLowerCase();
-    return [...BOUNTIES, ...BOUNTY_ADDS].find((unit) => unit.name.toLowerCase() === key)?.imageKey;
+    const levelKits = BOUNTY_BOSSES.flatMap((boss) => Object.values(boss.kitByLevel ?? {}));
+    return [...BOUNTIES, ...BOUNTY_ADDS, ...levelKits].find(
+        (unit) => unit?.name.toLowerCase() === key && unit.imageKey
+    )?.imageKey;
 };
 
 const RARITY_LETTERS: Record<'c' | 'u' | 'r' | 'e' | 'l', RarityName> = {
