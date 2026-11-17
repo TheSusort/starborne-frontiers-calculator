@@ -126,7 +126,7 @@ import {
     parseStaticImmunities,
     parseInfiniteHacking,
     parseAlwaysCrits,
-    detectIgnoresForcedTargeting,
+    detectForcedTargetingIgnores,
     detectIgnoresStealth,
     parseChargeRemoval,
     parseSelfBuffRemovals,
@@ -1517,7 +1517,11 @@ function abilitiesFromText(
                     ...(ignoresDefense ? { ignoresDefense: true } : {}),
                     ...(ignoresStealth ? { ignoresStealth: true } : {}),
                     ...(ignoresAllTargeting
-                        ? { ignoresForcedTargeting: true, ignoresConcentrateFire: true }
+                        ? {
+                              ignoresTaunt: true,
+                              ignoresProvoke: true,
+                              ignoresConcentrateFire: true,
+                          }
                         : {}),
                 },
                 autoFilled: true,
@@ -4572,9 +4576,9 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
     const alwaysLandsDebuffs = getShipSkillRows(ship).some((row) => parseInfiniteHacking(row.text));
     const alwaysCrits = getShipSkillRows(ship).some((row) => parseAlwaysCrits(row.text));
 
-    // Ship-kit correctness backlog: check ALL skill rows for the "ignores Taunt and Provoke"
-    // clause (forced-targeting immunity), same refit-resolved row set as the flags above.
-    const ignoresForcedTargeting = detectIgnoresForcedTargeting(
+    // "ignores Taunt" / "ignores Provoke" (forced-targeting immunity), read over the same
+    // refit-resolved row set as the flags above.
+    const forcedTargetingIgnores = detectForcedTargetingIgnores(
         ...getShipSkillRows(ship).map((row) => row.text)
     );
 
@@ -4593,7 +4597,8 @@ export function buildShipAbilities(rawShip: Ship): ShipSkills {
         ...(purgeImmune ? { purgeImmune: true } : {}),
         ...(alwaysLandsDebuffs ? { alwaysLandsDebuffs: true } : {}),
         ...(alwaysCrits ? { alwaysCrits: true } : {}),
-        ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),
+        ...(forcedTargetingIgnores.taunt ? { ignoresTaunt: true } : {}),
+        ...(forcedTargetingIgnores.provoke ? { ignoresProvoke: true } : {}),
         ...(ignoresStealth ? { ignoresStealth: true } : {}),
     };
 }

@@ -946,10 +946,9 @@ export interface EnemyActorInput {
     isBoss?: boolean;
     /** The ship this actor fields (`CombatActor.shipId`). */
     shipId?: string;
-    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
-     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
-     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
-    ignoresForcedTargeting?: boolean;
+    /** Attacker ignores Taunt / Provoke forced targeting (`CombatActor.ignoresTaunt`). */
+    ignoresTaunt?: boolean;
+    ignoresProvoke?: boolean;
     /** Ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
@@ -1100,7 +1099,8 @@ export function buildEnemyPlayerActorRuntime(
         footprint: e.footprint,
         isBoss: e.isBoss,
         shipId: e.shipId,
-        ignoresForcedTargeting: e.ignoresForcedTargeting,
+        ignoresTaunt: e.ignoresTaunt,
+        ignoresProvoke: e.ignoresProvoke,
         ignoresStealth: e.ignoresStealth,
         doesntBreakStasis: e.doesntBreakStasis,
         stasisBreakExemptWhen: e.stasisBreakExemptWhen,
@@ -1607,10 +1607,9 @@ export type TeamActorEngineInput = TeamActorInput & {
     isBoss?: boolean;
     /** The ship this actor fields (`CombatActor.shipId`). */
     shipId?: string;
-    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
-     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
-     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
-    ignoresForcedTargeting?: boolean;
+    /** Attacker ignores Taunt / Provoke forced targeting (`CombatActor.ignoresTaunt`). */
+    ignoresTaunt?: boolean;
+    ignoresProvoke?: boolean;
     /** Ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
@@ -1753,10 +1752,9 @@ export interface CombatEngineInput {
         isBoss?: boolean;
         /** The ship this actor fields (`CombatActor.shipId`). */
         shipId?: string;
-        /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
-         *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
-         *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
-        ignoresForcedTargeting?: boolean;
+        /** Attacker ignores Taunt / Provoke forced targeting (`CombatActor.ignoresTaunt`). */
+        ignoresTaunt?: boolean;
+        ignoresProvoke?: boolean;
         /** Ship-wide stealth-targeting bypass. */
         ignoresStealth?: boolean;
         /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
@@ -1813,10 +1811,9 @@ export interface CombatEngineInput {
     isBoss?: boolean;
     /** The ship this actor fields (`CombatActor.shipId`). */
     shipId?: string;
-    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
-     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
-     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
-    ignoresForcedTargeting?: boolean;
+    /** Attacker ignores Taunt / Provoke forced targeting (`CombatActor.ignoresTaunt`). */
+    ignoresTaunt?: boolean;
+    ignoresProvoke?: boolean;
     /** Ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
@@ -2402,20 +2399,22 @@ function attackBreaksStasis(actor: CombatActor): boolean {
 
 /**
  * The acting attacker's targeting bypasses, read live at each targeting site: its static
- * `ignoresForcedTargeting` or the timed `Rogue's Liberty` (rogueLiberty.ts), its static
- * `ignoresStealth`, and a control-immune attacker's bypass of all three forced-targeting
+ * `ignoresTaunt` / `ignoresProvoke`, the timed `Rogue's Liberty` (rogueLiberty.ts, both), its
+ * static `ignoresStealth`, and a control-immune attacker's bypass of all three forced-targeting
  * statuses and Stealth (`CombatActor.controlImmune`).
  */
 function targetingBypassesOf(
     statusEngine: StatusEngine,
     actor: CombatActor
-): Pick<PositionalActing, 'ignoresForcedTargeting' | 'ignoresStealth' | 'ignoresConcentrateFire'> {
+): Pick<
+    PositionalActing,
+    'ignoresTaunt' | 'ignoresProvoke' | 'ignoresStealth' | 'ignoresConcentrateFire'
+> {
     const controlImmune = actor.controlImmune === true;
+    const liberty = controlImmune || holdsRoguesLiberty(statusEngine, actor.id);
     return {
-        ignoresForcedTargeting:
-            actor.ignoresForcedTargeting ||
-            controlImmune ||
-            holdsRoguesLiberty(statusEngine, actor.id),
+        ignoresTaunt: actor.ignoresTaunt || liberty,
+        ignoresProvoke: actor.ignoresProvoke || liberty,
         ignoresStealth: actor.ignoresStealth || controlImmune,
         ignoresConcentrateFire: controlImmune,
     };
@@ -2568,7 +2567,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         footprint: input.footprint,
         isBoss: input.isBoss,
         shipId: input.shipId,
-        ignoresForcedTargeting: input.ignoresForcedTargeting,
+        ignoresTaunt: input.ignoresTaunt,
+        ignoresProvoke: input.ignoresProvoke,
         ignoresStealth: input.ignoresStealth,
         doesntBreakStasis: input.doesntBreakStasis,
         stasisBreakExemptWhen: input.stasisBreakExemptWhen,
@@ -2698,7 +2698,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             footprint: t.footprint,
             isBoss: t.isBoss,
             shipId: t.shipId,
-            ignoresForcedTargeting: t.ignoresForcedTargeting,
+            ignoresTaunt: t.ignoresTaunt,
+            ignoresProvoke: t.ignoresProvoke,
             ignoresStealth: t.ignoresStealth,
             doesntBreakStasis: t.doesntBreakStasis,
             stasisBreakExemptWhen: t.stasisBreakExemptWhen,

@@ -3486,11 +3486,11 @@ describe('buildShipAbilities chargeLossImmune', () => {
     });
 });
 
-// ── ship-kit correctness backlog: ignoresForcedTargeting (ignore Taunt/Provoke) ────────────
+// ── ignoresTaunt / ignoresProvoke ──────────────────────────────────────────────────────────
 // Judge/Stalwart/Yuyan/Huanying/Valkyrie/Vanguard's kit text states their attacks "ignore
 // Taunt and Provoke". Old-corpus active-skill texts (synthetic; the catalogue wording differs),
 // fed through the production buildShipAbilities(ship) path.
-describe('buildShipAbilities ignoresForcedTargeting', () => {
+describe('buildShipAbilities ignoresTaunt / ignoresProvoke', () => {
     it.each([
         [
             'Judge',
@@ -3516,16 +3516,29 @@ describe('buildShipAbilities ignoresForcedTargeting', () => {
             'Vanguard',
             "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> and deals <unit-damage>100% damage</unit-damage>.",
         ],
-    ])('%s: ignoresForcedTargeting=true from its active-skill text', (_name, activeSkillText) => {
+    ])('%s: both flags from its active-skill text', (_name, activeSkillText) => {
         const result = buildShipAbilities(ship({ activeSkillText }));
-        expect(result.ignoresForcedTargeting).toBe(true);
+        expect(result.ignoresTaunt).toBe(true);
+        expect(result.ignoresProvoke).toBe(true);
     });
 
-    it('unrelated ship (no ignore clause): ignoresForcedTargeting is absent (falsy)', () => {
+    it('a Taunt-only ignore sets ignoresTaunt alone', () => {
+        const result = buildShipAbilities(
+            ship({
+                activeSkillText:
+                    "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> effects and deal <unit-damage>100% damage</unit-damage>.",
+            })
+        );
+        expect(result.ignoresTaunt).toBe(true);
+        expect(result.ignoresProvoke).toBeUndefined();
+    });
+
+    it('unrelated ship (no ignore clause): both flags are absent', () => {
         const activeSkillText =
             'This Unit deals <unit-damage>50% damage</unit-damage> with additional damage equal to <unit-damage>60%</unit-damage> of its defense and inflicts <unit-skill>Defense Down I</unit-skill> for 1 turn.';
         const result = buildShipAbilities(ship({ activeSkillText }));
-        expect(result.ignoresForcedTargeting).toBeFalsy();
+        expect(result.ignoresTaunt).toBeUndefined();
+        expect(result.ignoresProvoke).toBeUndefined();
     });
 });
 

@@ -911,17 +911,33 @@ function stripUnitTags(text: string): string {
     return text.replace(/<\/?unit-(?:aid|skill|damage)>/gi, '');
 }
 
-// "ignores Taunt and Provoke" / "ignoring Taunt and Provoke" / "ignores Taunt and Provoke effects"
-// Requires ignor… THEN taunt THEN provoke in order within a sentence so applier/reader texts don't match.
-const IGNORES_FORCED_TARGETING_RE = /\bignor\w*\b[^.]*\btaunt\b[^.]*\bprovoke\b/i;
+// The forced-targeting statuses an "ignore" verb governs: the list written directly after it
+// ("ignores Taunt and Provoke effects", "ignoring Taunt", "ignore Provoke and Taunt"). Reading
+// only that list keeps an applier ("applies Provoke") or a reader ("enemies affected by Taunt or
+// Provoke") off the flags, and keeps a Taunt-only ignore from picking up a Provoke named later in
+// the same sentence.
+const FORCED_TARGETING_IGNORE_RE =
+    /\bignor\w*\s+(?:both\s+)?((?:taunt|provoke)(?:(?:\s*,\s*|\s+)(?:and\s+|or\s+)?(?:taunt|provoke))*)\b/gi;
 
-/** True if any of the given skill texts states the unit ignores Taunt/Provoke (forced
- *  targeting). Per-ship: every corpus ignore-ship ignores uniformly across active/charged/
- *  passive. Does NOT cover Concentrate Fire (no ship text ignores CF). */
-export function detectIgnoresForcedTargeting(
-    ...skillTexts: Array<string | null | undefined>
-): boolean {
-    return skillTexts.some((t) => !!t && IGNORES_FORCED_TARGETING_RE.test(stripUnitTags(t)));
+/** Which forced-targeting statuses the unit's skill texts say it ignores. Per-ship: every corpus
+ *  ignore-ship ignores uniformly across active/charged/passive. Concentrate Fire is not covered
+ *  (no ship text ignores it); "ignores all targeting changing effects" is per-attack and lives in
+ *  `parseIgnoresAllTargetingEffects`. */
+export function detectForcedTargetingIgnores(...skillTexts: Array<string | null | undefined>): {
+    taunt: boolean;
+    provoke: boolean;
+} {
+    let taunt = false;
+    let provoke = false;
+    for (const t of skillTexts) {
+        if (!t) continue;
+        for (const m of stripUnitTags(t).matchAll(FORCED_TARGETING_IGNORE_RE)) {
+            const list = m[1].toLowerCase();
+            if (/\btaunt\b/.test(list)) taunt = true;
+            if (/\bprovoke\b/.test(list)) provoke = true;
+        }
+    }
+    return { taunt, provoke };
 }
 
 // W6: "This Unit ignores Stealth effects" — a ship-wide stealth-ignoring passive (Lodolite).
@@ -2253,7 +2269,7 @@ export function parseSelfBuffRemovals(
  * buffs/debuffs). Any other named status falls back to a manual (non-derivable) self-buff.
  * (Epic PR5 finding 1: Taunt previously resolved as an enemy-buff — subject inverted — because
  * Taunt CAN also be checked on an opponent in other phrasings, e.g. "ignoring Taunt and Provoke"
- * targeting bypass; but that phrasing is handled entirely by detectIgnoresForcedTargeting, not
+ * targeting bypass; but that phrasing is handled entirely by detectForcedTargetingIgnores, not
  * this function, so every actual caller here is self-subject.)
  */
 export function statusEffectCondition(name: string, anyOf = false): Condition {

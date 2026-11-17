@@ -899,10 +899,12 @@ export type AbilityConfig =
            *  (active vs charged slot) from this and the positional resolver skips the stealth
            *  filter. Absent → normal stealth filtering. */
           ignoresStealth?: boolean;
-          /** "ignores all targeting changing effects": this attack's target choice ignores Taunt
-           *  and Provoke. Set together with `ignoresStealth` and `ignoresConcentrateFire`. */
-          ignoresForcedTargeting?: boolean;
-          /** See `ignoresForcedTargeting`: this attack's target choice ignores Concentrate Fire. */
+          /** "ignores all targeting changing effects": this attack's target choice ignores Taunt.
+           *  Set together with `ignoresProvoke`, `ignoresStealth` and `ignoresConcentrateFire`. */
+          ignoresTaunt?: boolean;
+          /** See `ignoresTaunt`: this attack's target choice ignores Provoke. */
+          ignoresProvoke?: boolean;
+          /** See `ignoresTaunt`: this attack's target choice ignores Concentrate Fire. */
           ignoresConcentrateFire?: boolean;
           /** "it destroys itself" (Torpedo): after the hit resolves, the owner destroys itself
            *  (`SELF_DESTRUCT_MAX_HP_MULTIPLE`, engine.ts), even when the hit found no victim.
@@ -1740,12 +1742,13 @@ export interface ShipSkills {
      *  (owner ruling 57). perShipRules' `applyGuaranteedCrit` tops the crit STAT up for the same
      *  ships; `alwaysCritHundred.integration.test.ts` pins that the two agree. */
     alwaysCrits?: boolean;
-    /** True when the ship's skill text declares its attacks ignore Taunt and Provoke
-     *  (Judge, Stalwart, Yuyan, Huanying, Valkyrie, Vanguard). Threaded onto
-     *  CombatActor.ignoresForcedTargeting by the engine adapter and consumed by
-     *  positionalBinding.ts to skip Taunt/Provoke forced-targeting redirects (Concentrate
-     *  Fire is unaffected). */
-    ignoresForcedTargeting?: boolean;
+    /** True when the ship's skill text declares it ignores Taunt (`detectForcedTargetingIgnores`).
+     *  Threaded onto CombatActor.ignoresTaunt by the engine adapter and consumed by
+     *  positionalBinding.ts to skip the Taunt forced-targeting redirect (Concentrate Fire is
+     *  unaffected). */
+    ignoresTaunt?: boolean;
+    /** The Provoke counterpart of `ignoresTaunt`. */
+    ignoresProvoke?: boolean;
     /** True when the ship's passive text declares it ignores Stealth effects (Lodolite).
      *  Threaded onto CombatActor.ignoresStealth by the engine adapter and consumed by
      *  positionalBinding.ts to skip the stealth targeting filter on ALL of this ship's casts

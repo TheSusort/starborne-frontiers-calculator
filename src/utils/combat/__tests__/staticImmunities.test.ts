@@ -91,10 +91,12 @@ describe('defence and targeting bypass parse', () => {
         expect(damage?.config).toMatchObject({
             ignoresDefense: true,
             ignoresStealth: true,
-            ignoresForcedTargeting: true,
+            ignoresTaunt: true,
+            ignoresProvoke: true,
             ignoresConcentrateFire: true,
         });
-        expect(kit.ignoresForcedTargeting).toBeUndefined();
+        expect(kit.ignoresTaunt).toBeUndefined();
+        expect(kit.ignoresProvoke).toBeUndefined();
         expect(kit.ignoresStealth).toBeUndefined();
     });
 });

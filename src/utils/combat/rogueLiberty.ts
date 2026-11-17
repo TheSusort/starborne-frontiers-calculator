@@ -6,13 +6,14 @@ import { selfBuffNamesForOwners } from './triggers';
  * charged skill to all allies for 2 turns.
  *
  * NAME-KEYED: this is a targeting-rule override, not a stat, so it has no `parsedEffects`
- * channel to ride. It ORs into the existing `CombatActor.ignoresForcedTargeting` flag at the
- * resolver's read sites, turning a static construction-time property into a dynamic one.
+ * channel to ride. It ORs into both `CombatActor.ignoresTaunt` and `CombatActor.ignoresProvoke`
+ * at the resolver's read sites (`targetingBypassesOf`, engine.ts), turning static
+ * construction-time properties into dynamic ones.
  *
- * Scope matches the static flag exactly: actor-wide while held (most of the nine ships that
- * carry the static flag state the clause on a specific cast, yet it is modelled actor-wide),
- * and it does NOT bypass Concentrate Fire — see state.ts's flag docs and positionalBinding's
- * CF-over-Taunt priority.
+ * Scope matches the static flags exactly: actor-wide while held (the ships that carry the static
+ * flags often state the clause on a specific cast, yet it is modelled actor-wide), and it does
+ * NOT bypass Concentrate Fire — see state.ts's flag docs and positionalBinding's CF-over-Taunt
+ * priority.
  */
 export const ROGUES_LIBERTY = "Rogue's Liberty";
 

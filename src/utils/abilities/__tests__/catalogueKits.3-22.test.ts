@@ -126,11 +126,13 @@ describe('3.22 kits — damage clauses', () => {
         };
         const passive =
             "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />Upon destroying an enemy with a <unit-aid>debuff</unit-aid>, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.";
-        expect(buildShipAbilities(kit as unknown as Ship).ignoresForcedTargeting).toBeUndefined();
-        expect(
-            buildShipAbilities({ ...kit, firstPassiveSkillText: passive } as unknown as Ship)
-                .ignoresForcedTargeting
-        ).toBe(true);
+        const before = buildShipAbilities(kit as unknown as Ship);
+        expect([before.ignoresTaunt, before.ignoresProvoke]).toEqual([undefined, undefined]);
+        const after = buildShipAbilities({
+            ...kit,
+            firstPassiveSkillText: passive,
+        } as unknown as Ship);
+        expect([after.ignoresTaunt, after.ignoresProvoke]).toEqual([true, true]);
     });
 
     it('Akula charged: 220% damage', () => {
@@ -354,7 +356,8 @@ describe('3.22 kits — Akula', () => {
                 "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.",
         } as unknown as Ship;
         const built = buildShipAbilities(ship);
-        expect(built.ignoresForcedTargeting).toBe(true);
+        expect(built.ignoresTaunt).toBe(true);
+        expect(built.ignoresProvoke).toBe(true);
         expect(built.doesntBreakStasis).toBe(true);
     });
 });
