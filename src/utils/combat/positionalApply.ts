@@ -4,6 +4,7 @@ import { resolveCells, type CellRole } from '../targeting/resolvePattern';
 import {
     markedTargets,
     resolvePositionalTargetCell,
+    targetableEnemies,
     type ActorTargetingStatus,
     type PositionalActing,
 } from './positionalBinding';
@@ -278,23 +279,29 @@ export function everyVictimIsPrimary(pattern: ParsedPattern): boolean {
  * the single answer for every site that needs a cast's footprint. A `marked` selection with a
  * living Marked enemy ({@link markedTargets}) strikes each Marked unit at full damage, all primary,
  * and nothing else; otherwise the pattern expands around `anchorCell` ({@link footprintVictims})
- * and {@link everyVictimIsPrimary} decides primary-ness.
+ * and {@link everyVictimIsPrimary} decides primary-ness. An All Targetable pattern
+ * (`modifiers.targetable`) keeps only the enemies {@link targetableEnemies} admits for the acting
+ * attacker, in footprint order.
  */
 export function castFootprint(
     pattern: ParsedPattern,
     target: ParsedTarget,
     anchorCell: Position,
     opposingLiving: CombatActor[],
-    statusOf?: (id: string) => ActorTargetingStatus | undefined
+    statusOf?: (id: string) => ActorTargetingStatus | undefined,
+    acting?: PositionalActing
 ): { victims: FootprintHit[]; allPrimary: boolean } {
     const marked = markedTargets(target, opposingLiving, statusOf);
     if (marked) {
         return { victims: marked.map((victim) => ({ victim, roleScale: 1 })), allPrimary: true };
     }
-    return {
-        victims: footprintVictims(pattern, anchorCell, opposingLiving),
-        allPrimary: everyVictimIsPrimary(pattern),
-    };
+    const footprint = footprintVictims(pattern, anchorCell, opposingLiving);
+    const allPrimary = everyVictimIsPrimary(pattern);
+    if (pattern.modifiers.targetable) {
+        const admitted = new Set(targetableEnemies(target, opposingLiving, statusOf, acting));
+        return { victims: footprint.filter((h) => admitted.has(h.victim)), allPrimary };
+    }
+    return { victims: footprint, allPrimary };
 }
 
 /** The payload of `applyPositionalDamage`'s sub-attack boundary hooks. */
@@ -653,7 +660,8 @@ export function applyPositionalDamage(args: {
             target,
             resolved.cell,
             opposingLiving,
-            statusOf
+            statusOf,
+            acting
         );
         const subVictimIdsForHooks = footprint.map((f) => f.victim.id);
         const primaryVictimIds = allPrimary

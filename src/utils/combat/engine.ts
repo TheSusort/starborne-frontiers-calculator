@@ -2420,6 +2420,16 @@ function targetingBypassesOf(
     };
 }
 
+/** The acting attacker's full targeting context, read live: its bypasses
+ *  ({@link targetingBypassesOf}), the unit that Provoked it, and its id. */
+function targetingActingOf(statusEngine: StatusEngine, actor: CombatActor): PositionalActing {
+    return {
+        ...targetingBypassesOf(statusEngine, actor),
+        provokedBy: provokerOf(statusEngine, actor.id),
+        attackerId: actor.id,
+    };
+}
+
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
  * pool (one pending action each) and repeatedly selects the unacted actor with the highest
@@ -10489,14 +10499,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                           target,
                           tb.opposingRoster,
                           statusLookupFor(tb.opposingRoster),
-                          {
-                              // Read live: Rogue's Liberty comes and goes mid-battle. The
-                              // positional-apply site below re-resolves the anchor per hit with
-                              // the same bypasses, so the two never disagree on the victim.
-                              ...targetingBypassesOf(statusEngine, a),
-                              provokedBy: provokerOf(statusEngine, a.id),
-                              attackerId: a.id,
-                          }
+                          // Read live: Rogue's Liberty comes and goes mid-battle. The
+                          // positional-apply site below re-resolves the anchor per hit with
+                          // the same bypasses, so the two never disagree on the victim.
+                          targetingActingOf(statusEngine, a)
                       )
                     : null;
             // ONE rule for both sides. An actor that resolves no living positional victim
@@ -10597,7 +10603,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                           castTarget,
                           tgtCell,
                           tb.opposingRoster,
-                          statusLookupFor(tb.opposingRoster)
+                          statusLookupFor(tb.opposingRoster),
+                          targetingActingOf(statusEngine, a)
                       ).victims.map((h) => h.victim.id)
                     : undefined;
             const opposingVictimById =

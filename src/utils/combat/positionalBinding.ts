@@ -199,8 +199,46 @@ export function forcingProvoker(
 
 /** True when Stealth hides nobody from this cast: the attacker (ship-level `acting`) or the
  *  cast's own target (per-ability `target.ignoresStealth`) ignores it. */
-function ignoresStealthFor(target: ParsedTarget, acting?: PositionalActing): boolean {
-    return !!acting?.ignoresStealth || !!target.ignoresStealth;
+function ignoresStealthFor(target: ParsedTarget | undefined, acting?: PositionalActing): boolean {
+    return !!acting?.ignoresStealth || !!target?.ignoresStealth;
+}
+
+/**
+ * The enemies an All Targetable cast (`PatternModifiers.targetable`) strikes, out of the living
+ * opposing roster. Priority is Provoke > Taunt > Stealth (balance-patch notes; owner rulings
+ * 2026-11-17):
+ *   1. the attacker is Provoked (and does not ignore Provoke) → its living Provoker alone;
+ *   2. else Taunted units exist (and the attacker does not ignore Taunt) → every Taunter;
+ *   3. else every enemy not in Stealth — every enemy when the attacker or the cast ignores
+ *      Stealth;
+ *   4. step 3 empty (everyone stealthed) → every enemy.
+ * A stealthed Provoker or Taunter is still struck. Concentrate Fire does not narrow the set.
+ * Without `statusOf` nothing narrows it. Team-symmetric: each side passes its own opposing roster.
+ *
+ * NOTE: the single-target resolver ({@link resolvePositionalTargetCell}) checks Taunt before
+ * Provoke; this filter follows the patch notes' Provoke-first order.
+ */
+export function targetableEnemies(
+    target: ParsedTarget | undefined,
+    opposingLiving: CombatActor[],
+    statusOf?: (id: string) => ActorTargetingStatus | undefined,
+    acting?: PositionalActing
+): CombatActor[] {
+    const living = livingPlaced(opposingLiving);
+    if (!statusOf) return living;
+    const provoker = forcingProvoker(living, acting);
+    if (provoker) return [provoker];
+    const taunting = forcingTaunters(living, statusOf, acting);
+    if (taunting.length) return taunting;
+    if (ignoresStealthFor(target, acting)) return living;
+    const visible = visibleAmong(living, statusOf);
+    return visible.length ? visible : living;
+}
+
+/** The living, placed units of an opposing roster: the candidates every positional selection
+ *  starts from. Their cells are read through `buildCellIndex`. */
+function livingPlaced(opposingLiving: CombatActor[]): CombatActor[] {
+    return opposingLiving.filter((a) => a.position !== undefined && a.currentHp > 0);
 }
 
 /** The units of `units` not in Stealth. */
@@ -275,7 +313,7 @@ export function resolvePositionalTargetCell(
     statusOf?: (id: string) => ActorTargetingStatus | undefined,
     acting?: PositionalActing
 ): PositionalTargetHit | null {
-    const living = opposingLiving.filter((a) => a.position !== undefined && a.currentHp > 0);
+    const living = livingPlaced(opposingLiving);
     if (living.length === 0) {
         return null;
     }
