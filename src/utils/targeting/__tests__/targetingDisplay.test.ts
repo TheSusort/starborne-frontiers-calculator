@@ -25,6 +25,12 @@ describe('targetingLabel', () => {
         expect(label).not.toContain('Range');
     });
 
+    it('labels the targetable whole-board pattern', () => {
+        expect(targetingLabel(active('front', 'Pattern-All-Targetable'))).toBe(
+            'All targetable · enemy front'
+        );
+    });
+
     it('whole-lane support pattern shows "Whole lane" and no Range segment', () => {
         // Pattern-Line-Support-whole-lane → shape 'line', range 'lane', modifiers.support=true
         // support modifier is intentionally omitted from the caption (ally target side conveys it)

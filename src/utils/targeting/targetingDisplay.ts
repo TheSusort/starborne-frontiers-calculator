@@ -12,7 +12,7 @@ function cap(s: string): string {
 // conveys it (see spec caption rules). Do NOT add a "Support" prefix here.
 function shapeSegment(p: ParsedPattern): string {
     if (p.shape === 'base') return 'Single target';
-    if (p.shape === 'all') return 'Whole board';
+    if (p.shape === 'all') return p.modifiers.targetable ? 'All targetable' : 'Whole board';
     if (p.shape === 'row') return 'Whole row';
     const prefixes = [
         p.modifiers.reverse && 'Reverse',

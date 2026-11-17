@@ -64,6 +64,10 @@ export interface PatternModifiers {
     double?: boolean;
     fromCentre?: boolean;
     anchorMod?: 'back' | 'center' | 'forward';
+    /** A whole-board (`all`) pattern that strikes only the enemies the caster could target:
+     *  the Provoker, else a Taunter, else every enemy not in Stealth (`targetableEnemies`,
+     *  positionalBinding.ts). Set by a `targetable` name token (`Pattern-All-Targetable`). */
+    targetable?: boolean;
 }
 
 export interface ParsedPattern {
@@ -170,7 +174,46 @@ const KNOWN_NON_SHAPE_TOKENS = new Set([
     'double',
     'whole',
     'lane',
+    'targetable',
 ]);
+
+// Every token a shape rule in `detectShape` keys on, plus the range keyword. A pattern-name token
+// outside this set and `KNOWN_NON_SHAPE_TOKENS` (and not a number) makes `parsePattern` throw,
+// so a new official name is never silently read as whatever shape it also mentions.
+const SHAPE_TOKENS = new Set([
+    'backline',
+    'scattershot',
+    'pickaxe',
+    'cone',
+    'cross',
+    'curve',
+    'circle',
+    'horseshoe',
+    'wings',
+    'root',
+    'split',
+    'burst',
+    'line',
+    'base',
+    'row',
+    'all',
+    'range',
+]);
+
+function assertKnownTokens(lower: string): void {
+    const unknown = lower
+        .split('-')
+        .filter(
+            (t) =>
+                t.length > 0 &&
+                !/^\d+$/.test(t) &&
+                !SHAPE_TOKENS.has(t) &&
+                !KNOWN_NON_SHAPE_TOKENS.has(t)
+        );
+    if (unknown.length > 0) {
+        throw new Error(`Unknown pattern token "${unknown.join('", "')}" in: "${lower}"`);
+    }
+}
 
 // Shape detection is presence-based (not positional) and ORDER-SENSITIVE:
 // check 'backline' before any 'line'/'back' rule so it isn't mis-split.
@@ -239,7 +282,16 @@ export function parsePattern(raw: string): ParsedPattern {
         range = 0;
     }
 
-    return { raw, shape: detectShape(lower), range, modifiers };
+    const shape = detectShape(lower);
+    assertKnownTokens(lower);
+    if (/(^|-)targetable(-|$)/.test(lower)) {
+        if (shape !== 'all') {
+            throw new Error(`A targetable token needs a whole-board (All) pattern: "${lower}"`);
+        }
+        modifiers.targetable = true;
+    }
+
+    return { raw, shape, range, modifiers };
 }
 
 // ---------------------------------------------------------------------------

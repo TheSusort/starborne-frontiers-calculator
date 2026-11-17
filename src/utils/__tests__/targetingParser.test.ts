@@ -161,6 +161,32 @@ describe('parsePattern', () => {
         expect(() => parsePattern('Pattern-Nonsense-Range-1')).toThrow(/unknown pattern shape/i);
     });
 
+    it.each(['Pattern-All-Targetable', 'Pattern-Targetable-All', 'Pattern-All_Targetable'])(
+        'parses %s as a whole-board targetable pattern',
+        (raw) => {
+            expect(parsePattern(raw)).toMatchObject({
+                shape: 'all',
+                range: 'all',
+                modifiers: { targetable: true },
+            });
+        }
+    );
+
+    it('leaves Pattern-All untargetable', () => {
+        expect(parsePattern('Pattern-All').modifiers.targetable).toBeUndefined();
+    });
+
+    it.each(['Pattern-All-Nonsense', 'Pattern-Frobbed-All', 'Pattern-Cone-Frobbed-Range-1'])(
+        'throws on the unknown token in %s instead of falling through to its shape',
+        (raw) => {
+            expect(() => parsePattern(raw)).toThrow(/unknown pattern token/i);
+        }
+    );
+
+    it('throws on a targetable token outside a whole-board pattern', () => {
+        expect(() => parsePattern('Pattern-Cone-Targetable-Range-1')).toThrow(/targetable/i);
+    });
+
     it('captures the double modifier (Double-Pickaxe)', () => {
         expect(parsePattern('Pattern-Support-Double-Pickaxe-Range-0')).toMatchObject({
             shape: 'pickaxe',
