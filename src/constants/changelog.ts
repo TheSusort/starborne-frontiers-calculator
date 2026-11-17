@@ -4,13 +4,18 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Statistics: Engineering tab now shows role and stat names properly.',
-    'Statistics: top two engineering leaderboard names are no longer hidden.',
-    'Bounty bosses: Abyssal Fenri Khaliriz and his Torpedoes can now be fought.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.91.0',
+        date: '2026-11-17',
+        changes: [
+            'Statistics: Engineering tab now shows role and stat names properly.',
+            'Statistics: top two engineering leaderboard names are no longer hidden.',
+            'Bounty bosses: Abyssal Fenri Khaliriz and his Torpedoes can now be fought.',
+        ],
+    },
     {
         version: '1.90.0',
         date: '2026-11-16',
