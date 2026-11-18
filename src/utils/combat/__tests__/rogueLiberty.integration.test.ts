@@ -6,7 +6,7 @@
  * OWN skill text. Rogue's Liberty sets both for its duration: a timed, ally-granted buff.
  *
  * Positional mode only — forced targeting is a positional concept; aggregate mode has no
- * per-target selection to override. Semantics match the static flag exactly, including that it
+ * per-target selection to override. Semantics match the static flags exactly, including that it
  * does NOT bypass Concentrate Fire (state.ts's flag docs; positionalBinding keeps CF above Taunt).
  *
  * Drives production targeting through `runCombat`. A `resolvePositionalTarget` unit test would

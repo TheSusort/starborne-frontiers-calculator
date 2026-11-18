@@ -100,9 +100,50 @@ describe('targetableEnemies', () => {
         ]);
     });
 
-    it('Concentrate Fire does not narrow the set', () => {
+    it('one Concentrate Fire mark → that enemy alone, over a Taunter and through Stealth', () => {
+        const so = statusFrom({
+            a: { concentrated: true, stealthed: true },
+            b: { taunting: true },
+        });
+        expect(ids(targetableEnemies(FRONT, living, so))).toEqual(['a']);
+    });
+
+    it('several Concentrate Fire marks → every marked enemy', () => {
+        const so = statusFrom({ a: { concentrated: true }, c: { concentrated: true } });
+        expect(ids(targetableEnemies(FRONT, living, so))).toEqual(['a', 'c']);
+    });
+
+    it('Concentrate Fire beats Provoke and Taunt', () => {
+        const so = statusFrom({ a: { concentrated: true }, b: { taunting: true } });
+        expect(ids(targetableEnemies(FRONT, living, so, { provokedBy: 'c' }))).toEqual(['a']);
+    });
+
+    it('ignoresConcentrateFire skips the mark, falling to Provoke then Taunt', () => {
+        const so = statusFrom({ a: { concentrated: true }, b: { taunting: true } });
+        expect(ids(targetableEnemies(FRONT, living, so, { ignoresConcentrateFire: true }))).toEqual(
+            ['b']
+        );
+        expect(
+            ids(
+                targetableEnemies(FRONT, living, so, {
+                    ignoresConcentrateFire: true,
+                    provokedBy: 'c',
+                })
+            )
+        ).toEqual(['c']);
+    });
+
+    it('ignoresTaunt / ignoresProvoke do not skip Concentrate Fire', () => {
         const so = statusFrom({ a: { concentrated: true } });
-        expect(ids(targetableEnemies(FRONT, living, so))).toEqual(['a', 'b', 'c', 'd']);
+        expect(
+            ids(
+                targetableEnemies(FRONT, living, so, {
+                    ignoresTaunt: true,
+                    ignoresProvoke: true,
+                    provokedBy: 'c',
+                })
+            )
+        ).toEqual(['a']);
     });
 
     it('without a status lookup nothing narrows it', () => {

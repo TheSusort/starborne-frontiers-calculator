@@ -2271,10 +2271,8 @@ export function parseSelfBuffRemovals(
  * constants/buffs.ts) and Provoke is a debuff on THIS unit; both therefore resolve against the
  * caster's own buff/debuff set. Both are derivable (checked live from self's active
  * buffs/debuffs). Any other named status falls back to a manual (non-derivable) self-buff.
- * (Epic PR5 finding 1: Taunt previously resolved as an enemy-buff — subject inverted — because
- * Taunt CAN also be checked on an opponent in other phrasings, e.g. "ignoring Taunt and Provoke"
- * targeting bypass; but that phrasing is handled entirely by detectForcedTargetingIgnores, not
- * this function, so every actual caller here is self-subject.)
+ * An opponent's Taunt in the "ignoring Taunt and Provoke" targeting-bypass phrasing is not read
+ * here; `detectForcedTargetingIgnores` owns it, so every caller of this function is self-subject.
  */
 export function statusEffectCondition(name: string, anyOf = false): Condition {
     const lower = name.toLowerCase();

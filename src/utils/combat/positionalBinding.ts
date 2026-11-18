@@ -205,18 +205,17 @@ function ignoresStealthFor(target: ParsedTarget | undefined, acting?: Positional
 
 /**
  * The enemies an All Targetable cast (`PatternModifiers.targetable`) strikes, out of the living
- * opposing roster. Priority is Provoke > Taunt > Stealth (balance-patch notes; owner rulings
- * 2026-11-17):
- *   1. the attacker is Provoked (and does not ignore Provoke) → its living Provoker alone;
- *   2. else Taunted units exist (and the attacker does not ignore Taunt) → every Taunter;
- *   3. else every enemy not in Stealth — every enemy when the attacker or the cast ignores
+ * opposing roster. Priority mirrors {@link resolvePositionalTargetCell}: Concentrate Fire >
+ * Provoke > Taunt > Stealth (balance-patch notes; owner rulings 2026-11-17):
+ *   1. unless the attacker ignores Concentrate Fire, any living Concentrate-Fire-marked enemy →
+ *      every marked enemy (an All Targetable hit strikes each one rather than picking one);
+ *   2. the attacker is Provoked (and does not ignore Provoke) → its living Provoker alone;
+ *   3. else Taunted units exist (and the attacker does not ignore Taunt) → every Taunter;
+ *   4. else every enemy not in Stealth — every enemy when the attacker or the cast ignores
  *      Stealth;
- *   4. step 3 empty (everyone stealthed) → every enemy.
- * A stealthed Provoker or Taunter is still struck. Concentrate Fire does not narrow the set.
+ *   5. step 4 empty (everyone stealthed) → every enemy.
+ * A stealthed marked unit, Provoker or Taunter is still struck.
  * Without `statusOf` nothing narrows it. Team-symmetric: each side passes its own opposing roster.
- *
- * NOTE: the single-target resolver ({@link resolvePositionalTargetCell}) checks Taunt before
- * Provoke; this filter follows the patch notes' Provoke-first order.
  */
 export function targetableEnemies(
     target: ParsedTarget | undefined,
@@ -226,6 +225,10 @@ export function targetableEnemies(
 ): CombatActor[] {
     const living = livingPlaced(opposingLiving);
     if (!statusOf) return living;
+    if (!acting?.ignoresConcentrateFire) {
+        const concentrated = living.filter((a) => statusOf(a.id)?.concentrated);
+        if (concentrated.length) return concentrated;
+    }
     const provoker = forcingProvoker(living, acting);
     if (provoker) return [provoker];
     const taunting = forcingTaunters(living, statusOf, acting);
@@ -258,13 +261,13 @@ function visibleAmong(
  *   1. Concentrate Fire (bypasses stealth) — force the marked actor (one picked at random when
  *      several are marked; a pick the cast already made stays while it lives). Skipped only when
  *      `acting.ignoresConcentrateFire` is true; `ignoresTaunt` / `ignoresProvoke` do not skip it.
- *   2. Taunt (before stealth) — force a taunting actor. Several taunters are ordered by the
+ *   2. Provoke — attacker must target the actor whose id matches `acting.provokedBy`.
+ *      Bypasses stealth (forced-targeting override). Falls through if the provoker is dead/absent.
+ *      Skipped when `acting.ignoresProvoke` is true.
+ *   3. Taunt (before stealth) — force a taunting actor. Several taunters are ordered by the
  *      attacker's NORMAL targeting over the taunters' cells (its own row first, then the next
  *      rows; front to back for a `front` target), never by roster or application order.
  *      Skipped when `acting.ignoresTaunt` is true.
- *   3. Provoke — attacker must target the actor whose id matches `acting.provokedBy`.
- *      Bypasses stealth (forced-targeting override). Falls through if the provoker is dead/absent.
- *      Skipped when `acting.ignoresProvoke` is true.
  *   4. Stealth filter — drop stealthed cells; if that empties the set, restore all. Skipped
  *      entirely when the acting attacker (ship-level `acting.ignoresStealth`) or this cast's
  *      target (per-ability `target.ignoresStealth`) ignores Stealth. A `row-most` / `row-least`
@@ -365,16 +368,16 @@ export function resolvePositionalTargetCell(
             return aimAt(ordered[Math.min(ordered.length - 1, Math.floor(draw * ordered.length))]);
         }
 
-        // 2. Taunt — evaluated before the stealth filter.
-        const taunting = forcingTaunters(living, statusOf, acting);
-        if (taunting.length) {
-            return selectAmong(taunting) ?? aimAt(taunting[0]);
-        }
-
-        // 3. Provoke — bypasses stealth; falls through if the provoker is dead/absent.
+        // 2. Provoke — bypasses stealth; falls through if the provoker is dead/absent.
         const provoker = forcingProvoker(living, acting);
         if (provoker) {
             return aimAt(provoker);
+        }
+
+        // 3. Taunt — evaluated before the stealth filter.
+        const taunting = forcingTaunters(living, statusOf, acting);
+        if (taunting.length) {
+            return selectAmong(taunting) ?? aimAt(taunting[0]);
         }
 
         // 4. Stealth filter — restore all if every candidate is stealthed.

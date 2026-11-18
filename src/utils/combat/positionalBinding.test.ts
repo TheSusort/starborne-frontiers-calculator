@@ -300,12 +300,33 @@ describe('resolvePositionalTarget — Provoke redirect + ignore gating', () => {
         ).toBe('front');
     });
 
-    it('Taunt beats Provoke when both apply (Taunt higher priority)', () => {
-        // 'front' is taunting (should win), 'back' is the provoker; result must be 'front'.
+    it('Provoke beats Taunt when both apply (Provoke higher priority)', () => {
+        // 'front' is taunting, 'back' is the provoker; the Provoker wins.
+        const so = statusFrom({ front: { taunting: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                provokedBy: 'back',
+            })?.id
+        ).toBe('back');
+    });
+
+    it('Provoke beats Taunt whichever side casts (roster order and caster cell swapped)', () => {
+        // The resolver reads only the opposing roster, so the mirrored case is the same rule from
+        // the other side's perspective: reversed roster, caster on a different cell.
+        const so = statusFrom({ back: { taunting: true } });
+        expect(
+            resolvePositionalTarget('M1', enemyTarget('back'), [...enemies].reverse(), so, {
+                provokedBy: 'front',
+            })?.id
+        ).toBe('front');
+    });
+
+    it('a Taunter wins once the Provoke is ignored', () => {
         const so = statusFrom({ front: { taunting: true } });
         expect(
             resolvePositionalTarget('M4', enemyTarget('back'), enemies, so, {
                 provokedBy: 'back',
+                ignoresProvoke: true,
             })?.id
         ).toBe('front');
     });
