@@ -907,6 +907,10 @@ export function parseHpThresholdCondition(
     return { hpComparator: below ? 'below' : 'above', hpPercent: parseInt(m[2], 10) };
 }
 
+/** "all enemies" as a clause's recipients, "all targetable enemies" included: both are the
+ *  'all-enemies' target; buildShipAbilities' `markBoardWide` narrows the targetable form. */
+const ALL_ENEMIES_RE = /all\s+(?:targetable\s+)?enemies/;
+
 function stripUnitTags(text: string): string {
     return text.replace(/<\/?unit-(?:aid|skill|damage)>/gi, '');
 }
@@ -5828,7 +5832,7 @@ export function parsePurge(text: string | null | undefined): {
             if (!count || isNaN(count)) continue;
         }
         const sentence = sentenceAround(plain, m.index).toLowerCase();
-        const target: 'enemy' | 'all-enemies' = /all\s+enemies/.test(sentence)
+        const target: 'enemy' | 'all-enemies' = ALL_ENEMIES_RE.test(sentence)
             ? 'all-enemies'
             : 'enemy';
         const scaleMatch = CRIT_POWER_SCALING_RE.exec(sentence);
@@ -7215,7 +7219,7 @@ export function detectEnemyGrantScope(
     const withoutAdjacencyPhrasing = resolved
         .replace(TARGET_AND_ADJACENT_ENEMY_RE, '')
         .replace(ADJACENT_ENEMY_ONLY_RE, '');
-    return /all\s+enemies/.test(withoutAdjacencyPhrasing) ? 'all-enemies' : 'enemy';
+    return ALL_ENEMIES_RE.test(withoutAdjacencyPhrasing) ? 'all-enemies' : 'enemy';
 }
 
 /**

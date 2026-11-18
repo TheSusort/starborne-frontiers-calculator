@@ -108,6 +108,7 @@ import { isPassivePerHitStatus, liveGateConditions } from './abilityStatusGating
 import {
     isPositional,
     resolvePositionalTargetCell,
+    targetableEnemies,
     resolvesPositionalVictim,
     type PositionalActing,
 } from './positionalBinding';
@@ -10874,7 +10875,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Board-wide clauses (`Ability.boardWide`): the same positional discriminator as
                 // `opposingVictimById`, and the same unmemoized aliveness thunk as the selectors.
                 ...(opposingVictimById
-                    ? { aliveOpposingIds: () => aliveOpposing().map((v) => v.id) }
+                    ? {
+                          aliveOpposingIds: () => aliveOpposing().map((v) => v.id),
+                          targetableOpposingIds: () =>
+                              targetableEnemies(
+                                  castTarget,
+                                  tb.opposingRoster,
+                                  statusLookupFor(tb.opposingRoster),
+                                  targetingActingOf(statusEngine, a)
+                              ).map((v) => v.id),
+                      }
                     : {}),
                 // Forced bomb-detonation sink (Lingshe's countdown-reduce-to-0). `sink` serves
                 // both directions — ids are globally unique across sides — so no per-side
