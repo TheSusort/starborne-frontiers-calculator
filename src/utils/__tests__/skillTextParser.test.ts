@@ -4579,6 +4579,18 @@ describe('detectForcedTargetingIgnores', () => {
         ).toEqual(BOTH);
     });
 
+    it('reads both for "ignores Taunt effects and Provoke effects"', () => {
+        expect(
+            detectForcedTargetingIgnores('This Unit ignores Taunt effects and Provoke effects.')
+        ).toEqual(BOTH);
+    });
+
+    it('keeps "ignores Taunt effects and applies Provoke" Taunt-only', () => {
+        expect(
+            detectForcedTargetingIgnores('This Unit ignores Taunt effects and applies Provoke.')
+        ).toEqual({ taunt: true, provoke: false });
+    });
+
     it('reads both when Provoke is named first', () => {
         expect(
             detectForcedTargetingIgnores('This Unit ignores Provoke and Taunt effects.')

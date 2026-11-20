@@ -64,9 +64,9 @@ export interface PatternModifiers {
     double?: boolean;
     fromCentre?: boolean;
     anchorMod?: 'back' | 'center' | 'forward';
-    /** A whole-board (`all`) pattern that strikes only the enemies the caster could target:
-     *  the Provoker, else a Taunter, else every enemy not in Stealth (`targetableEnemies`,
-     *  positionalBinding.ts). Set by a `targetable` name token (`Pattern-All-Targetable`). */
+    /** A whole-board (`all`) pattern that strikes only the enemies the caster could target;
+     *  `targetableEnemies` (positionalBinding.ts) is the single source of truth for who that is.
+     *  Set by a `targetable` name token (`Pattern-All-Targetable`). */
     targetable?: boolean;
 }
 

@@ -115,6 +115,15 @@ describe('the parser reads "all targetable enemies" as a narrowed board-wide rec
         ]);
     });
 
+    it('reads the recipient across repeated whitespace, as the purge parser does', () => {
+        const slots = buildShipAbilities({
+            refits: [],
+            activeSkillText: 'Purges 1 buff from all  targetable   enemies.',
+        } as unknown as Ship).slots;
+        const purge = slots.flatMap((s) => s.abilities).find((a) => a.type === 'purge');
+        expect([purge?.boardWide, purge?.targetableOnly]).toEqual([true, true]);
+    });
+
     it('no current corpus ship carries targetableOnly', () => {
         const carriers = loadShipSkillRecords().filter((rec) => {
             const ship = buildTraceShip(rec.name);

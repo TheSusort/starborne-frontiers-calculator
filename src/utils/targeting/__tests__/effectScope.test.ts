@@ -16,6 +16,12 @@ describe('parseEffectScope', () => {
         ).toBe('all targetable enemies');
     });
 
+    it('reads "all  targetable enemies" with extra whitespace as the canonical label', () => {
+        expect(parseEffectScope('Purges 1 buff from all  targetable   enemies.')).toBe(
+            'all targetable enemies'
+        );
+    });
+
     it('detects adjacent enemies (Asphyxiator-style)', () => {
         expect(
             parseEffectScope(

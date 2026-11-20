@@ -921,7 +921,7 @@ function stripUnitTags(text: string): string {
 // Provoke") off the flags, and keeps a Taunt-only ignore from picking up a Provoke named later in
 // the same sentence.
 const FORCED_TARGETING_IGNORE_RE =
-    /\bignor\w*\s+(?:both\s+)?((?:taunt|provoke)(?:(?:\s*,\s*|\s+)(?:and\s+|or\s+)?(?:taunt|provoke))*)\b/gi;
+    /\bignor\w*\s+(?:both\s+)?((?:taunt|provoke)(?:\s+effects)?(?:(?:\s*,\s*|\s+)(?:and\s+|or\s+)?(?:taunt|provoke)(?:\s+effects)?)*)\b/gi;
 
 /** Which forced-targeting statuses the unit's skill texts say it ignores. Per-ship: every corpus
  *  ignore-ship ignores uniformly across active/charged/passive. Concentrate Fire is not covered

@@ -9451,6 +9451,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             /** The cell of `castTargetId` the cast is aimed at (`applyPositionalDamage`'s
              *  `firstAnchorCell`). */
             castTargetCell?: Position;
+            /** `PositionalTurnSel.castTargetableIds`. */
+            castTargetableIds?: string[];
             opposingLiving: CombatActor[];
             /** This turn's landed scheduled enemy effects, from the acting
              *  `PlayerTurnResult`. Feeds `defenseProfileOf` so the per-victim damage read honours
@@ -9569,6 +9571,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     },
                     firstAnchorId: args.castTargetId,
                     firstAnchorCell: args.castTargetCell,
+                    firstTargetableIds: args.pattern.modifiers.targetable
+                        ? args.castTargetableIds
+                        : undefined,
                     defenseProfileOf: (v, didCrit) => ({
                         ...victimDefenseProfileOf(v, {
                             scheduledEnemyEffects: args.scheduledEnemyEffects,
@@ -11084,6 +11089,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             tgt: CombatActor;
             /** The cell of `tgt` the cast is aimed at (`selectTurnTarget`'s `tgtCell`). */
             tgtCell: Position | undefined;
+            /** The cast's footprint as selected before its clauses resolve; an All Targetable
+             *  cast's first sub-attack keeps it (`applyPositionalDamage`'s `firstTargetableIds`). */
+            castTargetableIds: string[] | undefined;
             pattern: ParsedPattern;
             target: ParsedTarget;
             preTurnVictimStatus: Map<string, PreTurnVictimStatusSnapshot> | undefined;
@@ -11410,6 +11418,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actingId: actor.id,
                 castTargetId: sel.tgt?.id,
                 castTargetCell: sel.tgtCell,
+                castTargetableIds: sel.castTargetableIds,
                 opposingLiving: tb.opposingRoster,
                 applyToVictim: tb.applyToVictim,
                 // The acting turn's landed scheduled enemy effects reach
@@ -13527,6 +13536,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     {
                                         tgt,
                                         tgtCell,
+                                        castTargetableIds: focusTurnArgs.aoeVictimIds,
                                         pattern,
                                         target,
                                         preTurnVictimStatus,
@@ -13804,6 +13814,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     {
                                         tgt,
                                         tgtCell,
+                                        castTargetableIds: teamTurnArgs.aoeVictimIds,
                                         pattern: teamPattern,
                                         target: teamTarget,
                                         preTurnVictimStatus: teamPreTurnVictimStatus,
@@ -14253,6 +14264,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     {
                                         tgt,
                                         tgtCell,
+                                        castTargetableIds: enemyTurnArgs.aoeVictimIds,
                                         // No `!` needed: `enemyPositional` is a const whose
                                         // conjunction includes both non-null checks, so the
                                         // gate above narrows them (it could not while these

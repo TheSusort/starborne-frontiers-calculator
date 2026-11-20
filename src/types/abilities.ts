@@ -1632,8 +1632,8 @@ export interface Ability {
      *  landing and its purge loop. Set by buildShipAbilities from the ability's own sentence. */
     boardWide?: boolean;
     /** Narrows a `boardWide` clause to the enemies the caster could target ("on all targetable
-     *  enemies"): the Provoker, else every Taunter, else every enemy not in Stealth
-     *  (`targetableEnemies`, positionalBinding.ts). Set by buildShipAbilities with `boardWide`. */
+     *  enemies"); `targetableEnemies` (positionalBinding.ts) is the single source of truth for who
+     *  that is. Set by buildShipAbilities with `boardWide`. */
     targetableOnly?: boolean;
     /** D-PR14 Bulwark: an on-ally-attacked reactive fires only when the DAMAGED ally is
      *  adjacent to this owner (board neighbours; non-positional → any living same-side ally).

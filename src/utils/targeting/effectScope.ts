@@ -15,7 +15,7 @@ export function parseEffectScope(skillText: string): string | null {
 
     // Conditional subsets — keep the qualifier so we don't overstate the scope.
     const conditional = t.match(
-        /all (cleansed|hit|damaged|debuffed|stealthed|targetable) (enemies|allies)/
+        /all\s+(cleansed|hit|damaged|debuffed|stealthed|targetable)\s+(enemies|allies)/
     );
     if (conditional) return `all ${conditional[1]} ${conditional[2]}`;
 

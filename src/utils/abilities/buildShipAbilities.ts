@@ -1114,9 +1114,10 @@ function markPatternScoped(positioned: PositionedAbility[], text: string): Posit
  * sentence) keeps a clause with its own recipient ("inflicts X on the target and Y on all enemies")
  * off the flag while a shared one ("inflicts X and Y on all enemies") flags both. "deals damage TO
  * all enemies" is a damage pattern, not a debuff's recipient, and stays footprint-scoped.
- * "on / from all targetable enemies" also sets `Ability.targetableOnly`.
+ * "on / from all targetable enemies" also sets `Ability.targetableOnly`; read `targetableEnemies`
+ * for which enemies that admits.
  */
-const BOARD_WIDE_RECIPIENT_RE = /\b(?:on|from) all (?:targetable )?enemies\b/i;
+const BOARD_WIDE_RECIPIENT_RE = /\b(?:on|from)\s+all\s+(?:targetable\s+)?enemies\b/i;
 const RECIPIENT_PHRASE_RE =
     /\b(?:on|to|from)\s+(?:the|that|this|its|itself|an?|each|every|all|adjacent|any)\b/i;
 function markBoardWide(positioned: PositionedAbility[], text: string): void {
@@ -1131,7 +1132,7 @@ function markBoardWide(positioned: PositionedAbility[], text: string): void {
         const rest = masked.slice(p.pos, end < 0 ? masked.length : p.pos + end);
         const at = rest.search(RECIPIENT_PHRASE_RE);
         const recipient =
-            at >= 0 ? /^(?:on|from) all (targetable )?enemies\b/i.exec(rest.slice(at)) : null;
+            at >= 0 ? /^(?:on|from)\s+all\s+(targetable\s+)?enemies\b/i.exec(rest.slice(at)) : null;
         if (recipient) {
             p.ability.boardWide = true;
             if (recipient[1]) p.ability.targetableOnly = true;
