@@ -4,11 +4,16 @@ import { ChangelogEntry } from '../types/changelog';
 // top of CHANGELOG, bumps CURRENT_VERSION in `version.ts` and empties this array — all three
 // together, because a bumped version whose entries are still unreleased shows users a what's-new
 // dialog listing nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Combat simulator: Provoke now takes priority over Taunt when choosing a target.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.91.1',
+        date: '2026-11-20',
+        changes: [
+            'Combat simulator: Provoke now takes priority over Taunt when choosing a target.',
+        ],
+    },
     {
         version: '1.91.0',
         date: '2026-11-17',
