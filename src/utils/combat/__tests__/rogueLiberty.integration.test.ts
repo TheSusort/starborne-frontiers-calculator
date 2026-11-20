@@ -2,12 +2,11 @@
  * `Rogue's Liberty` ("Ignores Taunt and Provoke.") — Chimei grants it to all allies for 2 turns.
  * It built as a name-only buff (empty `parsedEffects`) and nothing read it, so it did nothing.
  *
- * `ignoresForcedTargeting` already existed and was production-wired, but only as a STATIC
- * construction-time actor flag derived from a ship's OWN skill text (nine ships). This makes it
- * dynamic: a timed, ally-granted buff now sets it for its duration.
+ * `ignoresTaunt` / `ignoresProvoke` are STATIC construction-time actor flags derived from a ship's
+ * OWN skill text. Rogue's Liberty sets both for its duration: a timed, ally-granted buff.
  *
  * Positional mode only — forced targeting is a positional concept; aggregate mode has no
- * per-target selection to override. Semantics match the static flag exactly, including that it
+ * per-target selection to override. Semantics match the static flags exactly, including that it
  * does NOT bypass Concentrate Fire (state.ts's flag docs; positionalBinding keeps CF above Taunt).
  *
  * Drives production targeting through `runCombat`. A `resolvePositionalTarget` unit test would
@@ -165,7 +164,7 @@ const cfApplier = (): Ability => ({
 });
 
 /** An inert on-cast debuff whose `debuff-applied` event names the actor `selectTurnTarget`
- *  resolved — the observable for the SELECTION-side read of `ignoresForcedTargeting`.
+ *  resolved — the observable for the SELECTION-side read of the Taunt/Provoke ignores.
  *  `application: 'apply'` so it never rolls against hacking/resistance. */
 const MARKER_DEBUFF = 'Target Marker';
 

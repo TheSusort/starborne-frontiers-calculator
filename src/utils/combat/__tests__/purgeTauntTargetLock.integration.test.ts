@@ -65,7 +65,12 @@ const damage = (hits?: number): Ability => ({
 });
 
 /** Per round, the damage T and X took. */
-const fight = (side: 'player' | 'enemy', purgerSkills: ShipSkills, numRounds = 2) => {
+const fight = (
+    side: 'player' | 'enemy',
+    purgerSkills: ShipSkills,
+    numRounds = 2,
+    pattern?: string
+) => {
     const purger: ShipSpec = {
         id: 'purger',
         position: 'M4',
@@ -73,6 +78,7 @@ const fight = (side: 'player' | 'enemy', purgerSkills: ShipSkills, numRounds = 2
         attack: 1000,
         hacking: 1e6,
         skills: purgerSkills,
+        ...(pattern ? { pattern } : {}),
     };
     const x: ShipSpec = { id: 'x', position: 'M4', speed: 50, hp: 1e9 };
     const t: ShipSpec = {
@@ -132,6 +138,34 @@ describe('a pre-damage purge of Taunt does not move the hit it precedes', () => 
             expect(rounds[0].t).toBeGreaterThan(0);
             expect(rounds[0].x).toBeGreaterThan(0);
             expect(rounds[0].t).toBe(rounds[0].x);
+        });
+    }
+});
+
+describe('an All Targetable cast keeps its first footprint through a pre-damage Taunt purge', () => {
+    for (const side of ['player', 'enemy'] as const) {
+        it(`${side}-side: the first hit strikes only the taunter, the next turn strikes both`, () => {
+            const rounds = fight(
+                side,
+                { slots: [{ slot: 'active', abilities: [purge1, damage()] }] },
+                2,
+                'Pattern-All-Targetable'
+            );
+            expect(rounds[0].t).toBeGreaterThan(0);
+            expect(rounds[0].x).toBe(0);
+            expect(rounds[1].t).toBeGreaterThan(0);
+            expect(rounds[1].x).toBeGreaterThan(0);
+        });
+
+        it(`${side}-side control: without the purge, only the taunter is struck both turns`, () => {
+            const rounds = fight(
+                side,
+                { slots: [{ slot: 'active', abilities: [damage()] }] },
+                2,
+                'Pattern-All-Targetable'
+            );
+            expect(rounds.map((r) => r.x)).toEqual([0, 0]);
+            expect(rounds.every((r) => r.t > 0)).toBe(true);
         });
     }
 });

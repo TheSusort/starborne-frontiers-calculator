@@ -14,7 +14,9 @@ export function parseEffectScope(skillText: string): string | null {
     if (/adjacent allies|allies adjacent/.test(t)) return 'adjacent allies';
 
     // Conditional subsets — keep the qualifier so we don't overstate the scope.
-    const conditional = t.match(/all (cleansed|hit|damaged|debuffed|stealthed) (enemies|allies)/);
+    const conditional = t.match(
+        /all\s+(cleansed|hit|damaged|debuffed|stealthed|targetable)\s+(enemies|allies)/
+    );
     if (conditional) return `all ${conditional[1]} ${conditional[2]}`;
 
     // Whole-side scopes ("all enemies", "all other allies", …).

@@ -600,11 +600,14 @@ export interface CombatActor {
      *  the summon (`processSummons`, engine.ts) to find the dead adds it re-arms. Absent → no
      *  summon ever re-arms this actor. */
     shipId?: string;
-    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
-     *  plumbing — set at construction, consumed by resolvePositionalTarget. engine.ts's
+    /** Attacker ignores Taunt forced targeting (ShipSkills.ignoresTaunt). Positional plumbing —
+     *  set at construction, consumed by resolvePositionalTarget. engine.ts's
      *  `targetingBypassesOf` ORs it with the timed `Rogue's Liberty` buff (rogueLiberty.ts) and
      *  `controlImmune`, so this field alone is not the resolver's effective input. */
-    ignoresForcedTargeting?: boolean;
+    ignoresTaunt?: boolean;
+    /** Attacker ignores Provoke forced targeting (ShipSkills.ignoresProvoke). Read the same way
+     *  as `ignoresTaunt`. */
+    ignoresProvoke?: boolean;
     /** Attacker ignores the Stealth targeting filter on ALL its casts (Lodolite's "ignores
      *  Stealth effects" passive). Positional plumbing — set at construction, consumed by
      *  resolvePositionalTarget via acting.ignoresStealth. */
@@ -643,7 +646,7 @@ export interface CombatActor {
      *     at `controlImmunityBlocks`, controlImmunity.ts).
      *   - Provoke, Taunt and Concentrate Fire land on it as ordinary debuffs, but never force its
      *     target choice, and Stealth never hides a unit from it: the engine's targeting read
-     *     sites OR this flag into `ignoresForcedTargeting` and `ignoresStealth` and pass it as
+     *     sites OR this flag into `ignoresTaunt`, `ignoresProvoke` and `ignoresStealth` and pass it as
      *     `PositionalActing.ignoresConcentrateFire`.
      *  Absent → false. */
     controlImmune?: boolean;
@@ -692,7 +695,8 @@ export function createActor(
         footprint?: readonly Position[];
         isBoss?: boolean;
         shipId?: string;
-        ignoresForcedTargeting?: boolean;
+        ignoresTaunt?: boolean;
+        ignoresProvoke?: boolean;
         ignoresStealth?: boolean;
         doesntBreakStasis?: boolean;
         stasisBreakExemptWhen?: Condition[];
@@ -732,7 +736,8 @@ export function createActor(
         footprint: partial.footprint,
         isBoss: partial.isBoss,
         shipId: partial.shipId,
-        ignoresForcedTargeting: partial.ignoresForcedTargeting,
+        ignoresTaunt: partial.ignoresTaunt,
+        ignoresProvoke: partial.ignoresProvoke,
         ignoresStealth: partial.ignoresStealth,
         doesntBreakStasis: partial.doesntBreakStasis,
         stasisBreakExemptWhen: partial.stasisBreakExemptWhen,

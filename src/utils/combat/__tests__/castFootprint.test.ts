@@ -74,6 +74,29 @@ describe('castFootprint', () => {
     });
 });
 
+describe('castFootprint with a Marked selection and an All Targetable pattern', () => {
+    const ALL_TARGETABLE = parsePattern('Pattern-All-Targetable');
+    const living = [actor('taunter', 'T4'), actor('marked', 'B3'), actor('plain', 'M3')];
+    const status = (id: string): ActorTargetingStatus => ({
+        stealthed: false,
+        taunting: id === 'taunter',
+        concentrated: id === 'marked',
+        marked: id === 'marked',
+    });
+
+    it('a Marked enemy the caster could target is struck alone', () => {
+        const { victims } = castFootprint(ALL_TARGETABLE, MARKED, 'M3', living, status);
+        expect(victims.map((v) => v.victim.id)).toEqual(['marked']);
+    });
+
+    it('a Marked enemy the caster cannot target is not struck: the targetable set is', () => {
+        const { victims } = castFootprint(ALL_TARGETABLE, MARKED, 'M3', living, status, {
+            ignoresConcentrateFire: true,
+        });
+        expect(victims.map((v) => v.victim.id)).toEqual(['taunter']);
+    });
+});
+
 describe('resolvePositionalTargetCell with a marked selection', () => {
     it('anchors on the first Marked unit, past Taunt and Stealth', () => {
         const living = [actor('m4', 'M4'), actor('b2', 'B2'), actor('t1', 'T1')];

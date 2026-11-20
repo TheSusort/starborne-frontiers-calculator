@@ -266,7 +266,8 @@ describe('Rikra: "additional damage to enemies affected by Taunt" reads the stru
     const board = (aSkills: ShipSkills, bSkills?: ShipSkills): CombatEngineInput =>
         base({
             shipSkills: rikraActive(),
-            ignoresForcedTargeting: true,
+            ignoresTaunt: true,
+            ignoresProvoke: true,
             enemyAttackers: [
                 enemyAt('e-a', 'M4', aSkills),
                 ...(bSkills ? [enemyAt('e-b', 'M3', bSkills)] : []),
@@ -292,7 +293,8 @@ describe('Rikra: "additional damage to enemies affected by Taunt" reads the stru
      *  M3. */
     const enemyBoard = (aSkills: ShipSkills, bSkills?: ShipSkills): CombatEngineInput => {
         const rikra = enemyAt('e-rikra', 'M4', rikraActive(), { attack: 1000, speed: 100 });
-        rikra.ignoresForcedTargeting = true;
+        rikra.ignoresTaunt = true;
+        rikra.ignoresProvoke = true;
         return base({
             attack: 0,
             speed: 300,
@@ -322,7 +324,8 @@ describe('"if the target is affected by a control effect" reads the struck enemy
     const board = (aSkills: ShipSkills, bSkills?: ShipSkills): CombatEngineInput =>
         base({
             shipSkills: controlGatedActive(),
-            ignoresForcedTargeting: true,
+            ignoresTaunt: true,
+            ignoresProvoke: true,
             enemyAttackers: [
                 enemyAt('e-a', 'M4', aSkills),
                 ...(bSkills ? [enemyAt('e-b', 'M3', bSkills)] : []),
@@ -343,7 +346,8 @@ describe('"if the target is affected by a control effect" reads the struck enemy
             attack: 1000,
             speed: 100,
         });
-        hitterShip.ignoresForcedTargeting = true;
+        hitterShip.ignoresTaunt = true;
+        hitterShip.ignoresProvoke = true;
         return base({
             attack: 0,
             speed: 300,
@@ -382,7 +386,8 @@ describe('"if the target is affected by a control effect" reads the struck enemy
             ally.walk!.stats.hacking = 1000;
             const withAlly = base({
                 shipSkills: controlGatedActive(),
-                ignoresForcedTargeting: true,
+                ignoresTaunt: true,
+                ignoresProvoke: true,
                 teamActors: [ally],
                 enemyAttackers: [enemyAt('e-a', 'M4')],
             });
@@ -390,7 +395,8 @@ describe('"if the target is affected by a control effect" reads the struck enemy
             // Control: the same ally with no infliction → base 80% only.
             const idle = base({
                 shipSkills: controlGatedActive(),
-                ignoresForcedTargeting: true,
+                ignoresTaunt: true,
+                ignoresProvoke: true,
                 teamActors: [playerShip('p-controller', 'M3', NONE, 300)],
                 enemyAttackers: [enemyAt('e-a', 'M4')],
             });
@@ -403,7 +409,8 @@ describe('"if the target is affected by a control effect" reads the struck enemy
                     attack: 1000,
                     speed: 100,
                 });
-                hitterShip.ignoresForcedTargeting = true;
+                hitterShip.ignoresTaunt = true;
+                hitterShip.ignoresProvoke = true;
                 const controller = enemyAt('e-controller', 'M3', controllerSkills, {
                     speed: 300,
                 });

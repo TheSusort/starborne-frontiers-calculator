@@ -4,6 +4,7 @@ import { resolveCells, type CellRole } from '../targeting/resolvePattern';
 import {
     markedTargets,
     resolvePositionalTargetCell,
+    targetableEnemies,
     type ActorTargetingStatus,
     type PositionalActing,
 } from './positionalBinding';
@@ -278,23 +279,39 @@ export function everyVictimIsPrimary(pattern: ParsedPattern): boolean {
  * the single answer for every site that needs a cast's footprint. A `marked` selection with a
  * living Marked enemy ({@link markedTargets}) strikes each Marked unit at full damage, all primary,
  * and nothing else; otherwise the pattern expands around `anchorCell` ({@link footprintVictims})
- * and {@link everyVictimIsPrimary} decides primary-ness.
+ * and {@link everyVictimIsPrimary} decides primary-ness. An All Targetable pattern
+ * (`modifiers.targetable`) keeps only the enemies {@link targetableEnemies} admits for the acting
+ * attacker (Marked victims included), in footprint order; `lockedTargetableIds` stands in for that
+ * admitted set when the caller fixed it earlier.
  */
 export function castFootprint(
     pattern: ParsedPattern,
     target: ParsedTarget,
     anchorCell: Position,
     opposingLiving: CombatActor[],
-    statusOf?: (id: string) => ActorTargetingStatus | undefined
+    statusOf?: (id: string) => ActorTargetingStatus | undefined,
+    acting?: PositionalActing,
+    lockedTargetableIds?: ReadonlySet<string>
 ): { victims: FootprintHit[]; allPrimary: boolean } {
-    const marked = markedTargets(target, opposingLiving, statusOf);
+    const admittedFor = (): ReadonlySet<string> =>
+        lockedTargetableIds ??
+        new Set(targetableEnemies(target, opposingLiving, statusOf, acting).map((a) => a.id));
+    let marked = markedTargets(target, opposingLiving, statusOf);
+    if (marked && pattern.modifiers.targetable) {
+        const admitted = admittedFor();
+        marked = marked.filter((m) => admitted.has(m.id));
+        if (marked.length === 0) marked = null;
+    }
     if (marked) {
         return { victims: marked.map((victim) => ({ victim, roleScale: 1 })), allPrimary: true };
     }
-    return {
-        victims: footprintVictims(pattern, anchorCell, opposingLiving),
-        allPrimary: everyVictimIsPrimary(pattern),
-    };
+    const footprint = footprintVictims(pattern, anchorCell, opposingLiving);
+    const allPrimary = everyVictimIsPrimary(pattern);
+    if (pattern.modifiers.targetable) {
+        const admitted = admittedFor();
+        return { victims: footprint.filter((h) => admitted.has(h.victim.id)), allPrimary };
+    }
+    return { victims: footprint, allPrimary };
 }
 
 /** The payload of `applyPositionalDamage`'s sub-attack boundary hooks. */
@@ -391,6 +408,10 @@ export function applyPositionalDamage(args: {
     /** The cell of `firstAnchorId` the cast was aimed at (its pattern origin). Unsupplied, or not
      *  one of that unit's cells → the attacker's normal aim at it (`hitCellOf`). */
     firstAnchorCell?: Position;
+    /** The enemies an All Targetable cast admitted when its turn began. Sub-attack 0 strikes
+     *  these (the living ones) so a purge that strips Taunt or Stealth before the damage does not
+     *  move the hit, as `firstAnchorId` does for a single-target cast. Sub-attacks 1+ re-resolve. */
+    firstTargetableIds?: string[];
     /** `didCrit` is this victim's own crit on the hit being read (a per-enemy crit bonus scales
      *  off it — Crucialis). */
     defenseProfileOf: (v: CombatActor, didCrit: boolean) => VictimDefenseProfile;
@@ -570,6 +591,7 @@ export function applyPositionalDamage(args: {
         acting,
         firstAnchorId,
         firstAnchorCell,
+        firstTargetableIds,
         defenseProfileOf,
         applyToVictim,
         emitHit,
@@ -653,7 +675,11 @@ export function applyPositionalDamage(args: {
             target,
             resolved.cell,
             opposingLiving,
-            statusOf
+            statusOf,
+            acting,
+            h === 0 && lockedAnchor !== undefined && firstTargetableIds !== undefined
+                ? new Set(firstTargetableIds)
+                : undefined
         );
         const subVictimIdsForHooks = footprint.map((f) => f.victim.id);
         const primaryVictimIds = allPrimary

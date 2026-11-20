@@ -45,7 +45,7 @@ import {
     parseHealNoCrit,
     statusEffectCondition,
     parseControlInflicts,
-    detectIgnoresForcedTargeting,
+    detectForcedTargetingIgnores,
     parseStasisBreakExemption,
     parseChargeRemoval,
     parseEnemyChargedCastReaction,
@@ -4545,72 +4545,117 @@ describe('Chakara start-of-round self-buff extraction', () => {
     });
 });
 
-describe('detectIgnoresForcedTargeting', () => {
-    it('returns true for "ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>" (Akula)', () => {
+describe('detectForcedTargetingIgnores', () => {
+    const BOTH = { taunt: true, provoke: true };
+    const NONE = { taunt: false, provoke: false };
+
+    it('reads both for "ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>" (Akula)', () => {
         expect(
-            detectIgnoresForcedTargeting(
+            detectForcedTargetingIgnores(
                 "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> and deals 160% damage."
             )
-        ).toBe(true);
+        ).toEqual(BOTH);
     });
 
-    it('returns true for "ignoring Taunt and Provoke" without tags (Anjian)', () => {
+    it('reads both for "ignoring Taunt and Provoke" without tags (Anjian)', () => {
         expect(
-            detectIgnoresForcedTargeting('This Unit deals 130% damage, ignoring Taunt and Provoke.')
-        ).toBe(true);
+            detectForcedTargetingIgnores('This Unit deals 130% damage, ignoring Taunt and Provoke.')
+        ).toEqual(BOTH);
     });
 
-    it('returns true for "ignores Taunt and Provoke effects" (Judge passive)', () => {
+    it('reads both for "ignores Taunt and Provoke effects" (Judge passive)', () => {
         expect(
-            detectIgnoresForcedTargeting(
+            detectForcedTargetingIgnores(
                 'This Unit ignores Taunt and Provoke effects and has 20% defense penetration'
             )
-        ).toBe(true);
+        ).toEqual(BOTH);
     });
 
-    it('returns true for "ignores Taunt and Provoke, deals 230% damage" (Judge active)', () => {
+    it('reads both for "ignores Taunt and Provoke, deals 230% damage" (Judge active)', () => {
         expect(
-            detectIgnoresForcedTargeting(
+            detectForcedTargetingIgnores(
                 "This Unit's attack ignores Taunt and Provoke, deals 230% damage, and applies Concentrate Fire for 1 turn."
             )
-        ).toBe(true);
+        ).toEqual(BOTH);
     });
 
-    it('returns false for a Provoke APPLIER (not an ignorer)', () => {
+    it('reads both for "ignores Taunt effects and Provoke effects"', () => {
         expect(
-            detectIgnoresForcedTargeting(
+            detectForcedTargetingIgnores('This Unit ignores Taunt effects and Provoke effects.')
+        ).toEqual(BOTH);
+    });
+
+    it('keeps "ignores Taunt effects and applies Provoke" Taunt-only', () => {
+        expect(
+            detectForcedTargetingIgnores('This Unit ignores Taunt effects and applies Provoke.')
+        ).toEqual({ taunt: true, provoke: false });
+    });
+
+    it('reads both when Provoke is named first', () => {
+        expect(
+            detectForcedTargetingIgnores('This Unit ignores Provoke and Taunt effects.')
+        ).toEqual(BOTH);
+    });
+
+    it('reads Taunt only for "This Unit\'s attacks ignore Taunt effects."', () => {
+        expect(
+            detectForcedTargetingIgnores(
+                "This Unit's attacks ignore <unit-skill>Taunt</unit-skill> effects."
+            )
+        ).toEqual({ taunt: true, provoke: false });
+    });
+
+    it('reads Provoke only for "This Unit ignores Provoke effects."', () => {
+        expect(detectForcedTargetingIgnores('This Unit ignores Provoke effects.')).toEqual({
+            taunt: false,
+            provoke: true,
+        });
+    });
+
+    it('keeps a Taunt-only ignore off Provoke named later in the same sentence', () => {
+        expect(
+            detectForcedTargetingIgnores(
+                'This Unit ignores Taunt effects and applies Provoke for 1 turn.'
+            )
+        ).toEqual({ taunt: true, provoke: false });
+    });
+
+    it('reads nothing for a Provoke APPLIER (not an ignorer)', () => {
+        expect(
+            detectForcedTargetingIgnores(
                 'This Unit deals 180% damage and applies Provoke for 1 turn.'
             )
-        ).toBe(false);
+        ).toEqual(NONE);
     });
 
-    it('returns false for a condition reader ("to enemies affected by Taunt or Provoke", Rikra)', () => {
+    it('reads nothing for a condition reader ("to enemies affected by Taunt or Provoke", Rikra)', () => {
         expect(
-            detectIgnoresForcedTargeting(
+            detectForcedTargetingIgnores(
                 'This Unit deals <unit-damage>140% damage</unit-damage> with an additional <unit-damage>60% damage</unit-damage> to enemies affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.'
             )
-        ).toBe(false);
+        ).toEqual(NONE);
     });
 
-    it('returns false for null', () => {
-        expect(detectIgnoresForcedTargeting(null)).toBe(false);
+    it('reads nothing for "ignores all targeting changing effects" (a per-attack clause)', () => {
+        expect(detectForcedTargetingIgnores('It ignores all targeting changing effects.')).toEqual(
+            NONE
+        );
     });
 
-    it('returns false for undefined', () => {
-        expect(detectIgnoresForcedTargeting(undefined)).toBe(false);
+    it('reads nothing for null, undefined or empty text', () => {
+        expect(detectForcedTargetingIgnores(null)).toEqual(NONE);
+        expect(detectForcedTargetingIgnores(undefined)).toEqual(NONE);
+        expect(detectForcedTargetingIgnores('')).toEqual(NONE);
     });
 
-    it('returns false for empty string', () => {
-        expect(detectIgnoresForcedTargeting('')).toBe(false);
-    });
-
-    it('returns true when any of the variadic args matches', () => {
+    it('unions the flags across the variadic texts', () => {
         expect(
-            detectIgnoresForcedTargeting(
+            detectForcedTargetingIgnores(
                 null,
-                'This Unit deals 130% damage, ignoring Taunt and Provoke.'
+                'This Unit ignores Taunt effects.',
+                'This Unit ignores Provoke effects.'
             )
-        ).toBe(true);
+        ).toEqual(BOTH);
     });
 });
 

@@ -156,7 +156,10 @@ export function resolvesPositionalVictim(
 
 /** The acting attacker's targeting context for `resolvePositionalTarget`. */
 export interface PositionalActing {
-    ignoresForcedTargeting?: boolean;
+    /** Skips the Taunt override. */
+    ignoresTaunt?: boolean;
+    /** Skips the Provoke override. */
+    ignoresProvoke?: boolean;
     ignoresStealth?: boolean;
     /** Skips the Concentrate Fire override (a control-immune attacker, `CombatActor.controlImmune`). */
     ignoresConcentrateFire?: boolean;
@@ -169,6 +172,87 @@ export interface PositionalActing {
 }
 
 /**
+ * The living opposing units whose Taunt forces this attacker's choice: every taunting unit, or
+ * none when the attacker ignores Taunt. The one place the Taunt rule and its ignore are read.
+ */
+export function forcingTaunters(
+    living: CombatActor[],
+    statusOf: (id: string) => ActorTargetingStatus | undefined,
+    acting?: PositionalActing
+): CombatActor[] {
+    if (acting?.ignoresTaunt) return [];
+    return living.filter((a) => statusOf(a.id)?.taunting);
+}
+
+/**
+ * The living unit that Provoked this attacker (`acting.provokedBy`), or undefined when it is
+ * dead or absent, or the attacker ignores Provoke. The one place the Provoke rule and its ignore
+ * are read.
+ */
+export function forcingProvoker(
+    living: CombatActor[],
+    acting?: PositionalActing
+): CombatActor | undefined {
+    if (acting?.ignoresProvoke || acting?.provokedBy === undefined) return undefined;
+    return living.find((a) => a.id === acting.provokedBy);
+}
+
+/** True when Stealth hides nobody from this cast: the attacker (ship-level `acting`) or the
+ *  cast's own target (per-ability `target.ignoresStealth`) ignores it. */
+function ignoresStealthFor(target: ParsedTarget | undefined, acting?: PositionalActing): boolean {
+    return !!acting?.ignoresStealth || !!target?.ignoresStealth;
+}
+
+/**
+ * The enemies an All Targetable cast (`PatternModifiers.targetable`) strikes, out of the living
+ * opposing roster. Priority mirrors {@link resolvePositionalTargetCell}: Concentrate Fire >
+ * Provoke > Taunt > Stealth (balance-patch notes; owner rulings 2026-11-17):
+ *   1. unless the attacker ignores Concentrate Fire, any living Concentrate-Fire-marked enemy →
+ *      every marked enemy (an All Targetable hit strikes each one rather than picking one);
+ *   2. the attacker is Provoked (and does not ignore Provoke) → its living Provoker alone;
+ *   3. else Taunted units exist (and the attacker does not ignore Taunt) → every Taunter;
+ *   4. else every enemy not in Stealth — every enemy when the attacker or the cast ignores
+ *      Stealth;
+ *   5. step 4 empty (everyone stealthed) → every enemy.
+ * A stealthed marked unit, Provoker or Taunter is still struck.
+ * Without `statusOf` nothing narrows it. Team-symmetric: each side passes its own opposing roster.
+ */
+export function targetableEnemies(
+    target: ParsedTarget | undefined,
+    opposingLiving: CombatActor[],
+    statusOf?: (id: string) => ActorTargetingStatus | undefined,
+    acting?: PositionalActing
+): CombatActor[] {
+    const living = livingPlaced(opposingLiving);
+    if (!statusOf) return living;
+    if (!acting?.ignoresConcentrateFire) {
+        const concentrated = living.filter((a) => statusOf(a.id)?.concentrated);
+        if (concentrated.length) return concentrated;
+    }
+    const provoker = forcingProvoker(living, acting);
+    if (provoker) return [provoker];
+    const taunting = forcingTaunters(living, statusOf, acting);
+    if (taunting.length) return taunting;
+    if (ignoresStealthFor(target, acting)) return living;
+    const visible = visibleAmong(living, statusOf);
+    return visible.length ? visible : living;
+}
+
+/** The living, placed units of an opposing roster: the candidates every positional selection
+ *  starts from. Their cells are read through `buildCellIndex`. */
+function livingPlaced(opposingLiving: CombatActor[]): CombatActor[] {
+    return opposingLiving.filter((a) => a.position !== undefined && a.currentHp > 0);
+}
+
+/** The units of `units` not in Stealth. */
+function visibleAmong(
+    units: CombatActor[],
+    statusOf: (id: string) => ActorTargetingStatus | undefined
+): CombatActor[] {
+    return units.filter((a) => !statusOf(a.id)?.stealthed);
+}
+
+/**
  * Resolve the positional target anchor to a single living CombatActor.
  *
  * When `statusOf` is omitted, or the target is ally-side, no forced-targeting or stealth rule
@@ -176,14 +260,14 @@ export interface PositionalActing {
  * AND `target.side === 'enemy'`, forced targeting and stealth run before `selectTargets`:
  *   1. Concentrate Fire (bypasses stealth) — force the marked actor (one picked at random when
  *      several are marked; a pick the cast already made stays while it lives). Skipped only when
- *      `acting.ignoresConcentrateFire` is true; `ignoresForcedTargeting` does not skip it.
- *   2. Taunt (before stealth) — force a taunting actor. Several taunters are ordered by the
+ *      `acting.ignoresConcentrateFire` is true; `ignoresTaunt` / `ignoresProvoke` do not skip it.
+ *   2. Provoke — attacker must target the actor whose id matches `acting.provokedBy`.
+ *      Bypasses stealth (forced-targeting override). Falls through if the provoker is dead/absent.
+ *      Skipped when `acting.ignoresProvoke` is true.
+ *   3. Taunt (before stealth) — force a taunting actor. Several taunters are ordered by the
  *      attacker's NORMAL targeting over the taunters' cells (its own row first, then the next
  *      rows; front to back for a `front` target), never by roster or application order.
- *      Skipped when `acting.ignoresForcedTargeting` is true.
- *   3. Provoke — attacker must target the actor whose id matches `acting.provokedBy`.
- *      Bypasses stealth (forced-targeting override). Falls through if the provoker is dead/absent.
- *      Skipped when `acting.ignoresForcedTargeting` is true.
+ *      Skipped when `acting.ignoresTaunt` is true.
  *   4. Stealth filter — drop stealthed cells; if that empties the set, restore all. Skipped
  *      entirely when the acting attacker (ship-level `acting.ignoresStealth`) or this cast's
  *      target (per-ability `target.ignoresStealth`) ignores Stealth. A `row-most` / `row-least`
@@ -194,8 +278,8 @@ export interface PositionalActing {
  * `statusOf(id)` returning `undefined` is treated as all-false (never throws/skips).
  *
  * @param acting - Optional context for the acting attacker. `provokedBy` is the id of the
- *   actor that provoked this attacker (pre-resolved by the engine). `ignoresForcedTargeting`
- *   skips both Taunt and Provoke overrides, but NOT Concentrate Fire. `ignoresStealth` skips
+ *   actor that provoked this attacker (pre-resolved by the engine). `ignoresTaunt` /
+ *   `ignoresProvoke` skip their own override, but NOT Concentrate Fire. `ignoresStealth` skips
  *   the stealth visibility filter (step 4) for this attacker.
  */
 export function resolvePositionalTarget(
@@ -232,7 +316,7 @@ export function resolvePositionalTargetCell(
     statusOf?: (id: string) => ActorTargetingStatus | undefined,
     acting?: PositionalActing
 ): PositionalTargetHit | null {
-    const living = opposingLiving.filter((a) => a.position !== undefined && a.currentHp > 0);
+    const living = livingPlaced(opposingLiving);
     if (living.length === 0) {
         return null;
     }
@@ -267,10 +351,7 @@ export function resolvePositionalTargetCell(
     let candidates = living;
 
     if (statusOf) {
-        const ignore = acting?.ignoresForcedTargeting;
-
-        // 1. Concentrate Fire — bypasses stealth; `ignore` does not skip it, only
-        //    `ignoresConcentrateFire` does. Several marked actors → one is picked at random from
+        // 1. Concentrate Fire — bypasses stealth; only `ignoresConcentrateFire` skips it. Several marked actors → one is picked at random from
         //    the attacker's keyed stream; a single mark draws nothing.
         const concentrated = acting?.ignoresConcentrateFire
             ? []
@@ -287,29 +368,21 @@ export function resolvePositionalTargetCell(
             return aimAt(ordered[Math.min(ordered.length - 1, Math.floor(draw * ordered.length))]);
         }
 
-        // 2. Taunt — evaluated before the stealth filter. Skipped when the attacker ignores
-        //    forced targeting.
-        if (!ignore) {
-            const taunting = living.filter((a) => statusOf(a.id)?.taunting);
-            if (taunting.length) {
-                return selectAmong(taunting) ?? aimAt(taunting[0]);
-            }
+        // 2. Provoke — bypasses stealth; falls through if the provoker is dead/absent.
+        const provoker = forcingProvoker(living, acting);
+        if (provoker) {
+            return aimAt(provoker);
         }
 
-        // 3. Provoke — attacker must target the actor that provoked it. Bypasses stealth
-        //    (forced-targeting override). Falls through if the provoker is dead/absent.
-        //    Skipped when the attacker ignores forced targeting.
-        if (!ignore && acting?.provokedBy !== undefined) {
-            const provoker = living.find((a) => a.id === acting.provokedBy);
-            if (provoker) {
-                return aimAt(provoker);
-            }
+        // 3. Taunt — evaluated before the stealth filter.
+        const taunting = forcingTaunters(living, statusOf, acting);
+        if (taunting.length) {
+            return selectAmong(taunting) ?? aimAt(taunting[0]);
         }
 
-        // 4. Stealth filter — restore all if every candidate is stealthed. Skipped entirely when
-        //    the acting attacker (ship-level) OR this cast's target (per-ability) ignores Stealth.
-        if (!acting?.ignoresStealth && !target.ignoresStealth) {
-            const visible = candidates.filter((a) => !statusOf(a.id)?.stealthed);
+        // 4. Stealth filter — restore all if every candidate is stealthed.
+        if (!ignoresStealthFor(target, acting)) {
+            const visible = visibleAmong(candidates, statusOf);
             if (visible.length && isRowChoice(target.selection)) {
                 // A stealthed ship still counts toward its row's size (owner ruling, #519): the
                 // row is chosen over every candidate, then aimed at a visible ship of that row

@@ -1298,7 +1298,8 @@ export function simulateBattle(
             doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
             stasisBreakExemptWhen: plan.shipSkills.stasisBreakExemptWhen,
             chargeLossImmune: plan.shipSkills.chargeLossImmune,
-            ignoresForcedTargeting: plan.shipSkills.ignoresForcedTargeting,
+            ignoresTaunt: plan.shipSkills.ignoresTaunt,
+            ignoresProvoke: plan.shipSkills.ignoresProvoke,
             // W6: ship-wide stealth-targeting bypass (Lodolite's "This Unit ignores Stealth
             // effects."). Team-symmetric with the focus/enemy branches below.
             ignoresStealth: plan.shipSkills.ignoresStealth,
@@ -1342,7 +1343,8 @@ export function simulateBattle(
                 doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
                 stasisBreakExemptWhen: plan.shipSkills.stasisBreakExemptWhen,
                 chargeLossImmune: plan.shipSkills.chargeLossImmune,
-                ignoresForcedTargeting: plan.shipSkills.ignoresForcedTargeting,
+                ignoresTaunt: plan.shipSkills.ignoresTaunt,
+                ignoresProvoke: plan.shipSkills.ignoresProvoke,
                 // W6: ship-wide stealth-targeting bypass. Team-symmetric with the teamActors/
                 // focus branches.
                 ignoresStealth: plan.shipSkills.ignoresStealth,
@@ -1439,7 +1441,8 @@ export function simulateBattle(
         doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
         stasisBreakExemptWhen: focus.shipSkills.stasisBreakExemptWhen,
         chargeLossImmune: focus.shipSkills.chargeLossImmune,
-        ignoresForcedTargeting: focus.shipSkills.ignoresForcedTargeting,
+        ignoresTaunt: focus.shipSkills.ignoresTaunt,
+        ignoresProvoke: focus.shipSkills.ignoresProvoke,
         // W6: ship-wide stealth-targeting bypass. Team-symmetric with the teamActors/
         // enemyAttackers branches.
         ignoresStealth: focus.shipSkills.ignoresStealth,

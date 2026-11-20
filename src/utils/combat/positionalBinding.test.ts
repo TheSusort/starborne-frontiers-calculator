@@ -241,32 +241,52 @@ describe('resolvePositionalTarget — Provoke redirect + ignore gating', () => {
         ).toBe('back');
     });
 
-    it('ignoresForcedTargeting skips Taunt (taunting actor is NOT force-targeted)', () => {
+    it('ignoresTaunt skips Taunt (taunting actor is NOT force-targeted)', () => {
         // 'back' is taunting; without ignore it would be forced; with ignore, 'front' selection wins.
         const so = statusFrom({ back: { taunting: true } });
         expect(
             resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
-                ignoresForcedTargeting: true,
+                ignoresTaunt: true,
             })?.id
         ).toBe('front');
     });
 
-    it('ignoresForcedTargeting skips Provoke (provokedBy set, but normal selection wins)', () => {
+    it('ignoresProvoke skips Provoke (provokedBy set, but normal selection wins)', () => {
         // provokedBy='back' would normally force 'back'; ignore skips it, 'front' selection wins.
         expect(
             resolvePositionalTarget('M4', enemyTarget('front'), enemies, noStatus, {
-                ignoresForcedTargeting: true,
+                ignoresProvoke: true,
                 provokedBy: 'back',
             })?.id
         ).toBe('front');
     });
 
-    it('ignoresForcedTargeting does NOT skip Concentrate Fire (CF actor is still force-targeted)', () => {
+    it('ignoresTaunt alone still obeys Provoke', () => {
+        const so = statusFrom({ front: { taunting: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                ignoresTaunt: true,
+                provokedBy: 'back',
+            })?.id
+        ).toBe('back');
+    });
+
+    it('ignoresProvoke alone still obeys Taunt', () => {
+        const so = statusFrom({ back: { taunting: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                ignoresProvoke: true,
+            })?.id
+        ).toBe('back');
+    });
+
+    it('ignoresTaunt + ignoresProvoke do NOT skip Concentrate Fire (CF actor is still force-targeted)', () => {
         // 'back' has CF; even with ignore, CF is unconditional — must return 'back'.
         const so = statusFrom({ back: { concentrated: true } });
         expect(
             resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
-                ignoresForcedTargeting: true,
+                ignoresTaunt: true,
+                ignoresProvoke: true,
             })?.id
         ).toBe('back');
     });
@@ -280,12 +300,33 @@ describe('resolvePositionalTarget — Provoke redirect + ignore gating', () => {
         ).toBe('front');
     });
 
-    it('Taunt beats Provoke when both apply (Taunt higher priority)', () => {
-        // 'front' is taunting (should win), 'back' is the provoker; result must be 'front'.
+    it('Provoke beats Taunt when both apply (Provoke higher priority)', () => {
+        // 'front' is taunting, 'back' is the provoker; the Provoker wins.
+        const so = statusFrom({ front: { taunting: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                provokedBy: 'back',
+            })?.id
+        ).toBe('back');
+    });
+
+    it('Provoke beats Taunt whichever side casts (roster order and caster cell swapped)', () => {
+        // The resolver reads only the opposing roster, so the mirrored case is the same rule from
+        // the other side's perspective: reversed roster, caster on a different cell.
+        const so = statusFrom({ back: { taunting: true } });
+        expect(
+            resolvePositionalTarget('M1', enemyTarget('back'), [...enemies].reverse(), so, {
+                provokedBy: 'front',
+            })?.id
+        ).toBe('front');
+    });
+
+    it('a Taunter wins once the Provoke is ignored', () => {
         const so = statusFrom({ front: { taunting: true } });
         expect(
             resolvePositionalTarget('M4', enemyTarget('back'), enemies, so, {
                 provokedBy: 'back',
+                ignoresProvoke: true,
             })?.id
         ).toBe('front');
     });
@@ -368,7 +409,8 @@ describe('resolvePositionalTarget — several Concentrate Fire carriers', () => 
         });
         const id = resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
             attackerId: 'ally-1',
-            ignoresForcedTargeting: true,
+            ignoresTaunt: true,
+            ignoresProvoke: true,
         })?.id;
         expect(['front', 'mid']).toContain(id);
     });

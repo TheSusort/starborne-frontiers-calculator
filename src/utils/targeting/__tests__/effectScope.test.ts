@@ -10,6 +10,18 @@ describe('parseEffectScope', () => {
         ).toBe('all enemies');
     });
 
+    it('keeps the "targetable" qualifier ("all targetable enemies")', () => {
+        expect(
+            parseEffectScope('purges 1 buff from all targetable enemies for every 50% crit power.')
+        ).toBe('all targetable enemies');
+    });
+
+    it('reads "all  targetable enemies" with extra whitespace as the canonical label', () => {
+        expect(parseEffectScope('Purges 1 buff from all  targetable   enemies.')).toBe(
+            'all targetable enemies'
+        );
+    });
+
     it('detects adjacent enemies (Asphyxiator-style)', () => {
         expect(
             parseEffectScope(

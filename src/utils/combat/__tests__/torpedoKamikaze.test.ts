@@ -189,7 +189,8 @@ describe('torpedo blast parse', () => {
             noCrit: true,
             ignoresDefense: true,
             ignoresStealth: true,
-            ignoresForcedTargeting: true,
+            ignoresTaunt: true,
+            ignoresProvoke: true,
             ignoresConcentrateFire: true,
             selfDestruct: true,
         });

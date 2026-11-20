@@ -108,6 +108,7 @@ import { isPassivePerHitStatus, liveGateConditions } from './abilityStatusGating
 import {
     isPositional,
     resolvePositionalTargetCell,
+    targetableEnemies,
     resolvesPositionalVictim,
     type PositionalActing,
 } from './positionalBinding';
@@ -946,10 +947,9 @@ export interface EnemyActorInput {
     isBoss?: boolean;
     /** The ship this actor fields (`CombatActor.shipId`). */
     shipId?: string;
-    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
-     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
-     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
-    ignoresForcedTargeting?: boolean;
+    /** Attacker ignores Taunt / Provoke forced targeting (`CombatActor.ignoresTaunt`). */
+    ignoresTaunt?: boolean;
+    ignoresProvoke?: boolean;
     /** Ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
@@ -1100,7 +1100,8 @@ export function buildEnemyPlayerActorRuntime(
         footprint: e.footprint,
         isBoss: e.isBoss,
         shipId: e.shipId,
-        ignoresForcedTargeting: e.ignoresForcedTargeting,
+        ignoresTaunt: e.ignoresTaunt,
+        ignoresProvoke: e.ignoresProvoke,
         ignoresStealth: e.ignoresStealth,
         doesntBreakStasis: e.doesntBreakStasis,
         stasisBreakExemptWhen: e.stasisBreakExemptWhen,
@@ -1607,10 +1608,9 @@ export type TeamActorEngineInput = TeamActorInput & {
     isBoss?: boolean;
     /** The ship this actor fields (`CombatActor.shipId`). */
     shipId?: string;
-    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
-     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
-     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
-    ignoresForcedTargeting?: boolean;
+    /** Attacker ignores Taunt / Provoke forced targeting (`CombatActor.ignoresTaunt`). */
+    ignoresTaunt?: boolean;
+    ignoresProvoke?: boolean;
     /** Ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
@@ -1753,10 +1753,9 @@ export interface CombatEngineInput {
         isBoss?: boolean;
         /** The ship this actor fields (`CombatActor.shipId`). */
         shipId?: string;
-        /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
-         *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
-         *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
-        ignoresForcedTargeting?: boolean;
+        /** Attacker ignores Taunt / Provoke forced targeting (`CombatActor.ignoresTaunt`). */
+        ignoresTaunt?: boolean;
+        ignoresProvoke?: boolean;
         /** Ship-wide stealth-targeting bypass. */
         ignoresStealth?: boolean;
         /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
@@ -1813,10 +1812,9 @@ export interface CombatEngineInput {
     isBoss?: boolean;
     /** The ship this actor fields (`CombatActor.shipId`). */
     shipId?: string;
-    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Populated from the
-     *  ship's own skill text via buildShipAbilities/detectIgnoresForcedTargeting; ORed at the read
-     *  sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts). */
-    ignoresForcedTargeting?: boolean;
+    /** Attacker ignores Taunt / Provoke forced targeting (`CombatActor.ignoresTaunt`). */
+    ignoresTaunt?: boolean;
+    ignoresProvoke?: boolean;
     /** Ship-wide stealth-targeting bypass. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
@@ -2402,22 +2400,34 @@ function attackBreaksStasis(actor: CombatActor): boolean {
 
 /**
  * The acting attacker's targeting bypasses, read live at each targeting site: its static
- * `ignoresForcedTargeting` or the timed `Rogue's Liberty` (rogueLiberty.ts), its static
- * `ignoresStealth`, and a control-immune attacker's bypass of all three forced-targeting
+ * `ignoresTaunt` / `ignoresProvoke`, the timed `Rogue's Liberty` (rogueLiberty.ts, both), its
+ * static `ignoresStealth`, and a control-immune attacker's bypass of all three forced-targeting
  * statuses and Stealth (`CombatActor.controlImmune`).
  */
 function targetingBypassesOf(
     statusEngine: StatusEngine,
     actor: CombatActor
-): Pick<PositionalActing, 'ignoresForcedTargeting' | 'ignoresStealth' | 'ignoresConcentrateFire'> {
+): Pick<
+    PositionalActing,
+    'ignoresTaunt' | 'ignoresProvoke' | 'ignoresStealth' | 'ignoresConcentrateFire'
+> {
     const controlImmune = actor.controlImmune === true;
+    const liberty = controlImmune || holdsRoguesLiberty(statusEngine, actor.id);
     return {
-        ignoresForcedTargeting:
-            actor.ignoresForcedTargeting ||
-            controlImmune ||
-            holdsRoguesLiberty(statusEngine, actor.id),
+        ignoresTaunt: actor.ignoresTaunt || liberty,
+        ignoresProvoke: actor.ignoresProvoke || liberty,
         ignoresStealth: actor.ignoresStealth || controlImmune,
         ignoresConcentrateFire: controlImmune,
+    };
+}
+
+/** The acting attacker's full targeting context, read live: its bypasses
+ *  ({@link targetingBypassesOf}), the unit that Provoked it, and its id. */
+function targetingActingOf(statusEngine: StatusEngine, actor: CombatActor): PositionalActing {
+    return {
+        ...targetingBypassesOf(statusEngine, actor),
+        provokedBy: provokerOf(statusEngine, actor.id),
+        attackerId: actor.id,
     };
 }
 
@@ -2568,7 +2578,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         footprint: input.footprint,
         isBoss: input.isBoss,
         shipId: input.shipId,
-        ignoresForcedTargeting: input.ignoresForcedTargeting,
+        ignoresTaunt: input.ignoresTaunt,
+        ignoresProvoke: input.ignoresProvoke,
         ignoresStealth: input.ignoresStealth,
         doesntBreakStasis: input.doesntBreakStasis,
         stasisBreakExemptWhen: input.stasisBreakExemptWhen,
@@ -2698,7 +2709,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             footprint: t.footprint,
             isBoss: t.isBoss,
             shipId: t.shipId,
-            ignoresForcedTargeting: t.ignoresForcedTargeting,
+            ignoresTaunt: t.ignoresTaunt,
+            ignoresProvoke: t.ignoresProvoke,
             ignoresStealth: t.ignoresStealth,
             doesntBreakStasis: t.doesntBreakStasis,
             stasisBreakExemptWhen: t.stasisBreakExemptWhen,
@@ -9439,6 +9451,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             /** The cell of `castTargetId` the cast is aimed at (`applyPositionalDamage`'s
              *  `firstAnchorCell`). */
             castTargetCell?: Position;
+            /** `PositionalTurnSel.castTargetableIds`. */
+            castTargetableIds?: string[];
             opposingLiving: CombatActor[];
             /** This turn's landed scheduled enemy effects, from the acting
              *  `PlayerTurnResult`. Feeds `defenseProfileOf` so the per-victim damage read honours
@@ -9557,6 +9571,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     },
                     firstAnchorId: args.castTargetId,
                     firstAnchorCell: args.castTargetCell,
+                    firstTargetableIds: args.pattern.modifiers.targetable
+                        ? args.castTargetableIds
+                        : undefined,
                     defenseProfileOf: (v, didCrit) => ({
                         ...victimDefenseProfileOf(v, {
                             scheduledEnemyEffects: args.scheduledEnemyEffects,
@@ -10488,14 +10505,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                           target,
                           tb.opposingRoster,
                           statusLookupFor(tb.opposingRoster),
-                          {
-                              // Read live: Rogue's Liberty comes and goes mid-battle. The
-                              // positional-apply site below re-resolves the anchor per hit with
-                              // the same bypasses, so the two never disagree on the victim.
-                              ...targetingBypassesOf(statusEngine, a),
-                              provokedBy: provokerOf(statusEngine, a.id),
-                              attackerId: a.id,
-                          }
+                          // Read live: Rogue's Liberty comes and goes mid-battle. The
+                          // positional-apply site below re-resolves the anchor per hit with
+                          // the same bypasses, so the two never disagree on the victim.
+                          targetingActingOf(statusEngine, a)
                       )
                     : null;
             // ONE rule for both sides. An actor that resolves no living positional victim
@@ -10596,7 +10609,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                           castTarget,
                           tgtCell,
                           tb.opposingRoster,
-                          statusLookupFor(tb.opposingRoster)
+                          statusLookupFor(tb.opposingRoster),
+                          targetingActingOf(statusEngine, a)
                       ).victims.map((h) => h.victim.id)
                     : undefined;
             const opposingVictimById =
@@ -10866,7 +10880,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Board-wide clauses (`Ability.boardWide`): the same positional discriminator as
                 // `opposingVictimById`, and the same unmemoized aliveness thunk as the selectors.
                 ...(opposingVictimById
-                    ? { aliveOpposingIds: () => aliveOpposing().map((v) => v.id) }
+                    ? {
+                          aliveOpposingIds: () => aliveOpposing().map((v) => v.id),
+                          targetableOpposingIds: () =>
+                              targetableEnemies(
+                                  castTarget,
+                                  tb.opposingRoster,
+                                  statusLookupFor(tb.opposingRoster),
+                                  targetingActingOf(statusEngine, a)
+                              ).map((v) => v.id),
+                      }
                     : {}),
                 // Forced bomb-detonation sink (Lingshe's countdown-reduce-to-0). `sink` serves
                 // both directions — ids are globally unique across sides — so no per-side
@@ -11066,6 +11089,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             tgt: CombatActor;
             /** The cell of `tgt` the cast is aimed at (`selectTurnTarget`'s `tgtCell`). */
             tgtCell: Position | undefined;
+            /** The cast's footprint as selected before its clauses resolve; an All Targetable
+             *  cast's first sub-attack keeps it (`applyPositionalDamage`'s `firstTargetableIds`). */
+            castTargetableIds: string[] | undefined;
             pattern: ParsedPattern;
             target: ParsedTarget;
             preTurnVictimStatus: Map<string, PreTurnVictimStatusSnapshot> | undefined;
@@ -11392,6 +11418,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actingId: actor.id,
                 castTargetId: sel.tgt?.id,
                 castTargetCell: sel.tgtCell,
+                castTargetableIds: sel.castTargetableIds,
                 opposingLiving: tb.opposingRoster,
                 applyToVictim: tb.applyToVictim,
                 // The acting turn's landed scheduled enemy effects reach
@@ -13509,6 +13536,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     {
                                         tgt,
                                         tgtCell,
+                                        castTargetableIds: focusTurnArgs.aoeVictimIds,
                                         pattern,
                                         target,
                                         preTurnVictimStatus,
@@ -13786,6 +13814,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     {
                                         tgt,
                                         tgtCell,
+                                        castTargetableIds: teamTurnArgs.aoeVictimIds,
                                         pattern: teamPattern,
                                         target: teamTarget,
                                         preTurnVictimStatus: teamPreTurnVictimStatus,
@@ -14235,6 +14264,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     {
                                         tgt,
                                         tgtCell,
+                                        castTargetableIds: enemyTurnArgs.aoeVictimIds,
                                         // No `!` needed: `enemyPositional` is a const whose
                                         // conjunction includes both non-null checks, so the
                                         // gate above narrows them (it could not while these

@@ -1103,6 +1103,10 @@ export interface PlayerTurnArgs {
     /** Every LIVING opposing actor's id, read at call time — the recipients of a board-wide clause
      *  (`Ability.boardWide`) in place of `aoeVictimIds`. Supplied with `opposingVictimById`. */
     aliveOpposingIds?: () => string[];
+    /** The ids of the living opposing actors this caster could target (`targetableEnemies`,
+     *  positionalBinding.ts), read at call time — the recipients of a board-wide clause narrowed
+     *  by `Ability.targetableOnly`. Supplied with `aliveOpposingIds`. */
+    targetableOpposingIds?: () => string[];
     /** Every living opposing actor's engine-derived gate readings, keyed by id, read before the
      *  cast together with the bound target's own (`enemyHp`, `targetRepairedThisRound`,
      *  `enemyDebuffNames`, `enemyBuffCount` come from the same derivation). Positional runs only;
@@ -2295,6 +2299,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         aoeVictimIds,
         opposingVictimById,
         aliveOpposingIds,
+        targetableOpposingIds,
         recipientGateReadings,
         positional,
         activePattern,
@@ -2934,6 +2939,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     /** The living enemies as the cast resolves, before its damage: a board-wide purge written
      *  after the damage still reaches an enemy that damage destroyed (`purgeStruck`). */
     const castOpposingIds = aliveOpposingIds?.();
+    const castTargetableIds = targetableOpposingIds?.();
+    /**
+     * A board-wide clause's recipients (`Ability.boardWide`): every living enemy, or only those
+     * the caster could target when `Ability.targetableOnly`. `atCast` reads the snapshot taken as
+     * the cast resolves, before its damage. Undefined → the clause fans over the cast's footprint.
+     */
+    const boardWideIds = (
+        ab: Pick<Ability, 'boardWide' | 'targetableOnly'> | undefined,
+        atCast = false
+    ): string[] | undefined => {
+        if (!ab?.boardWide) return undefined;
+        if (ab.targetableOnly) return atCast ? castTargetableIds : targetableOpposingIds?.();
+        return atCast ? castOpposingIds : aliveOpposingIds?.();
+    };
     // Each helper performs the removal's STATE change and returns its events as a thunk, so a
     // clause written after the damage can hold the events back with the write (see
     // `deferredEnemyApplications`). Side-symmetric: player and enemy casters run the same code.
@@ -3012,7 +3031,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      * (owner rule; `aoeNarrowingPhraseTripwire.test.ts` holds the ruled phrases). A caller without
      * a footprint (non-positional) stays on the single anchor `targetId`. Each victim emits its
      * own purge-performed (Salvation/Sefuba are victim-scoped). The purge count is per victim.
-     * A board-wide purge (`Ability.boardWide`) reaches every living enemy instead of the footprint.
+     * A board-wide purge (`Ability.boardWide`) reaches its `boardWideIds` instead of the footprint.
      *
      * An 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the engine-supplied
      * enemyMostBuffsId instead of the normal positional anchor (targetId) — the reactive
@@ -3041,10 +3060,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         abTarget: Ability['target'],
         count: number | 'all',
         stripsShield: boolean | undefined,
-        boardWide: boolean | undefined
+        scope: Pick<Ability, 'boardWide' | 'targetableOnly'>
     ): { waveTotal: number; emit: () => void } => {
         if (targetId === undefined) return { waveTotal: 0, emit: () => {} };
-        const footprint = boardWide && castOpposingIds ? castOpposingIds : aoeVictimIds;
+        const footprint = boardWideIds(scope, true) ?? aoeVictimIds;
         const recipients =
             (abTarget === 'all-enemies' || abTarget === 'enemy') && footprint
                 ? footprint
@@ -3146,7 +3165,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 cfg.grantAdjacentAllies ? [actor.id, ...(adjacentAllyIds ?? [])] : [actor.id]
             )();
         } else if (cfg.type === 'purge') {
-            const wave = purgeStruck(ab.target, cfg.count, cfg.stripsShield, ab.boardWide);
+            const wave = purgeStruck(ab.target, cfg.count, cfg.stripsShield, ab);
             buffsPurgedThisCast += wave.waveTotal;
             wave.emit();
         } else if (cfg.type === 'cleanse') {
@@ -4604,7 +4623,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const perSubAttackDebuffRecipes: {
         status: TimedStatus;
         abTarget: Ability['target'] | undefined;
-        boardWide: boolean;
+        /** The matched clause's board-wide scope (`boardWideIds`). */
+        scope: Pick<Ability, 'boardWide' | 'targetableOnly'> | undefined;
     }[] = [];
     /** The enemy-side passive clauses riding this positional cast's hits — see
      *  `applyPerHitEnemyStatusesForSubAttack`. */
@@ -4650,11 +4670,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // cast it is rolled per sub-attack once that damage is known
         // (`applyPerHitEnemyStatusesForSubAttack`), never here.
         if (status.perHit === true && positionalLanding) {
-            perHitEnemyRecipes.push({
-                status,
-                abTarget,
-                boardWide: matchingAbility?.boardWide === true,
-            });
+            perHitEnemyRecipes.push({ status, abTarget, scope: matchingAbility });
             continue;
         }
         // The mapping lives in ./debuffRecipients so the
@@ -4663,8 +4679,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const recipientIds: (string | undefined)[] = resolveDebuffRecipientIds({
             abTarget,
             anchorId: targetId,
-            aoeVictimIds:
-                matchingAbility?.boardWide && aliveOpposingIds ? aliveOpposingIds() : aoeVictimIds,
+            aoeVictimIds: boardWideIds(matchingAbility) ?? aoeVictimIds,
             adjacentEnemyIdsFor,
             positionalLanding,
             // Filtered to the slot this cast fired, plus the passive statuses riding its hits —
@@ -4675,17 +4690,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
         landStatusOnRecipients(status, recipientIds);
         if (positionalLanding)
-            perSubAttackDebuffRecipes.push({
-                status,
-                abTarget,
-                boardWide: matchingAbility?.boardWide === true,
-            });
+            perSubAttackDebuffRecipes.push({ status, abTarget, scope: matchingAbility });
     }
 
     /** One clause's recipients for one sub-attack, resolved against that sub-attack's own anchor
      *  and footprint. */
     const subAttackRecipientIds = (
-        { abTarget, boardWide }: (typeof perSubAttackDebuffRecipes)[number],
+        { abTarget, scope }: (typeof perSubAttackDebuffRecipes)[number],
         sub: { anchorId: string; victimIds: string[] }
     ): (string | undefined)[] =>
         resolveDebuffRecipientIds({
@@ -4693,8 +4704,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             anchorId: sub.anchorId,
             // THIS sub-attack's real footprint, not the cast's — so an `all-enemies` or
             // `enemy` clause fans over who it actually struck and a killed victim drops out.
-            // A board-wide clause reads the living roster instead (`Ability.boardWide`).
-            aoeVictimIds: boardWide && aliveOpposingIds ? aliveOpposingIds() : sub.victimIds,
+            // A board-wide clause reads the living roster instead (`boardWideIds`).
+            aoeVictimIds: boardWideIds(scope) ?? sub.victimIds,
             adjacentEnemyIdsFor,
             positionalLanding: true,
             firingClause: true,
@@ -6809,10 +6820,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     effectiveCritDamage
                 );
                 const { stripsShield } = ab.config;
-                const purge = () =>
-                    purgeStruck(ab.target, purgeCount, stripsShield, ab.boardWide).emit;
+                const purge = () => purgeStruck(ab.target, purgeCount, stripsShield, ab).emit;
                 if (deferAfterDamage(ab, purge)) continue;
-                const wave = purgeStruck(ab.target, purgeCount, stripsShield, ab.boardWide);
+                const wave = purgeStruck(ab.target, purgeCount, stripsShield, ab);
                 buffsPurgedThisCast += wave.waveTotal;
                 wave.emit();
             }

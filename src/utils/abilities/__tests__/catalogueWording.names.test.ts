@@ -81,7 +81,8 @@ describe('status and buff names — catalogue wording parses like ours', () => {
         '%s: the singular "attack ignore Taunt and Provoke effects" ignores forced targeting',
         (_ship, text) => {
             const ship = { refits: [], firstPassiveSkillText: text } as unknown as Ship;
-            expect(buildShipAbilities(ship).ignoresForcedTargeting).toBe(true);
+            const built = buildShipAbilities(ship);
+            expect([built.ignoresTaunt, built.ignoresProvoke]).toEqual([true, true]);
         }
     );
 
